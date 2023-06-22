@@ -1,0 +1,109 @@
+[lnd]
+# Use full pathes with ~.
+cert_filepath = "path_to/tls.cert"
+macaroon_filepath = "path_to/admin.macaroon"
+ip_address = "192.168.2.21:10009"
+
+
+[sqlalchemy.url]
+# Sqlalchemy configuration for your database. Parameters are used to create
+# a sqlalchemy URL-Object. In case of sqlite the file will be created. But 
+# in case of postgres you have to create db and user/pw by yourself.
+
+# drivername = "sqlite"
+# database = "./feelancer.db"
+
+# drivername = "postgresql"
+# username = "feelancer"
+# port = 5432
+# host = "192.168.2.21"
+# database = "feelancer"
+# password = "feelancer"
+
+
+[feelancer]
+## Feelancer specific configuration
+
+# General parameters independent from specific models and specific peers.
+run_tasks = ["pid"]
+
+[feelancer.peers.default]
+# General parameters independent from specific models but dependent on the peer.
+# One can configure defaults for all peers here
+
+# Last update on a channel has to be older than this amount
+min_seconds = 3600
+# Minimum ppm change up / down, which has to be applied when broadcasting feerate to# Minimum time interval in seconds between two policy broadcasts to the network.
+# the network.
+feerate_min_ppm_up = 2
+feerate_min_ppm_down = 1
+# Minimum and maximum feerate in ppm can be configured. 
+feerate_min = 1
+feerate_max = 99999
+
+
+# You can also overwrite the default values for specific peers.
+# Only overwrites on a peer level are supported and not on a channel level.
+# You can name the GROUP in [feelancer.peers.GROUP] like whatever you want, it
+# has to be unique only.
+[feelancer.peers.boltz]
+pubkeys = [
+    "026165850492521f4ac8abd9bd8088123446d126f648ca35e60f88177dc149ceb2",
+    "02d96eadea3d780104449aca5c93461ce67c1564e2e1d73225fa67dd3b997a6018",
+]
+min_seconds = 7200
+
+
+[pid]
+## Model specific configuration
+# At the moment only the pid-model is applied. Pid models the feerate only with
+# a PID-Controller
+
+# List of peers and/or chan_ids to be excluded from the model
+exclude_pubkeys = []
+exclude_chanids = []
+
+# When db_only = true, results are only stored in the database and broadcasted
+# to the Lightning Network. If you are the most reckless person on the planet 
+# you can set it to false. ;)
+db_only = true
+
+# A channel is new if it wasn't included in the last run and if it has a max
+# age of this number of blocks.
+# If a channel is new and if there is no other public channel. The feerate_new_local
+# or feerate_new_remote is applied
+max_age_new_channels = 144
+
+
+[pid.feelevel]
+# The model includes a fee level specific component and a peer specific component.
+# The fee level component compares the capacity weighted average feerate of all
+# included peers with the local balance weighted average feerate. 
+# If the former is higher, it indicates the node is more depleted, and we increase
+# all feerates slightly. Otherwise, we decrease all feerates slightly.
+
+# Relevant for recalculating the ewma if a parameter changes. Not implemented yet
+lambda_epsilon = 1e-4
+
+pid_controller = { k_t = 0, k_p = 0, alpha_i = 0, k_i = 0, alpha_d = 0, k_d = 0, conversion_method_str = "simple" }
+
+
+[pid.peers.default]
+
+# Used feerate if a channel is new
+feerate_new_local = 1500
+feerate_new_remote = 250
+
+# Relevant for recalculating the ewma if a parameter changes. Not implemented yet
+lambda_epsilon = 1e-4
+
+pid_controller = { k_t = 0, k_p = 0, alpha_i = 0, k_i = 0, alpha_d = 0, k_d = 0, conversion_method_str = "compounding", shift = 10 }
+
+
+[pid.peers.boltz]
+pubkeys = [
+    "026165850492521f4ac8abd9bd8088123446d126f648ca35e60f88177dc149ceb2",
+    "02d96eadea3d780104449aca5c93461ce67c1564e2e1d73225fa67dd3b997a6018",
+]
+target = 900_000
+pid_controller = { k_p = 1, conversion_method_str = "compounding", shift = 10 }
