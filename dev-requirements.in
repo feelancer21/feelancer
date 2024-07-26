@@ -1,0 +1,10 @@
+fl21-lnd-grpc-client
+sqlalchemy
+psycopg2-binary
+tomli
+ruff
+black
+pytest
+pytest-cov
+pyright
+isort
