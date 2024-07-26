@@ -1,0 +1,39 @@
+services:
+  feelancer:
+    build: .
+    restart: unless-stopped
+    stop_grace_period: 120s
+    depends_on:
+      - "db"
+    volumes:
+      - ./app:/app # config and log directory
+      - ~/.lnd/:/root/.lnd:ro # lnd directory with certs/macaroons
+    command:
+    - -c
+    - feelancer --config /app/feelancer.toml
+
+  feelancer-streamlit:
+    build: 
+      dockerfile: ./addon.dockerfile
+    restart: unless-stopped
+    command:
+    - -c
+    - streamlit run --server.address 0.0.0.0 /feelancer/src/feelancer/addon/streamlit/demo.py --server.headless true --browser.gatherUsageStats false
+    ports:
+      - 8501:8501
+
+  db:
+    image: "postgres:14"
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: "feelancer"
+      POSTGRES_USER: "feelancer"
+      POSTGRES_DB: "feelancer"
+    volumes:
+      - db_storage:/var/lib/postgresql/data
+    ports:
+      - 5432:5432
+
+volumes:
+  db_storage:
+

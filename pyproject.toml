@@ -1,0 +1,11 @@
+[project]
+requires-python = ">=3.9"
+name = "feelancer"
+version = "0.0.0.1"
+
+[project.scripts]
+feelancer = "feelancer.app:app"
+
+[tool.black]
+line-length = 88
+force-exclude = "grpc_generated"

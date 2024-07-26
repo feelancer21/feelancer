@@ -1,0 +1,129 @@
+[lnd]
+cert_filepath = "/root/.lnd/tls.cert"
+# for policy updates you have to change it, e.g. to admin.macaroon
+macaroon_filepath = "/root/.lnd/data/chain/bitcoin/testnet/readonly.macaroon"
+ip_address = "192.168.2.21:10009"
+
+
+[sqlalchemy.url]
+# # Sqlalchemy configuration for your database.
+#drivername = "sqlite"
+#database = "/app/feelancer.db"
+drivername = "postgresql"
+username = "feelancer"
+port = 5432
+host = "db"
+database = "feelancer"
+password = "feelancer"
+
+[logging]
+level = "DEBUG"
+logfile = "/app/feelancer.log"
+
+## Feelancer specific configuration
+
+[feelancer]
+# General parameters independent from specific models and specific peers.
+
+# Execution interval of the jobs
+seconds = 900
+
+
+[feelancer.peers.default]
+# General parameters independent from specific models but dependent on the peer.
+# One can configure defaults for all peers here
+
+# Minimum time interval in seconds between two policy broadcasts to the network.
+min_seconds = 3600
+# Minimum ppm change up / down, which has to be applied when broadcasting fee_rate to
+# the network.
+fee_rate_ppm_min_up = 5
+fee_rate_ppm_min_down = 1
+
+# Minimum and maximum fee_rate in ppm can be configured. 
+fee_rate_min = 1
+fee_rate_max = 2121
+
+# Minimum ppm change up / down, which has to be applied when broadcasting fee_rate to# Minimum time interval in seconds between two policy broadcasts to the network.
+# the network.
+inbound_fee_rate_ppm_min_up = 2
+inbound_fee_rate_ppm_min_down = 5
+# Minimum and maximum fee_rate in ppm can be configured. 
+inbound_fee_rate_min = -99999
+inbound_fee_rate_max = 0
+
+
+# You can also overwrite the default values for specific peers.
+# Only overwrites on a peer level are supported and not on a channel level.
+# You can name the GROUP in [feelancer.peers.GROUP] like whatever you want, it
+# has to be unique only.
+[feelancer.peers.boltz]
+pubkeys = [
+    "026165850492521f4ac8abd9bd8088123446d126f648ca35e60f88177dc149ceb2",
+    "02d96eadea3d780104449aca5c93461ce67c1564e2e1d73225fa67dd3b997a6018",
+]
+min_seconds = 1
+
+
+## Model specific configuration
+# At the moment only the pid-model is applied. Pid models the fee_rate only with
+# a PID-Controller
+
+
+[pid]
+# List of peers and/or chan_ids to be excluded from the model
+exclude_pubkeys = []
+exclude_chanids = []
+
+# If true then also inbound discounts and fees are derived. The setting of positive
+# inbound fees can be prevented with inbound_fee_rate_max = 0 in the feelancer
+# section.
+set_inbound = true
+
+# If true then the updates are not sent to lnd backend.
+db_only = true
+
+# A channel is new if it wasn't included in the last run and if it has a max
+# age of this number of blocks.
+# If a channel is new and if there is no other public channel. The fee_rate_new_local
+# or fee_rate_new_remote is applied
+max_age_new_channels = 144
+
+# The model includes a fee level specific component and a peer specific component.
+# The fee level component compares the capacity weighted average fee_rate of all
+# included peers with the local balance weighted average fee_rate. 
+# If the former is higher, it indicates the node is more depleted, and we increase
+# all fee_rates slightly. Otherwise, we decrease all fee_rates slightly.
+
+
+[pid.pin]
+peer = "026165850492521f4ac8abd9bd8088123446d126f648ca35e60f88177dc149ceb2"
+# 'fee_rate' or 'spread'
+method = "spread"
+value = 84
+
+
+[pid.margin]
+
+mr_controller = { k_m = 50, alpha = 0.1 }
+
+
+[pid.peers.default]
+
+fee_rate_new_local = 1500
+fee_rate_new_remote = 250
+
+# Relevant for recalculating the ewma if a parameter changes. Not implemented yet
+lambda_epsilon = 1e-4
+
+ewma_controller = { k_t = 0.1, k_p = 1, alpha_i = 0.04, k_i = 4.8, alpha_d = 1, k_d = 2.4 }
+
+
+[pid.peers.boltz]
+pubkeys = [
+    "026165850492521f4ac8abd9bd8088123446d126f648ca35e60f88177dc149ceb2",
+    "02d96eadea3d780104449aca5c93461ce67c1564e2e1d73225fa67dd3b997a6018",
+]
+target = 900_000
+ewma_controller = { k_p = 1 }
+margin_idiosyncratic = -10

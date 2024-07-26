@@ -1,0 +1,5 @@
+# Additional to feelancer requirements
+streamlit
+pandas
+numpy
+scipy
