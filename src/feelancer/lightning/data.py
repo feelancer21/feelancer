@@ -24,7 +24,7 @@ ChannelIDX = tuple[int, int]
 PolicyIDX = tuple[PolicyFetchType, bool]
 
 
-def cast_from_channel_policy(policy: DBLnChannelPolicy) -> ChannelPolicy:
+def convert_from_channel_policy(policy: DBLnChannelPolicy) -> ChannelPolicy:
     return ChannelPolicy(
         feerate_ppm=policy.feerate_ppm,
         basefee_msat=policy.basefee_msat,
@@ -36,11 +36,11 @@ def cast_from_channel_policy(policy: DBLnChannelPolicy) -> ChannelPolicy:
     )
 
 
-def _cast_ln_run(db_run: DBRun, ln_node: DBLnNode) -> DBLnRun:
+def _convert_ln_run(db_run: DBRun, ln_node: DBLnNode) -> DBLnRun:
     return DBLnRun(run=db_run, ln_node=ln_node)
 
 
-def _cast_to_channel_policy(
+def _convert_to_channel_policy(
     policy: ChannelPolicy,
     channel_static: DBLnChannelStatic,
     ln_run: DBLnRun,
@@ -62,7 +62,7 @@ def _cast_to_channel_policy(
     )
 
 
-def _cast_to_channel_static(
+def _convert_to_channel_static(
     channel: Channel, channel_peer: DBLnChannelPeer, ln_node: DBLnNode
 ) -> DBLnChannelStatic:
     return DBLnChannelStatic(
@@ -76,7 +76,7 @@ def _cast_to_channel_static(
     )
 
 
-def _cast_to_channel_liquidity(
+def _convert_to_channel_liquidity(
     channel: Channel, channel_static: DBLnChannelStatic, ln_run: DBLnRun
 ) -> DBLnChannelLiquidity:
     return DBLnChannelLiquidity(
@@ -126,14 +126,14 @@ class LightningSessionCache:
 
         self.db_run = db_run
         self.ln_node = get_local_node(self.db_session, ln.pubkey_local)
-        self.ln_run = _cast_ln_run(self.db_run, self.ln_node)
+        self.ln_run = _convert_ln_run(self.db_run, self.ln_node)
 
         self._channel_liquidity: dict[ChannelIDX, DBLnChannelLiquidity] | None = None
         self._channel_peer: dict[str, DBLnChannelPeer] | None = None
         self._channel_static: dict[ChannelIDX, DBLnChannelStatic] | None = None
-        self._channel_policies: dict[
-            PolicyIDX, dict[ChannelIDX, DBLnChannelPolicy]
-        ] = {}
+        self._channel_policies: dict[PolicyIDX, dict[ChannelIDX, DBLnChannelPolicy]] = (
+            {}
+        )
 
     @property
     def channel_peer(self) -> dict[str, DBLnChannelPeer]:
@@ -158,7 +158,7 @@ class LightningSessionCache:
             idx = self._get_chan_idx(channel)
 
             if not (self._channel_static.get(idx)):
-                self._channel_static[idx] = _cast_to_channel_static(
+                self._channel_static[idx] = _convert_to_channel_static(
                     channel, self.get_channel_peer(channel.pub_key), self.ln_node
                 )
 
@@ -173,7 +173,7 @@ class LightningSessionCache:
         for channel in self.ln.channels.values():
             idx = self._get_chan_idx(channel)
 
-            self._channel_liquidity[idx] = _cast_to_channel_liquidity(
+            self._channel_liquidity[idx] = _convert_to_channel_liquidity(
                 channel, self.get_channel_static(channel), self.ln_run
             )
 
@@ -196,7 +196,7 @@ class LightningSessionCache:
             if not policy:
                 continue
 
-            policies[idx] = _cast_to_channel_policy(
+            policies[idx] = _convert_to_channel_policy(
                 policy, static, self.ln_run, fetch_type, local
             )
 

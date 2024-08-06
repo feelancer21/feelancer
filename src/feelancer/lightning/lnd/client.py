@@ -16,7 +16,7 @@ def _liquidity_pending(channel) -> tuple[int, int]:
     return pending_out, pending_in
 
 
-def _cast_policy(policy) -> ChannelPolicy | None:
+def _convert_policy(policy) -> ChannelPolicy | None:
     if policy:
         return ChannelPolicy(
             feerate_ppm=policy.fee_rate_milli_msat,
@@ -45,7 +45,7 @@ def _policies_per_side(
             channel_edge.node1_policy,
         )
 
-    return _cast_policy(local_policy), _cast_policy(remote_policy)
+    return _convert_policy(local_policy), _convert_policy(remote_policy)
 
 
 class LNDClient(LightningClient):

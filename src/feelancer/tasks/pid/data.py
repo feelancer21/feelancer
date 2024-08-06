@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Callable, Generator
 
 from sqlalchemy.orm import Session, joinedload
 
-from feelancer.lightning.data import DBLnRun, cast_from_channel_policy
+from feelancer.lightning.data import DBLnRun, convert_from_channel_policy
 from feelancer.lightning.enums import PolicyFetchType
 from feelancer.lightning.models import DBLnChannelPolicy
 from feelancer.tasks.result import TaskResult
@@ -58,11 +58,11 @@ def _get_last_ln_run(session: Session, pid_run: DBPidRun | None) -> DBLnRun | No
     return res
 
 
-def _cast_to_pid_run(run: DBRun, ln_node: DBLnNode) -> DBPidRun:
+def _convert_to_pid_run(run: DBRun, ln_node: DBLnNode) -> DBPidRun:
     return DBPidRun(run=run, ln_node=ln_node)
 
 
-def _cast_pid_result(
+def _convert_pid_result(
     policy_recommendation: PolicyRecommendation,
     channel_static: DBLnChannelStatic,
     pid_run: DBPidRun,
@@ -74,7 +74,7 @@ def _cast_pid_result(
     )
 
 
-def _cast_to_pid_controller(
+def _convert_to_pid_controller(
     pid_params: PidControllerParams, ewma_pid: EwmaPID
 ) -> DBPidController:
     return DBPidController(
@@ -103,7 +103,9 @@ def _cast_to_pid_controller(
     )
 
 
-def _cast_from_pid_controller(pid_controller: DBPidController) -> PidControllerParams:
+def _convert_from_pid_controller(
+    pid_controller: DBPidController,
+) -> PidControllerParams:
     return PidControllerParams(
         conversion_method_str=pid_controller.conversion_method.name,
         shift=pid_controller.shift,
@@ -123,13 +125,13 @@ def _cast_from_pid_controller(pid_controller: DBPidController) -> PidControllerP
     )
 
 
-def _cast_from_pid_peer_controller(
+def _convert_from_pid_peer_controller(
     pid_peer_controller: DBPidPeerController,
 ) -> PidControllerParams:
-    return _cast_from_pid_controller(pid_peer_controller.pid_controller)
+    return _convert_from_pid_controller(pid_peer_controller.pid_controller)
 
 
-def _cast_to_pid_peer_controller(
+def _convert_to_pid_peer_controller(
     peer_controller: PeerController,
     channel_peer: DBLnChannelPeer,
     pid_run: DBPidRun,
@@ -137,25 +139,25 @@ def _cast_to_pid_peer_controller(
     return DBPidPeerController(
         pid_run=pid_run,
         peer=channel_peer,
-        pid_controller=_cast_to_pid_controller(
+        pid_controller=_convert_to_pid_controller(
             peer_controller.pid_controller_params, peer_controller.ewma_pid
         ),
         target=peer_controller.target,
     )
 
 
-def _cast_from_feelevel_controller(
+def _convert_from_feelevel_controller(
     feelevel_controller: DBPidFeelevelController,
 ) -> PidControllerParams:
-    return _cast_from_pid_controller(feelevel_controller.pid_controller)
+    return _convert_from_pid_controller(feelevel_controller.pid_controller)
 
 
-def _cast_to_feelevel_controller(
+def _convert_to_feelevel_controller(
     pid_run: DBPidRun, feelevel_controller: FeelevelController
 ) -> DBPidFeelevelController:
     return DBPidFeelevelController(
         pid_run=pid_run,
-        pid_controller=_cast_to_pid_controller(
+        pid_controller=_convert_to_pid_controller(
             feelevel_controller.pid_controller_params, feelevel_controller.ewma_pid
         ),
         feerate_local=feelevel_controller.feerate_local,
@@ -171,7 +173,7 @@ def _yield_peer_controller(
     for pub_key, peer_controller in peer_controller_map.items():
         peer = ln_session.get_channel_peer(pub_key)
 
-        yield _cast_to_pid_peer_controller(peer_controller, peer, pid_run)
+        yield _convert_to_pid_peer_controller(peer_controller, peer, pid_run)
         for res in _yield_pid_results(ln_session, peer_controller, pid_run):
             yield res
 
@@ -197,7 +199,7 @@ def _get_last_pid_peer_controller(
     if not res:
         return None, None
 
-    return res.pid_run.run.timestamp_start, _cast_from_pid_controller(
+    return res.pid_run.run.timestamp_start, _convert_from_pid_controller(
         res.pid_controller
     )
 
@@ -206,7 +208,7 @@ def _get_historic_pid_peer_params(
     session: Session, local_pub_key: str, peer_pub_key: str
 ) -> list[tuple[datetime, PidControllerParams]]:
     res = [
-        (p.pid_run.run.timestamp_start, _cast_from_pid_controller(p.pid_controller))
+        (p.pid_run.run.timestamp_start, _convert_from_pid_controller(p.pid_controller))
         for p in session.query(DBPidPeerController)
         .join(DBPidPeerController.peer)
         .join(DBPidPeerController.pid_run)
@@ -227,7 +229,7 @@ def _get_historic_pid_feelevel_params(
     session: Session, local_pub_key: str
 ) -> list[tuple[datetime, PidControllerParams]]:
     res = [
-        (p.pid_run.run.timestamp_start, _cast_from_pid_controller(p.pid_controller))
+        (p.pid_run.run.timestamp_start, _convert_from_pid_controller(p.pid_controller))
         for p in session.query(DBPidFeelevelController)
         .join(DBPidFeelevelController.pid_run)
         .join(DBPidRun.ln_node)
@@ -263,7 +265,7 @@ def _get_last_policies_end(
 
     return {
         p.static.peer.pub_key: {
-            c.static.chan_id: cast_from_channel_policy(c)
+            c.static.chan_id: convert_from_channel_policy(c)
             for c in policies_end
             if c.static.peer.pub_key == p.static.peer.pub_key
         }
@@ -283,7 +285,7 @@ def _get_last_feelevel_pid_params(
         .filter(DBPidFeelevelController.pid_run == last_pid_run)
         .first()
     ):
-        feelevel_controller = _cast_from_feelevel_controller(res)
+        feelevel_controller = _convert_from_feelevel_controller(res)
     else:
         feelevel_controller = None
     return feelevel_controller
@@ -296,7 +298,7 @@ def _get_last_peer_pid_params(
         return {}
 
     return {
-        p.peer.pub_key: _cast_from_pid_peer_controller(p)
+        p.peer.pub_key: _convert_from_pid_peer_controller(p)
         for p in session.query(DBPidPeerController)
         .options(
             joinedload(DBPidPeerController.pid_controller),
@@ -314,7 +316,7 @@ def _yield_pid_results(
     pid_run: DBPidRun,
 ) -> Generator[DBPidResult, None, None]:
     for p in peer_controller.policy_recommendations():
-        yield _cast_pid_result(p, ln_session.get_channel_static(p.channel), pid_run)
+        yield _convert_pid_result(p, ln_session.get_channel_static(p.channel), pid_run)
 
 
 class Pid(TaskResult):
@@ -475,8 +477,8 @@ class Pid(TaskResult):
     ) -> Generator[
         DBPidFeelevelController | DBPidPeerController | DBPidResult, None, None
     ]:
-        pid_run = _cast_to_pid_run(ln_session.db_run, ln_session.ln_node)
-        yield _cast_to_feelevel_controller(pid_run, self.feelevel_controller)
+        pid_run = _convert_to_pid_run(ln_session.db_run, ln_session.ln_node)
+        yield _convert_to_feelevel_controller(pid_run, self.feelevel_controller)
         for res in _yield_peer_controller(
             ln_session, pid_run, self.peer_controller_map
         ):
