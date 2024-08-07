@@ -1,4 +1,6 @@
 PKG := feelancer
+UID = $(shell id -u)
+GID = $(shell id -g)
 
 black:
 	black . 
@@ -52,3 +54,6 @@ install-dev:
 pyenv_reset:
 	pyenv virtualenv-delete -f feelancer-dev
 	pyenv virtualenv feelancer-dev
+
+pdf:
+	docker run --rm --volume "./docs:/data" --user $(UID):$(GID) pandoc/latex:3.2.1 math.md -o math.pdf
