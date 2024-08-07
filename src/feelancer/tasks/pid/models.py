@@ -73,8 +73,8 @@ class DBPidPeerController(Base):
     peer: Mapped[DBLnChannelPeer] = relationship(DBLnChannelPeer)
 
 
-class DBPidFeelevelController(Base):
-    __tablename__ = "pid_feelevel_controller"
+class DBPidMarginController(Base):
+    __tablename__ = "pid_margin_controller"
 
     pid_controller_id: Mapped[int] = mapped_column(
         ForeignKey("pid_controller.id"), primary_key=True

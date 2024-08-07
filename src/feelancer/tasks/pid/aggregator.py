@@ -4,7 +4,7 @@
 3. Calculation of the default target of the peer controller
 4. Assigning the feerates from the config to new channel peers
 5. Calculation of two feerate averages (1. local balance weighted,
-   2. capacity * target weighed) for the feelevel controller error calculation
+   2. capacity * target weighed) for the margin controller error calculation
 """
 
 from __future__ import annotations

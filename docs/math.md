@@ -7,7 +7,7 @@ This model suggests a fee adjustment mechanism for lightning channels based on t
 The fee adjustment model aims to achieve the following objectives:
 1. Controlling fee rates on the sinks to prevent rapid depletion.
 2. Managing fee rates on the sources to cap rebalancing costs, considering the differences in feerates (spreads) between sinks and sources.
-3. Maximizing profits by optimizing fee levels.
+3. Maximizing profits by optimizing margins.
 
 It's worth noting that optimizing profits (point 3) was not the primary focus in the current stage, but it may be addressed through proper model parameterization in the future.
 
@@ -17,7 +17,7 @@ The model adjusts fee rates to balance channel liquidity effectively, utilizing 
 
 1. The first component exponentially increases the feerate on a peer level when the channel balance leans toward the remote side and decreases it when it leans toward the local side. This component affects spreads and influences rebalancing costs.
 
-2. The second component adjusts all node feerates by the same absolute value. If the sinks are more depleted than filled, it increases the fee level; otherwise, it decreases it. This component doesn't impact spreads but provides more time for rebalancing, preventing rapid depletion.
+2. The second component adjusts all node feerates by the same absolute value. If the sinks are more depleted than filled, it increases the margins; otherwise, it decreases it. This component doesn't impact spreads but provides more time for rebalancing, preventing rapid depletion.
 
 ### PID Controllers
 
@@ -39,9 +39,9 @@ Let $T$ be the current time, and $T_0$ represent the oldest observed historic ti
 
 We define $r_P(t)$ as the feerate for a peer $P$ at time $t$, which can be decomposed as follows:
 $$
-r_P(t) = s_P + \exp(x_P(t)) + x_L(t)
+r_P(t) = s_P + \exp(x_P(t)) + x_M(t)
 $$
-Here, $s_P$ is a time-independent shift parameter ($s_P \geq 0$), and the components $s_P + \exp(x_P(t))$ and $x_L(t)$ correspond to the previously mentioned component one and component two, respectively. The functions $x_*(t)$ will be modeled using the PID approach. The instantaneous increments are given by:
+Here, $s_P$ is a time-independent shift parameter ($s_P \geq 0$), and the components $s_P + \exp(x_P(t))$ and $x_M(t)$ correspond to the previously mentioned component one and component two, respectively. The functions $x_*(t)$ will be modeled using the PID approach. The instantaneous increments are given by:
 $$
 dx(t) = (T(t) + P(t) + I(t) + D(t))dt
 $$

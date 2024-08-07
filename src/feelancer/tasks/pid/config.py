@@ -23,7 +23,7 @@ class PidPeerControllerConfig(GenericConf):
 
 
 @dataclass
-class PidFeelevelControllerConfig(GenericConf):
+class PidMarginControllerConfig(GenericConf):
     lambda_epsilon: float = 1e-4
     pid_controller: PidControllerParams = field(
         default_factory=lambda: PidControllerParams()
@@ -51,9 +51,9 @@ class PidConfig:
         else:
             self.exclude_chanids = exclude_chanids
 
-        if conf_copy.get("feelevel"):
-            if fl_params := conf_copy["feelevel"].get("pid_controller"):
-                conf_copy["feelevel"]["pid_controller"] = PidControllerParams(
+        if conf_copy.get("margin"):
+            if fl_params := conf_copy["margin"].get("pid_controller"):
+                conf_copy["margin"]["pid_controller"] = PidControllerParams(
                     **fl_params
                 )
         self.max_age_new_channels = int(
@@ -67,8 +67,8 @@ class PidConfig:
         else:
             raise TypeError("'db_only' is not a bool")
 
-        self.feelevel = defaults_from_type(
-            PidFeelevelControllerConfig, conf_copy.get("feelevel")
+        self.margin = defaults_from_type(
+            PidMarginControllerConfig, conf_copy.get("margin")
         )
 
         if conf_copy.get("peers"):

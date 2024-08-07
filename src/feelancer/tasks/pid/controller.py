@@ -99,7 +99,7 @@ class FactorController:
         return self._pid_controller_params
 
 
-class FeelevelController(FactorController):
+class MarginController(FactorController):
     def __init__(
         self,
         pid_controller_params: PidControllerParams,
@@ -116,7 +116,7 @@ class FeelevelController(FactorController):
         last_pid_params: PidControllerParams | None,
         current_pid_params: PidControllerParams,
         historic_pid_params: Callable[..., list[tuple[datetime, PidControllerParams]]],
-    ) -> FeelevelController:
+    ) -> MarginController:
         call_args = (
             current_timestamp,
             current_pid_params,
@@ -167,7 +167,7 @@ class PeerController(FactorController):
         init_pid_params: PidControllerParams,
         current_pid_params: PidControllerParams,
         channel_collection: ChannelCollection,
-        feelevel_controller: FeelevelController,
+        margin_controller: MarginController,
         historic_pid_params: Callable[..., list[tuple[datetime, PidControllerParams]]],
     ) -> PeerController:
         call_args = (
@@ -175,7 +175,7 @@ class PeerController(FactorController):
             channel_collection,
             current_pid_params,
             target,
-            feelevel_controller,
+            margin_controller,
         )
 
         try:
@@ -192,7 +192,7 @@ class PeerController(FactorController):
         channel_collection: ChannelCollection,
         pid_controller_params: PidControllerParams,
         target: float,
-        feelevel_controller: FeelevelController | None = None,
+        margin_controller: MarginController | None = None,
     ) -> None:
         # If the feerate of the channel has changed due to manual interventions
         # outside of the controller, we have to reset the control_variable.
@@ -200,14 +200,14 @@ class PeerController(FactorController):
 
         self._channel_collection = channel_collection
         self.target = target
-        self._set_control_variable(channel_collection, feelevel_controller)
+        self._set_control_variable(channel_collection, margin_controller)
         error = self._error(channel_collection, target)
 
         self._call_factor(error, timestamp, pid_controller_params)
 
         self.feerate_recommendation = self.ewma_pid.control_variable
-        if feelevel_controller:
-            self.feerate_recommendation += feelevel_controller.ewma_pid.control_variable
+        if margin_controller:
+            self.feerate_recommendation += margin_controller.ewma_pid.control_variable
 
     def policy_recommendations(self) -> Generator[PolicyRecommendation, None, None]:
         if not self._channel_collection or not self.feerate_recommendation:
@@ -221,14 +221,14 @@ class PeerController(FactorController):
     def _set_control_variable(
         self,
         channel_collection: ChannelCollection,
-        feelevel_controller: FeelevelController | None,
+        margin_controller: MarginController | None,
     ) -> None:
         if not channel_collection.ref_feerate_changed:
             return None
 
         control_variable_new = channel_collection.ref_feerate
-        if feelevel_controller:
-            control_variable_new -= feelevel_controller.ewma_pid.control_variable_last
+        if margin_controller:
+            control_variable_new -= margin_controller.ewma_pid.control_variable_last
         self.ewma_pid.set_control_variable_last(control_variable_new)
 
     def _error(self, channel_collection: ChannelCollection, target: float) -> float:

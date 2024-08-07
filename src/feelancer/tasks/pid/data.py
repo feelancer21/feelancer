@@ -11,14 +11,14 @@ from feelancer.tasks.result import TaskResult
 
 from .aggregator import ChannelAggregator
 from .config import PidConfig
-from .controller import FeelevelController, PeerController, PidControllerParams
+from .controller import MarginController, PeerController, PidControllerParams
 from .models import (
     Base,
     DBLnChannelPeer,
     DBLnChannelStatic,
     DBLnNode,
     DBPidController,
-    DBPidFeelevelController,
+    DBPidMarginController,
     DBPidPeerController,
     DBPidResult,
     DBPidRun,
@@ -146,22 +146,22 @@ def _convert_to_pid_peer_controller(
     )
 
 
-def _convert_from_feelevel_controller(
-    feelevel_controller: DBPidFeelevelController,
+def _convert_from_margin_controller(
+    margin_controller: DBPidMarginController,
 ) -> PidControllerParams:
-    return _convert_from_pid_controller(feelevel_controller.pid_controller)
+    return _convert_from_pid_controller(margin_controller.pid_controller)
 
 
-def _convert_to_feelevel_controller(
-    pid_run: DBPidRun, feelevel_controller: FeelevelController
-) -> DBPidFeelevelController:
-    return DBPidFeelevelController(
+def _convert_to_margin_controller(
+    pid_run: DBPidRun, margin_controller: MarginController
+) -> DBPidMarginController:
+    return DBPidMarginController(
         pid_run=pid_run,
         pid_controller=_convert_to_pid_controller(
-            feelevel_controller.pid_controller_params, feelevel_controller.ewma_pid
+            margin_controller.pid_controller_params, margin_controller.ewma_pid
         ),
-        feerate_local=feelevel_controller.feerate_local,
-        feerate_target=feelevel_controller.feerate_target,
+        feerate_local=margin_controller.feerate_local,
+        feerate_target=margin_controller.feerate_target,
     )
 
 
@@ -225,19 +225,19 @@ def _get_historic_pid_peer_params(
     return res
 
 
-def _get_historic_pid_feelevel_params(
+def _get_historic_pid_margin_params(
     session: Session, local_pub_key: str
 ) -> list[tuple[datetime, PidControllerParams]]:
     res = [
         (p.pid_run.run.timestamp_start, _convert_from_pid_controller(p.pid_controller))
-        for p in session.query(DBPidFeelevelController)
-        .join(DBPidFeelevelController.pid_run)
+        for p in session.query(DBPidMarginController)
+        .join(DBPidMarginController.pid_run)
         .join(DBPidRun.ln_node)
         .filter(
             DBLnNode.pub_key == local_pub_key,
         )
         .options(
-            joinedload(DBPidFeelevelController.pid_controller),
+            joinedload(DBPidMarginController.pid_controller),
         )
         .order_by(DBPidRun.run_id.asc())
         .all()
@@ -273,22 +273,22 @@ def _get_last_policies_end(
     }
 
 
-def _get_last_feelevel_pid_params(
+def _get_last_margin_pid_params(
     session: Session, last_pid_run: DBPidRun | None
 ) -> PidControllerParams | None:
     if not last_pid_run:
         return None
     if res := (
-        session.query(DBPidFeelevelController)
-        .options(joinedload(DBPidFeelevelController.pid_controller))
-        .join(DBPidFeelevelController.pid_run)
-        .filter(DBPidFeelevelController.pid_run == last_pid_run)
+        session.query(DBPidMarginController)
+        .options(joinedload(DBPidMarginController.pid_controller))
+        .join(DBPidMarginController.pid_run)
+        .filter(DBPidMarginController.pid_run == last_pid_run)
         .first()
     ):
-        feelevel_controller = _convert_from_feelevel_controller(res)
+        margin_controller = _convert_from_margin_controller(res)
     else:
-        feelevel_controller = None
-    return feelevel_controller
+        margin_controller = None
+    return margin_controller
 
 
 def _get_last_peer_pid_params(
@@ -340,7 +340,7 @@ class Pid(TaskResult):
             self.last_policies_end = self._last_policies_end(last_ln_run)
 
         self.last_peer_pid_params = self._last_peer_pid_params(last_pid_run)
-        self.last_feelevel_pid_params = self._last_feelevel_pid_params(last_pid_run)
+        self.last_margin_pid_params = self._last_margin_pid_params(last_pid_run)
 
         self.aggregator = ChannelAggregator.from_channels(
             config=self.config,
@@ -349,13 +349,13 @@ class Pid(TaskResult):
             channels=self.channels.values(),
         )
 
-        self.feelevel_controller = FeelevelController.from_data(
+        self.margin_controller = MarginController.from_data(
             aggregator=self.aggregator,
             last_timestamp=self.last_timestamp,
             current_timestamp=self.timestamp_start,
-            last_pid_params=self.last_feelevel_pid_params,
-            current_pid_params=self.config.feelevel.pid_controller,
-            historic_pid_params=self._historic_feelevel_pid_params,
+            last_pid_params=self.last_margin_pid_params,
+            current_pid_params=self.config.margin.pid_controller,
+            historic_pid_params=self._historic_margin_pid_params,
         )
 
         self.peer_controller_map = self._peer_controller_map()
@@ -388,11 +388,11 @@ class Pid(TaskResult):
 
         return timestamp, pid_params
 
-    def _historic_feelevel_pid_params(
+    def _historic_margin_pid_params(
         self,
     ) -> list[tuple[datetime, PidControllerParams]]:
         with self._db_session() as session:
-            return _get_historic_pid_feelevel_params(session, self.pubkey_local)
+            return _get_historic_pid_margin_params(session, self.pubkey_local)
 
     def _historic_pid_peer_params(
         self, peer_pub_key: str
@@ -405,11 +405,11 @@ class Pid(TaskResult):
 
         return fetch_history
 
-    def _last_feelevel_pid_params(
+    def _last_margin_pid_params(
         self, pid_run: DBPidRun | None
     ) -> PidControllerParams | None:
         with self._db_session() as session:
-            return _get_last_feelevel_pid_params(session, pid_run)
+            return _get_last_margin_pid_params(session, pid_run)
 
     def _last_peer_pid_params(
         self, pid_run: DBPidRun | None
@@ -446,7 +446,7 @@ class Pid(TaskResult):
                 init_pid_params=init_pid_params,
                 current_pid_params=peer_config.pid_controller,
                 channel_collection=channel_collection,
-                feelevel_controller=self.feelevel_controller,
+                margin_controller=self.margin_controller,
                 historic_pid_params=self._historic_pid_peer_params(pub_key),
             )
 
@@ -475,10 +475,10 @@ class Pid(TaskResult):
     def _yield_results(
         self, ln_session: LightningSessionCache
     ) -> Generator[
-        DBPidFeelevelController | DBPidPeerController | DBPidResult, None, None
+        DBPidMarginController | DBPidPeerController | DBPidResult, None, None
     ]:
         pid_run = _convert_to_pid_run(ln_session.db_run, ln_session.ln_node)
-        yield _convert_to_feelevel_controller(pid_run, self.feelevel_controller)
+        yield _convert_to_margin_controller(pid_run, self.margin_controller)
         for res in _yield_peer_controller(
             ln_session, pid_run, self.peer_controller_map
         ):
