@@ -23,8 +23,6 @@ class PidControllerParams:
     k_p: float = 0
     k_i: float = 0
     k_d: float = 0
-    # k_m is for a potential mean reversion, which isn't coded yet
-    k_m: float = 0
     alpha_i: float = 0
     alpha_d: float = 0
     error: float = 0

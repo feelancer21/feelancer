@@ -37,7 +37,6 @@ class DBPidController(Base):
     k_p: Mapped[float] = mapped_column(Float, nullable=False)
     k_i: Mapped[float] = mapped_column(Float, nullable=False)
     k_d: Mapped[float] = mapped_column(Float, nullable=False)
-    k_m: Mapped[float] = mapped_column(Float, nullable=False)
     delta_time: Mapped[float] = mapped_column(Float, nullable=False)
     error: Mapped[float] = mapped_column(Float, nullable=False)
     error_ewma: Mapped[float] = mapped_column(Float, nullable=False)
