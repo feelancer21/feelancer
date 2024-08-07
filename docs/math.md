@@ -38,17 +38,23 @@ In this controller, classical integrals and derivatives are not used. Instead, a
 Let $T$ be the current time, and $T_0$ represent the oldest observed historic timestamp.
 
 We define $r_P(t)$ as the feerate for a peer $P$ at time $t$, which can be decomposed as follows:
+
 $$
 r_P(t) = x_P(t) + x_M(t)
 $$
+
 The components $x_P(t)$ and $x_M(t)$ correspond to the previously mentioned component one and component two, respectively. The functions $x_*(t)$ will be modeled using the PID approach. The instantaneous increments are given by:
+
 $$
 dx(t) = (T(t) + P(t) + I(t) + D(t))dt
 $$
+
 This equation leads to:
+
 $$
 x(T_n) = x(T_{n-1}) + \int_{T_{n-1}}^{T_n}(T(t) + P(t) + I(t) + D(t))dt
 $$
+
 Where:
 - $\int_{T_{n-1}}^{T_n} T(t) =: T$ represents the error-independent drift.
 - Similar definitions apply to the parts $P$, $I$, and $D$, which are the proportional, integral, and derivative parts of the controller.
@@ -58,10 +64,13 @@ Now, let's delve into the different parts. We will assume that the error is a co
 ### Drift and Proportional Part
 
 These parts are relatively straightforward:
+
 $$
 T = K_t \int_{T_{n-1}}^{T_n} dt = K_t (T_n - T_{n-1})
 $$
+
 And
+
 $$
 P = K_p \int_{T_{n-1}}^{T_n} e(t)dt = K_p (T_n - T_{n-1}) \cdot y
 $$
@@ -85,7 +94,7 @@ $$
 This allows us to set:
 
 $$
-\text{E}_\alpha(t) = \text{EWMA}_\alpha(t, T_{0})
+\text{EWMA}_\alpha(t) = \text{EWMA}_\alpha(t, T_{0})
 $$
 
 Using the recursive definition, we can express it as:
