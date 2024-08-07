@@ -86,8 +86,6 @@ def _convert_to_pid_controller(
         k_i=pid_params.k_i,
         k_d=pid_params.k_d,
         k_m=pid_params.k_m,
-        shift=pid_params.shift,
-        conversion_method=pid_params.conversion_method,
         delta_time=ewma_pid.delta_time,
         error=ewma_pid.error,
         error_ewma=ewma_pid.error_ewma,
@@ -107,8 +105,6 @@ def _convert_from_pid_controller(
     pid_controller: DBPidController,
 ) -> PidControllerParams:
     return PidControllerParams(
-        conversion_method_str=pid_controller.conversion_method.name,
-        shift=pid_controller.shift,
         alpha_i=pid_controller.alpha_i,
         alpha_d=pid_controller.alpha_d,
         c=pid_controller.c,

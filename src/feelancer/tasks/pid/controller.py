@@ -74,13 +74,8 @@ class FactorController:
         # Changes have to be handled in following way:
         #    1. k_ changed => We only have to set the new params
         #    2. alpha_ changed =>  Reinit the controller with the historic errors
-        #    3. conversion_method and shift => Recalculate the control_factor
 
         self._set_pid_controller_params(pid_controller_params)
-        self.ewma_pid.set_conversion(
-            k_conversion_method_new=pid_controller_params.conversion_method,
-            shift_new=pid_controller_params.shift,
-        )
         self.ewma_pid(error, timestamp)
 
     def _set_pid_controller_params(

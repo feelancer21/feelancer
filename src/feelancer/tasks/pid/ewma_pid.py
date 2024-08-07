@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from math import exp, log
 
-from .enums import ConversionMethod, TimeUnit
+from .enums import TimeUnit
 
 DEFAULT_TIME_DIFF = 3600
 
@@ -27,25 +27,11 @@ class PidControllerParams:
     k_m: float = 0
     alpha_i: float = 0
     alpha_d: float = 0
-    shift: float = 0
-    conversion_method_str: str = "simple"
-    conversion_method: ConversionMethod = field(init=False)
     error: float = 0
     error_ewma: float = 0
     error_delta_residual: float = 0
     delta_time: float = 0
     control_factor: float = 0
-
-    def __post_init__(self):
-        try:
-            self.conversion_method = ConversionMethod[
-                self.conversion_method_str.upper()
-            ]
-        except KeyError:
-            raise ValueError(
-                f"'{self.conversion_method_str}' is not an allowed"
-                " conversion_method_str"
-            )
 
 
 class TimeParam:
@@ -79,10 +65,8 @@ class EwmaPID:
         k_p: TimeParam,
         k_i: TimeParam,
         k_d: float,
-        k_conversion_method: ConversionMethod,
         alpha_d: TimeParam,
         alpha_i: TimeParam,
-        shift: float,
         error: float,
         error_ewma: float,
         error_delta_residual: float,
@@ -92,13 +76,11 @@ class EwmaPID:
         self.c = c
         self.k_t, self.k_p, self.k_i, self.k_d = k_t, k_p, k_i, k_d
         self.alpha_d, self.alpha_i = alpha_d, alpha_i
-        self.k_conversion_method = k_conversion_method
 
         self._last_error = error
         self._last_ewma = error_ewma
         self._last_delta_residual = error_delta_residual
 
-        self.shift = shift
         self._last_control_factor = control_factor
         self._last_dt = 0
 
@@ -129,8 +111,6 @@ class EwmaPID:
             k_p=TimeParam(pid_controller_params.k_p / k_unit, k_time_unit),
             k_d=pid_controller_params.k_d / k_unit,
             k_i=TimeParam(pid_controller_params.k_i / k_unit, k_time_unit),
-            k_conversion_method=pid_controller_params.conversion_method,
-            shift=pid_controller_params.shift,
             alpha_d=TimeParam(
                 pid_controller_params.alpha_d / alpha_unit, alpha_time_unit
             ),
@@ -184,38 +164,20 @@ class EwmaPID:
 
         return self.control_variable
 
-    def factor_to_value(self, factor: float) -> float:
-        if self.k_conversion_method == ConversionMethod.COMPOUNDING:
-            return exp(factor) - self.shift
-        return factor
-
-    def value_to_factor(self, value: float) -> float:
-        if self.k_conversion_method == ConversionMethod.COMPOUNDING:
-            return log(value + self.shift)
-        return value
-
-    def set_conversion(
-        self, k_conversion_method_new: ConversionMethod, shift_new: float
-    ) -> None:
-        control_variable = self.control_variable_last
-        self.k_conversion_method = k_conversion_method_new
-        self.shift = shift_new
-        self.set_control_variable_last(control_variable)
-
     @property
     def control_factor(self) -> float:
         return self._last_control_factor + self.gain
 
     @property
     def control_variable(self) -> float:
-        return self.factor_to_value(self.control_factor)
+        return self.control_factor
 
     @property
     def control_variable_last(self) -> float:
-        return self.factor_to_value(self._last_control_factor)
+        return self._last_control_factor
 
     def set_control_variable_last(self, control_variable_last: float) -> None:
-        self._last_control_factor = self.value_to_factor(control_variable_last)
+        self._last_control_factor = control_variable_last
 
     @property
     def gain(self) -> float:

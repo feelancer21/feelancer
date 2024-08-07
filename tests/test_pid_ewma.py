@@ -40,37 +40,10 @@ def call_ewma(
 def test_1():
     params = PidControllerParams(
         c=0,
-        k_t=0.1,
-        k_p=1.2,
-        k_i=4.8,
-        k_d=2.4,
-        conversion_method_str="compounding",
-        shift=300,
-        alpha_d=1.0,
-        alpha_i=0.04,
-    )
-    ewma_calls = [
-        EwmaCall(3600, 0, 0),
-        EwmaCall(7200, -1 / 8, 0),
-        EwmaCall(10800, -3 / 8, 0),
-        EwmaCall(14400, -4 / 8, 0),
-        EwmaCall(18000, -4 / 8, 0),
-        EwmaCall(18000, -2 / 8, 0),
-        EwmaCall(50400, -2 / 8, 0),
-        EwmaCall(532800, 0, 0),
-    ]
-    assert call_ewma(1500, ewma_calls, params) == 1466.2119081814774
-
-
-def test_2():
-    params = PidControllerParams(
-        c=0,
         k_t=10,
         k_p=120,
         k_i=480,
         k_d=240,
-        conversion_method_str="simple",
-        shift=300,
         alpha_d=1.0,
         alpha_i=0.04,
     )

@@ -39,9 +39,9 @@ Let $T$ be the current time, and $T_0$ represent the oldest observed historic ti
 
 We define $r_P(t)$ as the feerate for a peer $P$ at time $t$, which can be decomposed as follows:
 $$
-r_P(t) = s_P + \exp(x_P(t)) + x_M(t)
+r_P(t) = x_P(t) + x_M(t)
 $$
-Here, $s_P$ is a time-independent shift parameter ($s_P \geq 0$), and the components $s_P + \exp(x_P(t))$ and $x_M(t)$ correspond to the previously mentioned component one and component two, respectively. The functions $x_*(t)$ will be modeled using the PID approach. The instantaneous increments are given by:
+The components $x_P(t)$ and $x_M(t)$ correspond to the previously mentioned component one and component two, respectively. The functions $x_*(t)$ will be modeled using the PID approach. The instantaneous increments are given by:
 $$
 dx(t) = (T(t) + P(t) + I(t) + D(t))dt
 $$

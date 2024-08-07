@@ -14,7 +14,6 @@ from feelancer.lightning.models import (
     DBLnNode,
     DBRun,
 )
-from feelancer.tasks.pid.enums import ConversionMethod
 
 
 class DBPidRun(Base):
@@ -31,10 +30,6 @@ class DBPidController(Base):
     __tablename__ = "pid_controller"
 
     id: Mapped[int] = mapped_column(autoincrement=True, primary_key=True)
-    conversion_method: Mapped[ConversionMethod] = mapped_column(
-        Enum(ConversionMethod), nullable=False
-    )
-    shift: Mapped[float] = mapped_column(Float, nullable=False)
     alpha_i: Mapped[float] = mapped_column(Float, nullable=False)
     alpha_d: Mapped[float] = mapped_column(Float, nullable=False)
     c: Mapped[float] = mapped_column(Float, nullable=False)

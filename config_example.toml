@@ -85,7 +85,7 @@ max_age_new_channels = 144
 # Relevant for recalculating the ewma if a parameter changes. Not implemented yet
 lambda_epsilon = 1e-4
 
-pid_controller = { k_t = 0, k_p = 0, alpha_i = 0, k_i = 0, alpha_d = 0, k_d = 0, conversion_method_str = "simple" }
+pid_controller = { k_t = 0, k_p = 0, alpha_i = 0, k_i = 0, alpha_d = 0, k_d = 0 }
 
 
 [pid.peers.default]
@@ -97,7 +97,7 @@ feerate_new_remote = 250
 # Relevant for recalculating the ewma if a parameter changes. Not implemented yet
 lambda_epsilon = 1e-4
 
-pid_controller = { k_t = 0, k_p = 0, alpha_i = 0, k_i = 0, alpha_d = 0, k_d = 0, conversion_method_str = "compounding", shift = 10 }
+pid_controller = { k_t = 0, k_p = 0, alpha_i = 0, k_i = 0, alpha_d = 0, k_d = 0 }
 
 
 [pid.peers.boltz]
@@ -106,4 +106,4 @@ pubkeys = [
     "02d96eadea3d780104449aca5c93461ce67c1564e2e1d73225fa67dd3b997a6018",
 ]
 target = 900_000
-pid_controller = { k_p = 1, conversion_method_str = "compounding", shift = 10 }
+pid_controller = { k_p = 1 }
