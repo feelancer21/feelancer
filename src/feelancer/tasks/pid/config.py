@@ -53,9 +53,7 @@ class PidConfig:
 
         if conf_copy.get("margin"):
             if fl_params := conf_copy["margin"].get("pid_controller"):
-                conf_copy["margin"]["pid_controller"] = PidControllerParams(
-                    **fl_params
-                )
+                conf_copy["margin"]["pid_controller"] = PidControllerParams(**fl_params)
         self.max_age_new_channels = int(
             conf_copy.get("max_age_new_channels") or DEFAULT_MAX_AGE_NEW_CHANNELS
         )

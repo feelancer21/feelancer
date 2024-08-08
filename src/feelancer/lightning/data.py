@@ -131,9 +131,9 @@ class LightningSessionCache:
         self._channel_liquidity: dict[ChannelIDX, DBLnChannelLiquidity] | None = None
         self._channel_peer: dict[str, DBLnChannelPeer] | None = None
         self._channel_static: dict[ChannelIDX, DBLnChannelStatic] | None = None
-        self._channel_policies: dict[PolicyIDX, dict[ChannelIDX, DBLnChannelPolicy]] = (
-            {}
-        )
+        self._channel_policies: dict[
+            PolicyIDX, dict[ChannelIDX, DBLnChannelPolicy]
+        ] = {}
 
     @property
     def channel_peer(self) -> dict[str, DBLnChannelPeer]:

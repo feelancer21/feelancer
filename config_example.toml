@@ -4,6 +4,9 @@ cert_filepath = "path_to/tls.cert"
 macaroon_filepath = "path_to/admin.macaroon"
 ip_address = "192.168.2.21:10009"
 
+[logging]
+level = "INFO"
+logfile = "feelancer.log"
 
 [sqlalchemy.url]
 # Sqlalchemy configuration for your database. Parameters are used to create

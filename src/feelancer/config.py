@@ -30,11 +30,11 @@ class FeelancerConfig:
         self.tasks_config: dict[str, dict] = {}
 
         for task in run_tasks:
-            if task in ["feelancer", "lnd", "sqlalchemy"]:
+            if task in ["feelancer", "lnd", "logging", "sqlalchemy"]:
                 continue
 
             if not (task_config := config_dict.get(task)):
-                raise ValueError("'pid' section missing in configuration")
+                raise ValueError(f"'{task}' section missing in configuration")
             else:
                 self.tasks_config[task] = task_config
 

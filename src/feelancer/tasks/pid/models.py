@@ -4,7 +4,7 @@ Data model for the pid controller
 
 from __future__ import annotations
 
-from sqlalchemy import Enum, Float, ForeignKey
+from sqlalchemy import Float, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from feelancer.lightning.models import (
