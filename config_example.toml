@@ -1,3 +1,7 @@
+# There is a simple file based locking mechanism preventing races between multiple
+# executions of the application.
+lockfile = "feelancer.lock"
+
 [lnd]
 # Use full pathes with ~.
 cert_filepath = "path_to/tls.cert"

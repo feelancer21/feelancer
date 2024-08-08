@@ -1,4 +1,5 @@
 fl21-lnd-grpc-client
+flufl.lock
 sqlalchemy
 psycopg2-binary
 tomli
