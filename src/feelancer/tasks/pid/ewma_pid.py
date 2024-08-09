@@ -29,7 +29,7 @@ class PidControllerParams:
     error_ewma: float = 0
     error_delta_residual: float = 0
     delta_time: float = 0
-    control_factor: float = 0
+    control_variable: float = 0
 
 
 class TimeParam:
@@ -68,7 +68,7 @@ class EwmaPID:
         error: float,
         error_ewma: float,
         error_delta_residual: float,
-        control_factor: float,
+        control_variable: float,
         timestamp_last: datetime | None,
     ) -> None:
         self.c = c
@@ -79,7 +79,7 @@ class EwmaPID:
         self._last_ewma = error_ewma
         self._last_delta_residual = error_delta_residual
 
-        self._last_control_factor = control_factor
+        self._last_control_variable = control_variable
         self._last_dt = 0
 
         self.input = 0
@@ -118,7 +118,7 @@ class EwmaPID:
             error=pid_controller_params.error,
             error_ewma=pid_controller_params.error_ewma,
             error_delta_residual=pid_controller_params.error_delta_residual,
-            control_factor=pid_controller_params.control_factor,
+            control_variable=pid_controller_params.control_variable,
             timestamp_last=timestamp_last,
         )
 
@@ -144,7 +144,7 @@ class EwmaPID:
         except ZeroDivisionError:
             ewma_integral = 0
 
-        self._last_control_factor += self.gain
+        self._last_control_variable += self.gain
 
         error_delta = error - self._last_error
         delta = (self._last_delta_residual + error_delta) * (1 - lambda_d)
@@ -163,19 +163,15 @@ class EwmaPID:
         return self.control_variable
 
     @property
-    def control_factor(self) -> float:
-        return self._last_control_factor + self.gain
-
-    @property
     def control_variable(self) -> float:
-        return self.control_factor
+        return self._last_control_variable + self.gain
 
     @property
     def control_variable_last(self) -> float:
-        return self._last_control_factor
+        return self._last_control_variable
 
     def set_control_variable_last(self, control_variable_last: float) -> None:
-        self._last_control_factor = control_variable_last
+        self._last_control_variable = control_variable_last
 
     @property
     def gain(self) -> float:

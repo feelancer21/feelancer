@@ -47,7 +47,6 @@ class DBPidController(Base):
     gain_d: Mapped[float] = mapped_column(Float, nullable=False)
     gain: Mapped[float] = mapped_column(Float, nullable=False)
     control_variable_last: Mapped[float] = mapped_column(Float, nullable=False)
-    control_factor: Mapped[float] = mapped_column(Float, nullable=False)
     control_variable: Mapped[float] = mapped_column(Float, nullable=False)
 
 

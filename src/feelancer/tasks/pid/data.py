@@ -96,7 +96,6 @@ def _convert_to_pid_controller(
         gain_d=ewma_pid.gain_d,
         control_variable_last=ewma_pid.control_variable_last,
         control_variable=ewma_pid.control_variable,
-        control_factor=ewma_pid.control_factor,
     )
 
 
@@ -114,7 +113,7 @@ def _convert_from_pid_controller(
         error=pid_controller.error,
         error_ewma=pid_controller.error_ewma,
         error_delta_residual=pid_controller.error_delta_residual,
-        control_factor=pid_controller.control_factor,
+        control_variable=pid_controller.control_variable,
         delta_time=pid_controller.delta_time,
     )
 
