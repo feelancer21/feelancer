@@ -83,9 +83,9 @@ class EwmaSimulator:
 
         time_0 = datetime(2021, 1, 1, 0, 0, 0)
         controller = EwmaController.from_params(self.params, time_0)
-        controller._last_error = error
-        controller._last_delta_residual = error_delta_resudal
-        controller._last_ewma = ewma
+        controller.error = error
+        controller.error_delta_residual = error_delta_resudal
+        controller.error_ewma = ewma
 
         # Calling the controller and converting the result in a result object
         # for further data analysis.

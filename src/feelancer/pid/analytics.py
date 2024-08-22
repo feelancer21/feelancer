@@ -68,12 +68,13 @@ class EwmaController:
         self.alpha_d, self.alpha_i = alpha_d, alpha_i
         self.shift = 0
 
-        self._last_error = error
-        self._last_ewma = error_ewma
-        self._last_delta_residual = error_delta_residual
+        self.error = error
+        self.error_ewma = error_ewma
+        self.error_delta_residual = error_delta_residual
 
-        self._last_control_variable = control_variable
-        self._last_dt = 0
+        self.control_variable = control_variable
+
+        self.delta_time = 0
 
         self.gain_t = 0
         self.gain_p = 0
@@ -135,70 +136,46 @@ class EwmaController:
         if not self._last_time:
             dt = DEFAULT_TIME_DIFF
         elif (dt := (timestamp.timestamp() - self._last_time)) <= 0:
-            raise ValueError("dt has negative value {}, must be positive".format(dt))
+            raise ValueError(
+                f"dt has non positive value {dt}, must be positive. "
+                f"timestamp {timestamp.timestamp()}, last time {self._last_time}"
+            )
 
         lambda_d = _lambda(self.alpha_d, dt)
         lambda_i = _lambda(self.alpha_i, dt)
 
-        ewma = self._last_ewma * lambda_i + error * (1 - lambda_i)
+        ewma = self.error_ewma * lambda_i + error * (1 - lambda_i)
 
         if self.alpha_i.to_seconds != 0:
             ewma_integral = error * dt + (
-                self._last_ewma - error
+                self.error_ewma - error
             ) / self.alpha_i.to_seconds * (1 - lambda_i)
         else:
             ewma_integral = 0
 
-        error_delta = error - self._last_error
-        delta = (self._last_delta_residual + error_delta) * (1 - lambda_d)
-        delta_residual = self._last_delta_residual + error_delta - delta
+        error_delta = error - self.error
+        delta = (self.error_delta_residual + error_delta) * (1 - lambda_d)
+        delta_residual = self.error_delta_residual + error_delta - delta
 
-        self._last_control_variable = self.control_variable
         self.shift = 0
         self._last_time = timestamp.timestamp()
-        self._last_error = error
-        self._last_ewma = ewma
-        self._last_delta_residual = delta_residual
-        self._last_dt = dt
 
         self.gain_t = self.k_t.to_seconds * dt
         self.gain_p = self.k_p.to_seconds * error * dt
         self.gain_i = self.k_i.to_seconds * ewma_integral
         self.gain_d = self.k_d * delta
+        self.delta_time = dt
+        self.error = error
+        self.error_ewma = ewma
+        self.error_delta_residual = delta_residual
+        self.control_variable += self.gain
         self._ewma_params = None
 
         return self.control_variable
 
     @property
-    def control_variable(self) -> float:
-        return self._last_control_variable + self.gain + self.shift
-
-    @property
-    def control_variable_last(self) -> float:
-        return self._last_control_variable
-
-    def set_control_variable_last(self, control_variable_last: float) -> None:
-        self._last_control_variable = control_variable_last
-
-    @property
     def gain(self) -> float:
         return self.gain_t + self.gain_p + self.gain_d + self.gain_i
-
-    @property
-    def error(self) -> float:
-        return self._last_error
-
-    @property
-    def error_delta_residual(self) -> float:
-        return self._last_delta_residual
-
-    @property
-    def error_ewma(self) -> float:
-        return self._last_ewma
-
-    @property
-    def delta_time(self) -> float:
-        return self._last_dt
 
     @property
     def ewma_params(self) -> EwmaControllerParams:
@@ -218,8 +195,9 @@ class EwmaController:
 
         return self._ewma_params
 
-    def set_shift(self, shift: float):
-        self.shift = shift
+    def apply_shift(self, shift: float):
+        self.shift += shift
+        self.control_variable += shift
 
 
 # A mean reversion controller
@@ -234,8 +212,7 @@ class MrController:
         self.k_m = k_m
         self.alpha = alpha
 
-        self._last_control_variable = control_variable
-        self._last_dt = 0
+        self.control_variable = control_variable
 
         self.gain_m = 0
 
@@ -276,35 +253,19 @@ class MrController:
 
         lambda_m = _lambda(self.alpha, dt)
 
-        self._last_control_variable = self.control_variable
-
         self._last_time = timestamp.timestamp()
-        self._last_dt = dt
 
-        self.gain_m = (self.k_m - self._last_control_variable) * (1 - lambda_m)
+        self.gain_m = (self.k_m - self.control_variable) * (1 - lambda_m)
 
+        self.delta_time = dt
+        self.control_variable += self.gain
         self._mr_params = None
 
         return self.control_variable
 
     @property
-    def control_variable(self) -> float:
-        return self._last_control_variable + self.gain
-
-    @property
-    def control_variable_last(self) -> float:
-        return self._last_control_variable
-
-    def set_control_variable_last(self, control_variable_last: float) -> None:
-        self._last_control_variable = control_variable_last
-
-    @property
     def gain(self) -> float:
         return self.gain_m
-
-    @property
-    def delta_time(self) -> float:
-        return self._last_dt
 
     @property
     def mr_params(self) -> MrControllerParams:

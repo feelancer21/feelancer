@@ -29,7 +29,7 @@ def call_ewma(
         timestamp_last=time,
     )
 
-    pid.set_control_variable_last(start)
+    pid.control_variable = start
 
     for call in ewma_calls:
         time += timedelta(seconds=call.time_delta)
@@ -72,7 +72,7 @@ def call_mr(
         timestamp_last=time,
     )
 
-    mr.set_control_variable_last(start)
+    mr.control_variable = start
 
     for dt in time_delta_sec:
         time += timedelta(seconds=dt)

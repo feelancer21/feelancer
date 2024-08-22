@@ -60,7 +60,7 @@ class MarginController:
         # we assume that it is a new controller.
         # In this case we set the control variable to k_m.
         if not timestamp_last and mr_params.control_variable == 0:
-            self.mr_controller.set_control_variable_last(mr_params.k_m)
+            self.mr_controller.control_variable = mr_params.k_m
 
     def __call__(self, timestamp: datetime, mr_params: MrControllerParams) -> None:
         # Checking if a parameter has changed since the last run.
@@ -79,13 +79,6 @@ class MarginController:
         Returns the margin of the controller after the latest call.
         """
         return self.mr_controller.control_variable
-
-    @property
-    def margin_last(self) -> float:
-        """
-        Returns the margin of the controller before the latest call.
-        """
-        return self.mr_controller.control_variable_last
 
 
 class SpreadController:
@@ -108,7 +101,10 @@ class SpreadController:
         channel_collection: ChannelCollection,
         ewma_params: EwmaControllerParams,
         target: float,
-        margin_last: float,
+        # The margin for the case we have to recalculate the spread because
+        # the external fee rate had changed. This margin has to be consistent
+        # with the last call of the controller.
+        margin: float,
     ) -> None:
         # ewma_params can be different from the last call.
         # Changes have to be handled in following way:
@@ -154,8 +150,8 @@ class SpreadController:
         # outside of the controller, we have to reset the control_variable.
         # Otherwise the manual intervention will be overwritten by the controller.
         if channel_collection.ref_fee_rate_changed:
-            self.ewma_controller.set_control_variable_last(
-                channel_collection.ref_fee_rate - margin_last
+            self.ewma_controller.control_variable = (
+                channel_collection.ref_fee_rate - margin
             )
 
         # Now we are able to call the actual ewma controller
@@ -193,7 +189,7 @@ class SpreadController:
         for timestamp, params, _ in history:
             controller.ewma_controller(params.error, timestamp)
 
-        controller.ewma_controller.set_control_variable_last(
+        controller.ewma_controller.control_variable = (
             params.control_variable  # pyright: ignore - cannot be unbound because we returned early
         )
 
@@ -289,6 +285,10 @@ class PidController:
         last_pid_run = self.store.last_pid_run()
         self.config = config
 
+        # We need the last margin later we have to recalculate the spread for
+        # one peer
+        margin_last = self.margin_controller.margin
+
         # Calling the margin controller
         self.margin_controller(timestamp_start, self.config.margin.mr_controller)
         logging.debug(
@@ -344,15 +344,13 @@ class PidController:
             # Now we have a spread controller for each peer and we can prepare
             # the call of the controller. We set the arguments for the call first.
             target = peer_config.target or aggregator.target_default
-            margin_last = (
-                self.margin_controller.margin_last + peer_config.margin_idiosyncratic
-            )
+            margin_peer = margin_last + peer_config.margin_idiosyncratic
             call_args = (
                 timestamp_start,
                 channel_collection,
                 peer_config.ewma_controller,
                 target,
-                margin_last,
+                margin_peer,
             )
 
             try:
@@ -368,7 +366,7 @@ class PidController:
             logging.debug(
                 f"Called spread controller for {pub_key} with args: "
                 f"timestamp {timestamp_start}; params {peer_config.ewma_controller}; "
-                f"target {target}; margin last {margin_last}; result spread: "
+                f"target {target}; margin peer {margin_peer}; result spread: "
                 f"{spread_controller.spread}"
             )
         # If the channels with a peer has been closed, we can remove the
@@ -393,7 +391,7 @@ class PidController:
 
             logging.info(f"Shifting spread controllers by {shift}")
             for c in self.spread_controller_map.values():
-                c.ewma_controller.set_shift(shift)
+                c.ewma_controller.apply_shift(shift)
 
         self.last_timestamp = timestamp_start
 
