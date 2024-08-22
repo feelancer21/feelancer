@@ -53,7 +53,19 @@ class TaskRunner:
 
         scheduler = BlockingScheduler()
         logging.info(f"Running pid every {self.seconds}s")
-        self.job = scheduler.add_job(self._run, IntervalTrigger(seconds=self.seconds))
+
+        def run_wrapper() -> None:
+            """
+            Starts the run and resets objects in the case of an unexpected error,
+            e.g. db loss.
+            """
+            try:
+                self._run()
+            except:
+                logging.exception("An unexpected error occurred")
+                self._reset()
+
+        self.job = scheduler.add_job(run_wrapper, IntervalTrigger(seconds=self.seconds))
 
         """
         shutdown_schedule is a callback function which is called when SIGTERM or
@@ -106,17 +118,28 @@ class TaskRunner:
 
         except Exception as e:
             logging.error("Could not run pid controller")
-            logging.exception(e)
+            raise e
 
         timestamp_end = datetime.now(pytz.utc)
 
-        """Updating the Lightning Backend with new policies."""
-        update_channel_policies(self.lnclient, policy_updates, config, timestamp_end)
+        """
+        Now we have to send the results to the lightning backend and store the
+        results to database. There is the minimal risk that one of them is down
+        now.
+        We want to store the channel policies at the end of the run too. That's
+        the reason we do it at first.
+        """
+        try:
+            update_channel_policies(
+                self.lnclient, policy_updates, config, timestamp_end
+            )
+        except Exception as e:
+            # We log the exception but don't raise it.
+            logging.exception("Unexpected error during policy updates occurred")
 
         """
         Storing the relevant data in the database by calling the store_funcs
-        with the cached data.
-        We can return early if there is nothing to store.
+        with the cached data. We can return early if there is nothing to store.
         """
         if len(store_funcs) == 0:
             return None
@@ -155,6 +178,10 @@ class TaskRunner:
     def _run_pid(
         self, ln: LightningCache, config: FeelancerConfig, timestamp: datetime
     ) -> tuple[Callable[[LightningSessionCache], None], list[PolicyProposal]]:
+        """
+        Runs the the pid model.
+        """
+
         pid_config = PidConfig(config.tasks_config["pid"])
         if not self.pid_controller:
             self.pid_controller = PidController(self.db, pid_config, ln.pubkey_local)
@@ -164,3 +191,12 @@ class TaskRunner:
         func = self.pid_controller.store_data
         prop = self.pid_controller.policy_proposals()
         return func, prop
+
+    def _reset(self) -> None:
+        """
+        Resets all objects if the data could not be saved in the database.
+        These objects must be reinitialized during the next run.
+        """
+
+        self.pid_controller = None
+        logging.debug("Reset of internal objects completed.")

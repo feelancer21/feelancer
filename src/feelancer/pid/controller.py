@@ -1,7 +1,5 @@
 """
-Definition of the two factor controllers using the PID
-1. SpreadController: For 
-
+Defines MarginController, SpreadController and the PidController
 """
 
 from __future__ import annotations
@@ -40,12 +38,16 @@ LOG_THRESHOLD = 10
 
 
 class ReinitRequired(Exception):
-    def __init__(self, message="Reinit of FactorController required"):
+    def __init__(self, message="Reinit of Controller required"):
         self.message = message
         super().__init__(self.message)
 
 
 class MarginController:
+    """
+    Controls the margin with an MrController.
+    """
+
     def __init__(
         self,
         mr_params: MrControllerParams,
@@ -57,13 +59,17 @@ class MarginController:
         )
 
         # If there is no provided timestamp and the control variable equals 0,
-        # we assume that it is a new controller.
-        # In this case we set the control variable to k_m.
+        # we assume that it is a new controller.In this case we set the control
+        # variable to k_m.
         if not timestamp_last and mr_params.control_variable == 0:
             self.mr_controller.control_variable = mr_params.k_m
 
-    def __call__(self, timestamp: datetime, mr_params: MrControllerParams) -> None:
-        # Checking if a parameter has changed since the last run.
+    def __call__(self, timestamp: datetime, mr_params: MrControllerParams) -> float:
+        """Updates the parameters and calls the MrController"""
+
+        # Checking if a parameter has changed since the last run. We are not doing
+        # a Reinit if alpha changes, because it could lead to a jump in the margin
+        # and hence in the fee rate too.
         m = self.mr_controller.mr_params
         if m.k_m != mr_params.k_m:
             self.mr_controller.k_m = mr_params.k_m
@@ -72,6 +78,8 @@ class MarginController:
             self.mr_controller.set_alpha(mr_params.alpha)
 
         self.mr_controller(timestamp)
+
+        return self.mr_controller.control_variable
 
     @property
     def margin(self) -> float:
@@ -82,6 +90,10 @@ class MarginController:
 
 
 class SpreadController:
+    """
+    Controls the spread of one peer with an EwmaController.
+    """
+
     def __init__(
         self,
         ewma_params: EwmaControllerParams,
@@ -106,17 +118,19 @@ class SpreadController:
         # with the last call of the controller.
         margin: float,
     ) -> None:
-        # ewma_params can be different from the last call.
-        # Changes have to be handled in following way:
-        #    1. k_ changed => We only have to set the new params
-        #    2. alpha_ changed =>  Reinit the controller with the historic errors
+        """Updates the parameters and calls the EwmaController"""
 
+        """
+        We check of the ewma params have changed since the last call. If one
+        of the alpha params changed, we are raising an error, because we have
+        to reinitialize the controller with its history to calculate a new
+        ewma.
+        """
         e = self.ewma_controller.ewma_params
-
         if not (e.alpha_d == ewma_params.alpha_d and e.alpha_i == ewma_params.alpha_i):
             raise ReinitRequired
 
-        # We have to update the k values if necessary.
+        # If one the k_ changed we update the value only
         if e.k_d != ewma_params.k_d:
             self.ewma_controller.set_k_d(ewma_params.k_d)
 
@@ -129,6 +143,13 @@ class SpreadController:
         if e.k_t != ewma_params.k_t:
             self.ewma_controller.set_k_t(ewma_params.k_t)
 
+        """
+        Next step is the calculation of the error we need for the EwmaController.
+        The error is 0 if liquidity_in (normalized in millionths) is at the target.
+        If liquidity_in is higher than the target the error is in the range 
+        ]0; 0.5]. And if liquidity_in is lower than the target the error is in
+        the range [-0.5; 0[.
+        """
         liquidity_out = channel_collection.liquidity_out
         liquidity_in = channel_collection.liquidity_in
 
@@ -137,8 +158,8 @@ class SpreadController:
             ratio_in = liquidity_in / liquidity_total
             set_point = target / PEER_TARGET_UNIT
 
-            # We make a linear interpolation to have get an error with values between
-            # -0.5 and 0.5
+            # Now interpolate with piecewise linear functions between [-0.5; 0.5]
+
             if ratio_in >= set_point:
                 error = 0.5 / (1 - set_point) * (ratio_in - set_point)
             else:
@@ -146,9 +167,11 @@ class SpreadController:
         except ZeroDivisionError:
             error = 0
 
-        # If the fee_rate of the channel has changed due to manual interventions
-        # outside of the controller, we have to reset the control_variable.
-        # Otherwise the manual intervention will be overwritten by the controller.
+        """
+        If the reference fee rate of the channels has changed due to manual
+        interventions outside of the controller, we have to reset the control variable.
+        Otherwise the manual intervention will be overwritten by the controller.
+        """
         if channel_collection.ref_fee_rate_changed:
             self.ewma_controller.control_variable = (
                 channel_collection.ref_fee_rate - margin
@@ -161,7 +184,10 @@ class SpreadController:
         self._channel_collection = channel_collection
 
     def channels(self) -> Generator[Channel, None, None]:
-        if not self._channel_collection or not self.spread:
+        """
+        Yields all channels associated with this controller.
+        """
+        if not self._channel_collection:
             return None
 
         for channel in self._channel_collection.pid_channels():
@@ -180,6 +206,10 @@ class SpreadController:
         ewma_params: EwmaControllerParams,
         history: list[tuple[datetime, EwmaControllerParams, float]],
     ):
+        """
+        Initializes a new controller with the provided ewma params and calls
+        it for the whole history.
+        """
         if len(history) == 0:
             return cls(ewma_params, None)
 
@@ -250,28 +280,41 @@ def convert_to_policy_proposal(
 
 
 class PidController:
+    """
+    The main controller which holds the MarginController and all SpreadControllers.
+    """
+
     def __init__(self, db: FeelancerDB, config: PidConfig, pubkey_local: str) -> None:
         self.config = config
         self.store = PidStore(db, pubkey_local)
         self.pubkey_local = pubkey_local
 
+        """Fetching the last timestamp from the database"""
         last_pid_run = self.store.last_pid_run()
         if not last_pid_run:
             self.last_timestamp = None
         else:
             self.last_timestamp = last_pid_run.run.timestamp_start
 
-        # Fetching the last mean reversion params from db. If it is None we use
-        # the current config. In this case we set the control variable to k_m,
-        # because we don't want to start with a margin of 0.
-        # The params are updated again with the current config in the calling
-        # part of the controller.
+        """
+        Fetching the last mean reversion parameters from db and initializing the
+        MarginController .If there are no parameters we use the current config. 
+        In this case we set the control variable to k_m, because we don't want
+        to start with a margin of 0.
+        The parameters are updated again with the current config in the calling
+        part of the controller.
+        """
         mr_params = self.store.last_mr_params(last_pid_run)
         if not mr_params:
             mr_params = self.config.margin.mr_controller
 
         self.margin_controller = MarginController(mr_params, self.last_timestamp)
 
+        """
+        Next step is creating of the SpreadControllers for all controllers which
+        were used in the last run.
+        Controllers for new peers are created in the calling part.
+        """
         last_ewma_params = self.store.last_ewma_params(last_pid_run)
         self.spread_controller_map: dict[str, SpreadController] = {}
         for pub_key, params in last_ewma_params.items():
@@ -282,6 +325,11 @@ class PidController:
     def __call__(
         self, config: PidConfig, ln: LightningCache, timestamp_start: datetime
     ) -> None:
+        """
+        Updates the MarginController and all SpreadControllers with new data
+        fetched from the LN Node.
+        """
+
         last_pid_run = self.store.last_pid_run()
         self.config = config
 
@@ -297,20 +345,27 @@ class PidController:
             f"{self.margin_controller.margin}"
         )
 
+        """
+        Setup of the channel aggregator. It needs the current block height to
+        determine new channels and the policies of the last run to determine
+        externally changes of the feerate.
+        """
         block_height = ln.lnclient.block_height
         if not last_pid_run:
-            last_policies_end = {}
+            last_policies = {}
         else:
             last_ln_run = self.store.last_ln_run()
-            last_policies_end = self.store.last_policies_end(last_ln_run)
+            last_policies = self.store.last_policies_end(last_ln_run)
 
         aggregator = ChannelAggregator.from_channels(
             config=self.config,
-            policies_last=last_policies_end,
+            policies_last=last_policies,
             block_height=block_height,
             channels=ln.channels.values(),
         )
 
+        # We want to remove unused spread controllers at the end. That's why
+        # we store current pub keys.
         pub_keys_current = []
         for pub_key, channel_collection in aggregator.pid_collections():
             pub_keys_current.append(pub_key)
@@ -320,15 +375,15 @@ class PidController:
 
             # If there is no existing controller we have to create one
             if not spread_controller:
-                # We check if there was controller with this peer in the past, we
-                # use this params at starting point for the control variable.
+                # We check if there was a controller with this peer in the past,
+                # we use this params at starting point for the control variable.
                 timestamp, params = self.store.last_spread_controller_params(pub_key)
 
-                # Fallback to config if there is no controller.
+                # Fallback to current config if there is no historic controller.
                 if not params:
                     params = peer_config.ewma_controller
 
-                # Fallback to config if the controller is too old.
+                # Fallback to current config if the historic controller is too old.
                 if timestamp:
                     delta_hours = (timestamp_start - timestamp).total_seconds() / 3600
                     if delta_hours > config.max_age_spread_hours:
@@ -341,8 +396,13 @@ class PidController:
                     )
                 )
 
-            # Now we have a spread controller for each peer and we can prepare
-            # the call of the controller. We set the arguments for the call first.
+            """
+            Now we have a spread controller for each peer and we can prepare
+            the call of the controller. We set the arguments for the call first.
+            If the alpha parameters have changed since the last run, we get a
+            ReinitRequired error. In this case we initialize a new controller from
+            the start with its whole history,
+            """
             target = peer_config.target or aggregator.target_default
             margin_peer = margin_last + peer_config.margin_idiosyncratic
             call_args = (
@@ -369,12 +429,23 @@ class PidController:
                 f"target {target}; margin peer {margin_peer}; result spread: "
                 f"{spread_controller.spread}"
             )
-        # If the channels with a peer has been closed, we can remove the
-        # controller from the map.
+
+        """
+        If the channels with a peer has been closed, we can remove the controller
+        from the map.
+        """
         for pub_key in self.spread_controller_map.keys():
             if pub_key not in pub_keys_current:
                 del self.spread_controller_map[pub_key]
 
+        """
+        Last step is the (optional) feature for a pinned peer. If a peer is
+        pinned, you can choice if you want to keep the fee rate or the spread
+        constant at specified pin value for this peer.
+        Then the delta between the pin value and the current value is calculated.
+        This delta is applied as a shift to all spread controllers, which changes
+        the spreads of all controllers about the value.
+        """
         if pin_peer := config.pin_peer:
             pin_controller = self.spread_controller_map[pin_peer]
             peer_config = config.peer_config(pin_peer)
@@ -396,6 +467,11 @@ class PidController:
         self.last_timestamp = timestamp_start
 
     def store_data(self, ln_session: LightningSessionCache) -> None:
+        """
+        Adds all relevant date of the PidController and a LightningCache
+        to a db session.
+        """
+
         ln_session.set_channel_policies(0, True)
         ln_session.set_channel_policies(0, False)
         ln_session.set_channel_policies(1, True)
@@ -439,6 +515,11 @@ class PidController:
     ) -> Generator[
         DBPidMarginController | DBPidSpreadController | DBPidResult, None, None
     ]:
+        """
+        Generates all sqlalchemy objects with the results of the last call of
+        the PidController.
+        """
+
         pid_run = convert_to_pid_run(ln_session.db_run, ln_session.ln_node)
         yield convert_to_margin_controller(pid_run, self.margin_controller)
 
@@ -456,6 +537,11 @@ class PidController:
                 yield convert_to_pid_result(res, channel, pid_run)
 
     def policy_proposals(self) -> list[PolicyProposal]:
+        """
+        Creates a list of all PolicyProposals with the results of the last call of
+        the PidController.
+        """
+
         res = []
         if self.config.db_only:
             return res

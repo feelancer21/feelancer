@@ -119,7 +119,7 @@ def _get_channels_static(
 
 class LightningSessionCache:
     """
-    Caching Lightning data from the db and the Lightning Client during a session
+    Caching lightning data from the db and the lightning client during a session
     of sqlalchemy
     """
 
@@ -219,7 +219,7 @@ class LightningSessionCache:
 
 class LightningCache:
     """
-    Caching data from a LightningClient
+    Caching data from a LightningClient which may be used in multiple tasks.
     """
 
     def __init__(self, lnclient: LightningClient) -> None:

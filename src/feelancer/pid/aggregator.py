@@ -1,10 +1,9 @@
 """
-1. Aggregation of the channels per peer.
-2. Identifying the pid related channels (no private, but shadow channels allowed)
-3. Calculation of the default target of the peer controller
-4. Assigning the fee_rates from the config to new channel peers
-5. Calculation of two fee_rate averages (1. local balance weighted,
-   2. capacity * target weighed) for the margin controller error calculation
+aggregation module serves the aggregation of channels per peer in context of the
+pid controller.
+Relevant channels are identified, which are all channels with peer where one
+announced channel exist. Moreover the default is target is calculated which is
+used if no target is specified in the config.
 """
 
 from __future__ import annotations
@@ -16,33 +15,62 @@ if TYPE_CHECKING:
 
     from .data import PidConfig
 
+# The target is expressed in ppm.
 PEER_TARGET_UNIT = 1_000_000
+# The default value for the default target, which is only used if an error
+# occurred.
 TARGET_DEFAULT = 500_000
 
 
 class ChannelCollection:
+    """
+    A ChannelCollection is a set of channels for one peer.
+    """
+
     def __init__(
         self,
+        # minimum block height, that a channel can be considered as new
         min_height_new_channels: int,
+        # default for new local channels when there no historic data
         fee_rate_new_local: int,
+        # default for new remote channels when there no historic data
         fee_rate_new_remote: int,
     ) -> None:
-        self.channels: dict[int, Channel] = {}
+
         self.min_height_new_channels = min_height_new_channels
-        self._ref_fee_rate: int | None = None
-        self.ref_fee_rate_last: int | None = None
         self.fee_rate_new_local = fee_rate_new_local
         self.fee_rate_new_remote = fee_rate_new_remote
+
+        # dict with chan_id as key
+        self.channels: dict[int, Channel] = {}
+
+        # The current reference (outgoing) fee rate of this collection. It is
+        # determined as the lowest fee rate of all channels. An external change
+        # of this value triggers a recalculation of the spread.
+        self._ref_fee_rate: int | None = None
+
+        # Reference feerate at the end of the last pid run.
+        self.ref_fee_rate_last: int | None = None
+
+        # Private only is true if all channels in this collection are private.
         self.private_only = True
+
+        # list of chan_id of the new channels in tis collection.
         self._new_channels: list[int] = []
 
     def add_channel(self, channel: Channel, policy_last: ChannelPolicy | None) -> None:
+        """
+        Adds a new channel to the collection.
+        """
+
         self.channels[channel.chan_id] = channel
         self._pid_channels: list[Channel] | None = None
 
-        # If there is one public we consider the whole collection as public,
-        # because each channel can be used for routing as shadow channel.
-        # Hence we want to take the liquidity in these channels into account.
+        """
+        If there is one public we consider the whole collection as public,
+        because each channel can be used for routing as shadow channel.
+        Hence we want to take the liquidity in these channels into account.
+        """
         if not channel.private:
             self.private_only = False
 
@@ -75,6 +103,11 @@ class ChannelCollection:
 
     @property
     def liquidity_out(self) -> float:
+        """
+        Returns the sum of local liquidity which is the local balance with the
+        assumption that all outgoing pending htlcs will fail.
+        """
+
         return sum(
             channel.liquidity_out_pending_sat + channel.liquidity_out_settled_sat
             for channel in self.pid_channels()
@@ -82,6 +115,11 @@ class ChannelCollection:
 
     @property
     def liquidity_in(self) -> float:
+        """
+        Returns the sum of remote liquidity which is the remote balance with the
+        assumption that all outgoing pending htlcs will fail.
+        """
+
         return sum(
             channel.liquidity_in_pending_sat + channel.liquidity_in_settled_sat
             for channel in self.pid_channels()
@@ -89,6 +127,12 @@ class ChannelCollection:
 
     @property
     def ref_fee_rate(self) -> int:
+        """
+        Returns the reference feerate, which is the lowest feerate of all channels.
+        If the channels is new we return either fee_rate_new_local or
+        fee_rate_new_remote depending on the liquidity distribution.
+        """
+
         if self._ref_fee_rate is not None:
             return self._ref_fee_rate
 
@@ -101,12 +145,21 @@ class ChannelCollection:
 
     @property
     def ref_fee_rate_changed(self) -> bool:
+        """
+        Boolean which indicates if the reference fee rate has changed since the
+        last run.
+        """
+
         ref = self.ref_fee_rate_last
         if not ref:
             return True
         return ref != self.ref_fee_rate
 
     def pid_channels(self) -> Generator[Channel, None, None]:
+        """
+        Generates all channels which are relevant for the pid model.
+        """
+
         if self.private_only:
             return None
 
@@ -118,15 +171,14 @@ class ChannelCollection:
 
     def _get_pid_channels(self) -> list[Channel]:
         """
-        Determine all channels which have to be modelled.
-        We are returning None if there are only private channel in this
-        collection.
+        Determine all channels which have to be modelled. We are returning None
+        if there are only private channel in this collection.
         Public channels without any policy at the moment are not returned too,
-        which can be the case if a channel was opened lately.
-        Otherwise the fee_rate of the channel has to be equal to the ref_fee_rate,
+        which can be the case if a channel was opened lately. Otherwise the
+        fee rate of the channel has to be equal to the reference fee rate,
         which is the minimum fee_rate of all fee_rates.
-
         """
+
         pid_channels: list[Channel] = []
         if self.private_only:
             return pid_channels
@@ -153,23 +205,37 @@ class ChannelCollection:
 
 
 class ChannelAggregator:
+    """
+    The ChannelAggregator holds the ChannelCollection's for all peers.
+    """
+
     def __init__(
         self,
         config: PidConfig,
     ) -> None:
         self.config = config
+
+        # dict of channel collections with pub_key as key
         self.channel_collections: dict[str, ChannelCollection] = {}
 
+        # the calculated default target
         self._target_default: float | None = None
 
     @classmethod
     def from_channels(
         cls,
         config: PidConfig,
+        # dict of the final policies of the last run
         policies_last: dict[int, ChannelPolicy],
+        # current block height
         block_height: int,
+        # channels which are used to initialize this aggregator
         channels: Iterable[Channel],
     ) -> ChannelAggregator:
+        """
+        Creates a new channel aggregator and adds all provided channels.
+        """
+
         aggregator = cls(config)
         min_height_new_channel = block_height - config.max_age_new_channels
         for channel in channels:
@@ -187,6 +253,13 @@ class ChannelAggregator:
         policy_last: ChannelPolicy | None,
         min_height_new_channels: int,
     ) -> None:
+        """
+        Adds a channel to the aggregator.
+
+        Checks whether it is excluded by the conf and if not the channel is
+        added to channel collection.
+        """
+
         self._target_default = None
 
         pub_key = channel.pub_key
@@ -209,11 +282,18 @@ class ChannelAggregator:
         col.add_channel(channel, policy_last)
 
     def pid_channels(self) -> Generator[Channel, None, None]:
+        """
+        Generates all channels which are relevant for the pid model.
+        """
+
         for col in self.channel_collections.values():
             for channel in col.pid_channels():
                 yield channel
 
     def pid_collections(self) -> Generator[tuple[str, ChannelCollection], None, None]:
+        """
+        Generates all channel collections which are relevant for the pid model.
+        """
         for pub_key, collection in self.channel_collections.items():
             if collection.private_only:
                 continue
@@ -221,6 +301,20 @@ class ChannelAggregator:
 
     @property
     def target_default(self) -> float:
+        """
+        Calculates the default target for the aggregator.
+        """
+
+        """
+        Summed over all channels the following equation has to hold:
+        
+        sum[(liquidity_out + liquidity_in) * target] == sum[liquidity_in].
+        
+        For some channels we already have targets provided by the config. For
+        the residual channels we calculate a default target that satisfies
+        the equation.
+        """
+
         if self._target_default:
             return self._target_default
 
@@ -245,12 +339,12 @@ class ChannelAggregator:
                 sum_liquidity_known_target += local + remote
                 sum_liquidity_target += (local + remote) * peer_config.target
 
-        try:
+        if sum_liquidity != sum_liquidity_known_target:
             self._target_default = (
                 PEER_TARGET_UNIT * (sum_liquidity - sum_local) - sum_liquidity_target
             ) / (sum_liquidity - sum_liquidity_known_target)
 
-        except ZeroDivisionError:
+        else:
             # This case should only happen when sum_liquidity is equal to
             # sum_liquidity_known_target. Then we don't really need target_default.
             self._target_default = TARGET_DEFAULT

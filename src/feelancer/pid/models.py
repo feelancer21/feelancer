@@ -1,5 +1,5 @@
 """
-Data model for the pid controller
+Database Model for Pid
 """
 
 from __future__ import annotations

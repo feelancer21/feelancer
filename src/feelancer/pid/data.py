@@ -1,3 +1,7 @@
+"""
+Database interactions for the pid controller.
+"""
+
 from __future__ import annotations
 
 from copy import deepcopy
@@ -41,6 +45,8 @@ DEFAULT_SET_INBOUND = False
 
 @dataclass
 class EwmaControllerParams:
+    """Parameters for an EwmaController"""
+
     k_t: float = 0
     k_p: float = 0
     k_i: float = 0
@@ -53,15 +59,17 @@ class EwmaControllerParams:
     control_variable: float = 0
 
 
-# Parameters for a mean reverting controller
 @dataclass
 class MrControllerParams:
+    """Parameters for a MrController"""
+
     k_m: float = 0
     alpha: float = 0
     control_variable: float = 0
 
 
 def _get_last_pid_run(session: Session, pub_key: str) -> DBPidRun | None:
+    """Returns the DBPidRun when it is run the last time"""
     res = (
         session.query(DBPidRun)
         .join(DBPidRun.ln_node)
@@ -73,7 +81,8 @@ def _get_last_pid_run(session: Session, pub_key: str) -> DBPidRun | None:
     return res
 
 
-def _get_last_ln_run(session: Session, pid_run: DBPidRun | None) -> DBLnRun | None:
+def _get_ln_run(session: Session, pid_run: DBPidRun | None) -> DBLnRun | None:
+    """Returns the DBLnRun associated with DBPidRun"""
     if not pid_run:
         return None
     if not pid_run.run:
@@ -200,7 +209,7 @@ def _get_last_spread_controller(
     session: Session, local_pub_key: str, peer_pub_key: str
 ) -> tuple[None, None] | tuple[datetime, EwmaControllerParams]:
     """
-    Returns the EwmaControllerParams of the last execution of spread controller
+    Returns the EwmaControllerParams of the last execution of a spread controller
     for a given peer and its execution time.
     """
     res = (
@@ -229,6 +238,11 @@ def _get_last_spread_controller(
 def _get_historic_ewma_params(
     session: Session, local_pub_key: str, peer_pub_key: str
 ) -> list[tuple[datetime, EwmaControllerParams, float]]:
+    """
+    Selects all historic spread controllers for one peer from the database and
+    returns a tuple of the historic timestamp, the EwmaControllerParams and the
+    delta time.
+    """
     res = [
         (
             p.pid_run.run.timestamp_start,
@@ -254,6 +268,11 @@ def _get_historic_ewma_params(
 def _get_historic_mr_params(
     session: Session, local_pub_key: str
 ) -> list[tuple[datetime, MrControllerParams]]:
+    """
+    Selects all historic margin controller from the database and returns a tuple
+    of timestamp and MrControllerParams.
+    """
+
     res = [
         (
             p.pid_run.run.timestamp_start,
@@ -274,13 +293,18 @@ def _get_historic_mr_params(
     return res
 
 
-def _get_last_policies(
+def _get_policies(
     session: Session, last_ln_run: DBLnRun | None, sequence_id: int
 ) -> dict[int, ChannelPolicy]:
+    """
+    Selects all channel policies for a given ln run and a sequence. Returns a
+    dict with chan_id as key.
+    """
+
     if not last_ln_run:
         return {}
 
-    policies_end = (
+    res = (
         session.query(DBLnChannelPolicy)
         .options(joinedload(DBLnChannelPolicy.static, DBLnChannelStatic.peer))
         .join(DBLnChannelPolicy.ln_run)
@@ -292,7 +316,7 @@ def _get_last_policies(
         .all()
     )
 
-    return {c.static.chan_id: convert_from_channel_policy(c) for c in policies_end}
+    return {c.static.chan_id: convert_from_channel_policy(c) for c in res}
 
 
 def _get_last_mr_params(
@@ -361,10 +385,18 @@ class PidMarginControllerConfig(GenericConf):
 
 
 class PidConfig:
+    """
+    The config for the pid model.
+    """
+
     def __init__(
         self,
         config_dict: dict,
     ) -> None:
+        """
+        Validates the provided dictionary and stores values in variables.
+        """
+
         conf_copy = deepcopy(config_dict)
 
         if not (exclude_pubkeys := conf_copy.get("exclude_pubkeys")):
@@ -446,6 +478,10 @@ class PidConfig:
 
 
 class PidStore:
+    """
+    PidStore is the interface for all pid relevant data from the database.
+    """
+
     def __init__(self, db: FeelancerDB, pubkey_local: str) -> None:
         self.db = db
         self.pubkey_local = pubkey_local
@@ -467,10 +503,17 @@ class PidStore:
     def historic_ewma_params(
         self, peer_pub_key: str
     ) -> list[tuple[datetime, EwmaControllerParams, float]]:
+        """
+        Returns a tuple of the historic timestamp, the EwmaControllerParams and
+        the delta time.
+        """
         with self._db_session() as session:
             return _get_historic_ewma_params(session, self.pubkey_local, peer_pub_key)
 
     def last_mr_params(self, pid_run: DBPidRun | None) -> MrControllerParams | None:
+        """
+        Returns the MrControllerParams of the MarginController for the given pid run.
+        """
         with self._db_session() as session:
             return _get_last_mr_params(session, pid_run)
 
@@ -488,16 +531,19 @@ class PidStore:
             return _get_last_ewma_params(session, pid_run)
 
     def last_policies_end(self, ln_run: DBLnRun | None) -> dict[int, ChannelPolicy]:
+        """Returns the ChannelPolicy of the last run as dict with chan_id as key."""
         with self._db_session() as session:
-            return _get_last_policies(session, ln_run, 1)
+            return _get_policies(session, ln_run, 1)
 
     def last_pid_run(self) -> DBPidRun | None:
+        """Returns the last run of the pid controller"""
         with self._db_session() as session:
             return _get_last_pid_run(session, self.pubkey_local)
 
     def last_ln_run(self) -> DBLnRun | None:
+        """Returns the last ln run associated with last pid prun"""
         with self._db_session() as session:
-            return _get_last_ln_run(session, self.last_pid_run())
+            return _get_ln_run(session, self.last_pid_run())
 
     def last_spread_controller_params(
         self, peer_pub_key: str

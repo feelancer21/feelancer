@@ -1,8 +1,12 @@
 """
-A controller based on the idea of PID. It's not a classical PID (Proportional,
-Integral, Derivative) Controller, because it uses exponential moving averages
-for the integral and derivative terms.
-Moreover a drift term and a constant term is implemented.
+In this module two analytic controllers are defined:
+
+EwmaController: It follows the idea of a PID Controller (Proportional,
+Integral, Derivative) but it uses ewma's (exponential moving averages) as
+integrals and an exponential decay function as derivative.
+
+MrController: Is a mean reverting controller where the control variable
+converges to a given level over time with a given speed. 
 """
 
 from __future__ import annotations
@@ -17,17 +21,26 @@ from .data import EwmaControllerParams, MrControllerParams
 
 
 class TimeUnit(Enum):
+    """Unit for most of the parameters used by the controllers."""
+
     SECOND = 1
     HOUR = 3600
     DAY = 24 * 3600
 
 
-DEFAULT_TIME_DIFF = 3600
+# If there is no timestamp when a controller was called last, this value in
+# seconds is used as time delta.
+DEFAULT_TIME_DELTA = 3600
+
+# Units which are used when the controllers are initiated by EwmaControllerParans
+# and MrControllerParams.
 K_TIME_UNIT = TimeUnit.DAY
 ALPHA_TIME_UNIT = TimeUnit.DAY
 
 
 class TimeParam:
+    """Defines a floating parameter which is denominated in a TimeUnit."""
+
     def __init__(self, value: float, time_unit: TimeUnit) -> None:
         self.value = value
         self.time_unit = time_unit
@@ -37,6 +50,7 @@ class TimeParam:
 
     @property
     def to_seconds(self) -> float:
+        """Converges the value to seconds."""
         return self.value / self.time_unit.value
 
 
@@ -48,8 +62,13 @@ def _lambda(alpha: TimeParam, delta_time: float):
     return res
 
 
-# An ewma PID controller
 class EwmaController:
+    """
+    It follows the idea of a PID Controller (Proportional, Integral, Derivative)
+    but it uses ewma's (exponential moving averages) as integrals and an
+    exponential decay function as derivative.
+    """
+
     def __init__(
         self,
         k_t: TimeParam,
@@ -93,6 +112,7 @@ class EwmaController:
         ewma_controller_params: EwmaControllerParams,
         timestamp_last: datetime | None,
     ) -> EwmaController:
+        """Initializes a new EwmaController by providing EwmaControllerParams"""
         return cls(
             k_t=TimeParam(ewma_controller_params.k_t, K_TIME_UNIT),
             k_p=TimeParam(ewma_controller_params.k_p, K_TIME_UNIT),
@@ -108,24 +128,28 @@ class EwmaController:
         )
 
     def set_k_d(self, k_d: float) -> None:
+        """Changes k_d parameter"""
         self.k_d = k_d
 
     def set_k_i(
         self,
         k_i: float,
     ) -> None:
+        """Changes k_i parameter"""
         self.k_i = TimeParam(k_i, K_TIME_UNIT)
 
     def set_k_p(
         self,
         k_p: float,
     ) -> None:
+        """Changes k_p parameter"""
         self.k_p = TimeParam(k_p, K_TIME_UNIT)
 
     def set_k_t(
         self,
         k_t: float,
     ) -> None:
+        """Changes k_t parameter"""
         self.k_t = TimeParam(k_t, K_TIME_UNIT)
 
     def __call__(
@@ -133,8 +157,13 @@ class EwmaController:
         error: float,
         timestamp: datetime = datetime.now(pytz.utc),
     ) -> float:
+        """
+        Updates the error values, calculates the EWMA and adjusts the control
+        variable by calling the controller.
+        """
+
         if not self._last_time:
-            dt = DEFAULT_TIME_DIFF
+            dt = DEFAULT_TIME_DELTA
         elif (dt := (timestamp.timestamp() - self._last_time)) <= 0:
             raise ValueError(
                 f"dt has non positive value {dt}, must be positive. "
@@ -175,10 +204,19 @@ class EwmaController:
 
     @property
     def gain(self) -> float:
+        """
+        Returns the total controller gain compared to the last call, but without
+        the a shift.
+        """
         return self.gain_t + self.gain_p + self.gain_d + self.gain_i
 
     @property
     def ewma_params(self) -> EwmaControllerParams:
+        """
+        Returns the parameters of the controller as EwmaControllerParams.
+        """
+
+        # We are caching the result. The cache is reset with the next all.
         if not self._ewma_params:
             self._ewma_params = EwmaControllerParams(
                 k_t=self.k_t.value,
@@ -196,6 +234,7 @@ class EwmaController:
         return self._ewma_params
 
     def apply_shift(self, shift: float):
+        """Adds a shift to the control variable"""
         self.shift += shift
         self.control_variable += shift
 
@@ -229,6 +268,7 @@ class MrController:
         mr_controller_params: MrControllerParams,
         timestamp_last: datetime | None,
     ) -> MrController:
+        """Initializes a new EwmaController by providing MrControllerParams"""
         return cls(
             k_m=mr_controller_params.k_m,
             alpha=TimeParam(mr_controller_params.alpha, ALPHA_TIME_UNIT),
@@ -240,14 +280,19 @@ class MrController:
         self,
         alpha: float,
     ) -> None:
+        """Changes k_p parameter"""
         self.alpha = TimeParam(alpha, ALPHA_TIME_UNIT)
 
     def __call__(
         self,
         timestamp: datetime = datetime.now(pytz.utc),
     ) -> float:
+        """
+        Adjusts the control variable by calling the controller.
+        """
+
         if not self._last_time:
-            dt = DEFAULT_TIME_DIFF
+            dt = DEFAULT_TIME_DELTA
         elif (dt := (timestamp.timestamp() - self._last_time)) <= 0:
             raise ValueError("dt has negative value {}, must be positive".format(dt))
 
@@ -269,6 +314,9 @@ class MrController:
 
     @property
     def mr_params(self) -> MrControllerParams:
+        """
+        Returns the parameters of the controller as MrControllerParams.
+        """
         if not self._mr_params:
             self._mr_params = MrControllerParams(
                 k_m=self.k_m,
