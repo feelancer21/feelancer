@@ -5,6 +5,7 @@ from math import exp
 import pytz
 
 from feelancer.pid.analytics import EwmaController, MrController
+from feelancer.pid.controller import SpreadController
 from feelancer.pid.data import EwmaControllerParams, MrControllerParams
 
 
@@ -20,7 +21,7 @@ class EwmaCall:
 # multiple times.
 def call_ewma(
     start: float, ewma_calls: list[EwmaCall], params: EwmaControllerParams
-) -> float:
+) -> EwmaController:
     time = datetime.now(pytz.utc)
 
     pid = EwmaController.from_params(
@@ -34,7 +35,29 @@ def call_ewma(
         time += timedelta(seconds=call.time_delta)
         pid(call.error, time)
 
-    return pid.control_variable
+    return pid
+
+
+# initializes a spread controller with the .from_history method and calls it
+# multiple times
+def call_spread_from_history(
+    start: float, ewma_calls: list[EwmaCall], params: EwmaControllerParams
+) -> EwmaController:
+    time = datetime.now(pytz.utc)
+
+    iargs = (2.1, 2.1, 2.1, 2.1, 2.1, 2.1, 2.1, 2.1, 2.1, 2.1)
+    history: list[tuple[datetime, EwmaControllerParams, float]] = []
+
+    for call in ewma_calls:
+        time += timedelta(seconds=call.time_delta)
+        e = EwmaControllerParams(*iargs)
+        e.error = call.error
+        history.append((time, e, call.time_delta))
+
+    history[-1][1].control_variable = start
+    spread_ct = SpreadController.from_history(params, history)
+
+    return spread_ct.ewma_controller
 
 
 # initializes a mean reversion controller with a given start value and calls it
@@ -81,10 +104,21 @@ def test_ewma_1():
     ]
 
     start = 1500
+    expected_cv = 1310.5042338877226
 
     # We call the controller and compare the result with an external calculated
-    # value.
-    assert call_ewma(start, ewma_calls, params) == 1310.5042338877226
+    # value
+    ewma_ct = call_ewma(start, ewma_calls, params)
+    assert ewma_ct.control_variable == expected_cv
+
+    # We init a SpreadController from history and assert if it returns the same
+    # value as spread
+    spread_ect = call_spread_from_history(expected_cv, ewma_calls, params)
+
+    assert ewma_ct.error == spread_ect.error
+    assert ewma_ct.error_ewma == spread_ect.error_ewma
+    assert ewma_ct.error_delta_residual == spread_ect.error_delta_residual
+    assert ewma_ct.control_variable == spread_ect.control_variable
 
 
 # Direct calculation of the outcome of the mean reversion controller using the
