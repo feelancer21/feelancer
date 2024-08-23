@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import signal
+import time
 from datetime import datetime
 from typing import TYPE_CHECKING, Callable
 
@@ -23,6 +24,10 @@ from feelancer.utils import read_config_file
 if TYPE_CHECKING:
     from feelancer.lightning.chan_updates import PolicyProposal
     from feelancer.lightning.client import LightningClient
+
+
+RETRIES = 5
+DELAY = 5
 
 
 class TaskRunner:
@@ -54,16 +59,25 @@ class TaskRunner:
         scheduler = BlockingScheduler()
         logging.info(f"Running pid every {self.seconds}s")
 
+        """
+        Starts the run and resets objects in the case of an unexpected error,
+        e.g. db loss.
+        """
+
         def run_wrapper() -> None:
-            """
-            Starts the run and resets objects in the case of an unexpected error,
-            e.g. db loss.
-            """
-            try:
-                self._run()
-            except:
-                logging.exception("An unexpected error occurred")
-                self._reset()
+            for r in range(RETRIES + 1):
+                try:
+                    return self._run()
+                except Exception:
+                    if r < RETRIES:
+                        logging.warning(
+                            f"Error occured; Starting retry {r+1} in {DELAY}s ..."
+                        )
+                        self.db.engine.dispose()
+                        self._reset()
+                        time.sleep(DELAY)
+                    else:
+                        logging.exception("All retries failed!")
 
         self.job = scheduler.add_job(run_wrapper, IntervalTrigger(seconds=self.seconds))
 
@@ -133,7 +147,7 @@ class TaskRunner:
             update_channel_policies(
                 self.lnclient, policy_updates, config, timestamp_end
             )
-        except Exception as e:
+        except Exception:
             # We log the exception but don't raise it.
             logging.exception("Unexpected error during policy updates occurred")
 
