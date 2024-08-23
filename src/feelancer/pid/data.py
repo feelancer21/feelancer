@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeVar
 
 from sqlalchemy.orm import Session, joinedload
 
@@ -36,6 +36,8 @@ if TYPE_CHECKING:
 
     from .analytics import EwmaController, MrController
     from .controller import MarginController, PidResult, SpreadController
+
+T = TypeVar("T")
 
 DEFAULT_MAX_AGE_NEW_CHANNELS = 144
 DEFAULT_MAX_AGE_SPREAD_HOURS = 0
@@ -487,9 +489,6 @@ class PidStore:
         self.pubkey_local = pubkey_local
         self.db.create_base(Base)
 
-    def _db_session(self) -> Session:
-        return self.db.session()
-
     def historic_mr_params(
         self,
     ) -> list[tuple[datetime, MrControllerParams]]:
@@ -497,8 +496,10 @@ class PidStore:
         Returns the MrControllerParams of the MarginController for the given pid run.
         """
 
-        with self._db_session() as session:
+        def func(session: Session):
             return _get_historic_mr_params(session, self.pubkey_local)
+
+        return self.db.execute(func)
 
     def historic_ewma_params(
         self, peer_pub_key: str
@@ -507,15 +508,21 @@ class PidStore:
         Returns a tuple of the historic timestamp, the EwmaControllerParams and
         the delta time.
         """
-        with self._db_session() as session:
+
+        def func(session: Session):
             return _get_historic_ewma_params(session, self.pubkey_local, peer_pub_key)
+
+        return self.db.execute(func)
 
     def last_mr_params(self, pid_run: DBPidRun | None) -> MrControllerParams | None:
         """
         Returns the MrControllerParams of the MarginController for the given pid run.
         """
-        with self._db_session() as session:
+
+        def func(session: Session):
             return _get_last_mr_params(session, pid_run)
+
+        return self.db.execute(func)
 
     def last_ewma_params(
         self, pid_run: DBPidRun | None
@@ -527,23 +534,34 @@ class PidStore:
         Key of the returned dict is the pubkey of the channel peer.
         """
 
-        with self._db_session() as session:
+        def func(session: Session):
             return _get_last_ewma_params(session, pid_run)
+
+        return self.db.execute(func)
 
     def last_policies_end(self, ln_run: DBLnRun | None) -> dict[int, ChannelPolicy]:
         """Returns the ChannelPolicy of the last run as dict with chan_id as key."""
-        with self._db_session() as session:
+
+        def func(session: Session):
             return _get_policies(session, ln_run, 1)
+
+        return self.db.execute(func)
 
     def last_pid_run(self) -> DBPidRun | None:
         """Returns the last run of the pid controller"""
-        with self._db_session() as session:
+
+        def func(session: Session):
             return _get_last_pid_run(session, self.pubkey_local)
+
+        return self.db.execute(func)
 
     def last_ln_run(self) -> DBLnRun | None:
         """Returns the last ln run associated with last pid prun"""
-        with self._db_session() as session:
+
+        def func(session: Session):
             return _get_ln_run(session, self.last_pid_run())
+
+        return self.db.execute(func)
 
     def last_spread_controller_params(
         self, peer_pub_key: str
@@ -553,5 +571,7 @@ class PidStore:
         for a given peer and its execution time.
         """
 
-        with self._db_session() as session:
+        def func(session: Session):
             return _get_last_spread_controller(session, self.pubkey_local, peer_pub_key)
+
+        return self.db.execute(func)

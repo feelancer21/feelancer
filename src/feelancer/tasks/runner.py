@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import signal
-import time
 from datetime import datetime
 from typing import TYPE_CHECKING, Callable
 
@@ -22,12 +21,10 @@ from feelancer.pid.data import PidConfig
 from feelancer.utils import read_config_file
 
 if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
+
     from feelancer.lightning.chan_updates import PolicyProposal
     from feelancer.lightning.client import LightningClient
-
-
-RETRIES = 5
-DELAY = 5
 
 
 class TaskRunner:
@@ -65,19 +62,11 @@ class TaskRunner:
         """
 
         def run_wrapper() -> None:
-            for r in range(RETRIES + 1):
-                try:
-                    return self._run()
-                except Exception:
-                    if r < RETRIES:
-                        logging.warning(
-                            f"Error occured; Starting retry {r+1} in {DELAY}s ..."
-                        )
-                        self.db.engine.dispose()
-                        self._reset()
-                        time.sleep(DELAY)
-                    else:
-                        logging.exception("All retries failed!")
+            try:
+                return self._run()
+            except Exception:
+                logging.exception("An unexpected error occurred")
+                self._reset()
 
         self.job = scheduler.add_job(run_wrapper, IntervalTrigger(seconds=self.seconds))
 
@@ -158,28 +147,31 @@ class TaskRunner:
         if len(store_funcs) == 0:
             return None
 
-        with self.db.session() as db_session:
-            try:
-                db_run = DBRun(
-                    timestamp_start=timestamp_start,
-                    timestamp_end=timestamp_end,
-                )
-                ln_session = LightningSessionCache(ln, db_session, db_run)
-                for f in store_funcs:
-                    f(ln_session)
+        # Callback function for storing the data in the db.
+        def store_data(db_session: Session) -> DBRun:
+            db_run = DBRun(
+                timestamp_start=timestamp_start,
+                timestamp_end=timestamp_end,
+            )
 
-                db_session.commit()
+            ln_session = LightningSessionCache(ln, db_session, db_run)
 
-                run_time = timestamp_end - timestamp_start
-                logging.info(
-                    f"Run {db_run.id} successfully finished; start "
-                    f"{timestamp_start}; end {timestamp_end}; runtime {run_time}."
-                )
-            except Exception as e:
-                db_session.rollback()
-                raise e
-            finally:
-                db_session.close()
+            for f in store_funcs:
+                f(ln_session)
+
+            return db_run
+
+        # Callback for receiving the run id in the database session.
+        def get_run_id(db_run: DBRun) -> int:
+            return db_run.id
+
+        run_id = self.db.execute_post(store_data, get_run_id)
+
+        run_time = timestamp_end - timestamp_start
+        logging.info(
+            f"Run {run_id} successfully finished; start "
+            f"{timestamp_start}; end {timestamp_end}; runtime {run_time}."
+        )
 
         """
         If config.seconds had changed we modify the trigger of the job.
