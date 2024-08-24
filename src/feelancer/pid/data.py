@@ -445,18 +445,46 @@ class PidConfig:
             PidMarginControllerConfig, conf_copy.get("margin")
         )
 
+        """
+        For clear config handling, the ewma controller parameters can be given
+        names. This assumes that named_ewma is a dictionary. 
+        """
+        named_ewma: dict | None = conf_copy.get("named_ewma")
+        if named_ewma and not isinstance(named_ewma, dict):
+            raise ValueError("'named_ewma' is not a valid dictionary!")
+
+        """
+        get_ewma_controller performs a lookup into named_ewma if a str is provided
+        as parameter. 
+        """
+
+        def get_ewma_controller(params: str | dict) -> EwmaControllerParams:
+            ewma_params = None
+            if isinstance(params, str) and named_ewma:
+                ewma_params = named_ewma.get(params)
+
+            if not ewma_params:
+                if not isinstance(params, dict):
+                    raise ValueError(
+                        f"ewma_controller '{params}' is not valid. "
+                        f"dict expected here."
+                    )
+                ewma_params = params
+
+            return EwmaControllerParams(**ewma_params)
+
         if conf_copy.get("peers"):
             if conf_copy["peers"].get("defaults") and (
                 peer_params := conf_copy["peers"]["defaults"].get("ewma_controller")
             ):
-                conf_copy["peers"]["defaults"]["ewma_controller"] = (
-                    EwmaControllerParams(**peer_params)
+                conf_copy["peers"]["defaults"]["ewma_controller"] = get_ewma_controller(
+                    peer_params
                 )
 
             for peer in conf_copy["peers"].keys() - ["defaults"]:
                 if peer_params := conf_copy["peers"][peer].get("ewma_controller"):
-                    conf_copy["peers"][peer]["ewma_controller"] = EwmaControllerParams(
-                        **peer_params
+                    conf_copy["peers"][peer]["ewma_controller"] = get_ewma_controller(
+                        peer_params
                     )
 
         self.peers = get_peers_config(PidSpreadControllerConfig, conf_copy["peers"])
