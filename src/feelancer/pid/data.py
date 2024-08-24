@@ -8,10 +8,9 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, TypeVar
 
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Query, Session, joinedload
 
-from feelancer.lightning.data import DBLnRun, convert_from_channel_policy
-from feelancer.lightning.models import DBLnChannelPolicy
+from feelancer.lightning.data import DBLnRun
 from feelancer.utils import GenericConf, defaults_from_type, get_peers_config
 
 from .models import (
@@ -32,7 +31,6 @@ if TYPE_CHECKING:
     from datetime import datetime
 
     from feelancer.data.db import FeelancerDB
-    from feelancer.lightning.client import ChannelPolicy
 
     from .analytics import EwmaController, MrController
     from .controller import MarginController, PidResult, SpreadController
@@ -70,31 +68,32 @@ class MrControllerParams:
     control_variable: float = 0
 
 
-def _get_last_pid_run(session: Session, pub_key: str) -> DBPidRun | None:
-    """Returns the DBPidRun when it is run the last time"""
-    res = (
-        session.query(DBPidRun)
-        .join(DBPidRun.ln_node)
-        .filter(DBLnNode.pub_key == pub_key)
-        .options(joinedload(DBPidRun.run))
-        .order_by(DBPidRun.run_id.desc())
-        .first()
-    )
-    return res
+def _query_pid_run(
+    pub_key: str | None = None, order_by_run_id_desc: bool = False
+) -> Query[DBPidRun]:
+    qry = Query(DBPidRun).join(DBPidRun.ln_node)
+
+    if pub_key:
+        qry = qry.filter(DBLnNode.pub_key == pub_key)
+
+    qry = qry.options(joinedload(DBPidRun.run))
+
+    if order_by_run_id_desc:
+        qry = qry.order_by(DBPidRun.run_id.desc())
+
+    return qry
 
 
-def _get_ln_run(session: Session, pid_run: DBPidRun | None) -> DBLnRun | None:
+def _get_ln_run(session: Session, run_id: int | None) -> DBLnRun | None:
     """Returns the DBLnRun associated with DBPidRun"""
-    if not pid_run:
-        return None
-    if not pid_run.run:
+    if not run_id:
         return None
 
-    res = session.query(DBLnRun).filter(DBLnRun.run == pid_run.run).first()
+    res = session.query(DBLnRun).filter(DBLnRun.run_id == run_id).first()
     return res
 
 
-def convert_to_pid_run(run: DBRun, ln_node: DBLnNode) -> DBPidRun:
+def new_pid_run(run: DBRun, ln_node: DBLnNode) -> DBPidRun:
     return DBPidRun(run=run, ln_node=ln_node)
 
 
@@ -207,164 +206,73 @@ def convert_to_margin_controller(
     )
 
 
-def _get_last_spread_controller(
-    session: Session, local_pub_key: str, peer_pub_key: str
-) -> tuple[None, None] | tuple[datetime, EwmaControllerParams]:
+def _query_margin_controller(
+    local_pub_key: str | None = None,
+    run_id: int | None = None,
+    order_by_run_id_asc: bool = False,
+) -> Query[DBPidMarginController]:
     """
-    Returns the EwmaControllerParams of the last execution of a spread controller
-    for a given peer and its execution time.
+    Returns a query of DBPidMarginController and its associated objects.
     """
-    res = (
-        session.query(DBPidSpreadController)
+
+    qry = (
+        Query(DBPidMarginController)
+        .join(DBPidMarginController.pid_run)
+        .join(DBPidRun.ln_node)
+    )
+
+    if local_pub_key:
+        qry = qry.filter(DBLnNode.pub_key == local_pub_key)
+
+    if run_id:
+        qry = qry.filter(DBPidMarginController.run_id == run_id)
+
+    qry = qry.options(joinedload(DBPidMarginController.mr_controller))
+
+    if order_by_run_id_asc:
+        qry = qry.order_by(DBPidRun.run_id.asc())
+
+    return qry
+
+
+def _query_spread_controller(
+    local_pub_key: str | None = None,
+    peer_pub_key: str | None = None,
+    run_id: int | None = None,
+    order_by_run_id_asc: bool = False,
+    order_by_run_id_desc: bool = False,
+) -> Query[DBPidSpreadController]:
+    """
+    Returns a query of DBSpreadController and its associated objects.
+    """
+
+    qry: Query[DBPidSpreadController] = (
+        Query(DBPidSpreadController)
         .join(DBPidSpreadController.peer)
         .join(DBPidSpreadController.pid_run)
         .join(DBPidRun.ln_node)
-        .filter(
-            DBLnNode.pub_key == local_pub_key, DBLnChannelPeer.pub_key == peer_pub_key
-        )
-        .options(
-            joinedload(DBPidSpreadController.ewma_controller),
-        )
-        .order_by(DBPidRun.run_id.desc())
-        .first()
+    )
+    if local_pub_key:
+        qry = qry.filter(DBLnNode.pub_key == local_pub_key)
+
+    if peer_pub_key:
+        qry = qry.filter(DBLnChannelPeer.pub_key == peer_pub_key)
+
+    if run_id:
+        qry = qry.filter(DBPidSpreadController.run_id == run_id)
+
+    qry = qry.options(
+        joinedload(DBPidSpreadController.ewma_controller),
+        joinedload(DBPidSpreadController.peer),
     )
 
-    if not res:
-        return None, None
+    if order_by_run_id_asc:
+        qry = qry.order_by(DBPidRun.run_id.asc())
 
-    return res.pid_run.run.timestamp_start, _convert_from_ewma_controller(
-        res.ewma_controller
-    )
+    if order_by_run_id_desc:
+        qry = qry.order_by(DBPidRun.run_id.desc())
 
-
-def _get_historic_ewma_params(
-    session: Session, local_pub_key: str, peer_pub_key: str
-) -> list[tuple[datetime, EwmaControllerParams, float]]:
-    """
-    Selects all historic spread controllers for one peer from the database and
-    returns a tuple of the historic timestamp, the EwmaControllerParams and the
-    delta time.
-    """
-    res = [
-        (
-            p.pid_run.run.timestamp_start,
-            _convert_from_ewma_controller(p.ewma_controller),
-            p.ewma_controller.delta_time,
-        )
-        for p in session.query(DBPidSpreadController)
-        .join(DBPidSpreadController.peer)
-        .join(DBPidSpreadController.pid_run)
-        .join(DBPidRun.ln_node)
-        .filter(
-            DBLnNode.pub_key == local_pub_key, DBLnChannelPeer.pub_key == peer_pub_key
-        )
-        .options(
-            joinedload(DBPidSpreadController.ewma_controller),
-        )
-        .order_by(DBPidRun.run_id.asc())
-        .all()
-    ]
-    return res
-
-
-def _get_historic_mr_params(
-    session: Session, local_pub_key: str
-) -> list[tuple[datetime, MrControllerParams]]:
-    """
-    Selects all historic margin controller from the database and returns a tuple
-    of timestamp and MrControllerParams.
-    """
-
-    res = [
-        (
-            p.pid_run.run.timestamp_start,
-            _convert_from_mr_controller(p.mr_controller),
-        )
-        for p in session.query(DBPidMarginController)
-        .join(DBPidMarginController.pid_run)
-        .join(DBPidRun.ln_node)
-        .filter(
-            DBLnNode.pub_key == local_pub_key,
-        )
-        .options(
-            joinedload(DBPidMarginController.mr_controller),
-        )
-        .order_by(DBPidRun.run_id.asc())
-        .all()
-    ]
-    return res
-
-
-def _get_policies(
-    session: Session, last_ln_run: DBLnRun | None, sequence_id: int
-) -> dict[int, ChannelPolicy]:
-    """
-    Selects all channel policies for a given ln run and a sequence. Returns a
-    dict with chan_id as key.
-    """
-
-    if not last_ln_run:
-        return {}
-
-    res = (
-        session.query(DBLnChannelPolicy)
-        .options(joinedload(DBLnChannelPolicy.static, DBLnChannelStatic.peer))
-        .join(DBLnChannelPolicy.ln_run)
-        .filter(
-            DBLnChannelPolicy.ln_run == last_ln_run,
-            DBLnChannelPolicy.sequence_id == sequence_id,
-            DBLnChannelPolicy.local,
-        )
-        .all()
-    )
-
-    return {c.static.chan_id: convert_from_channel_policy(c) for c in res}
-
-
-def _get_last_mr_params(
-    session: Session, pid_run: DBPidRun | None
-) -> MrControllerParams | None:
-    """
-    Returns the MrControllerParams of the MarginController for the given pid run.
-    """
-    if not pid_run:
-        return None
-    if res := (
-        session.query(DBPidMarginController)
-        .options(joinedload(DBPidMarginController.mr_controller))
-        .join(DBPidMarginController.pid_run)
-        .filter(DBPidMarginController.pid_run == pid_run)
-        .first()
-    ):
-        margin_controller = _convert_from_margin_controller(res)
-    else:
-        margin_controller = None
-    return margin_controller
-
-
-def _get_last_ewma_params(
-    session: Session, pid_run: DBPidRun | None
-) -> dict[str, EwmaControllerParams]:
-    """
-    Returns all EwmaControllerParams for the given pid run which were used
-    by the SpreadControllers.
-
-    Key of the returned dict is the pubkey of the channel peer.
-    """
-    if not pid_run:
-        return {}
-
-    return {
-        p.peer.pub_key: _convert_from_spread_controller(p)
-        for p in session.query(DBPidSpreadController)
-        .options(
-            joinedload(DBPidSpreadController.ewma_controller),
-            joinedload(DBPidSpreadController.peer),
-        )
-        .join(DBPidSpreadController.pid_run)
-        .filter(DBPidSpreadController.pid_run == pid_run)
-        .all()
-    }
+    return qry
 
 
 @dataclass
@@ -521,13 +429,19 @@ class PidStore:
         self,
     ) -> list[tuple[datetime, MrControllerParams]]:
         """
-        Returns the MrControllerParams of the MarginController for the given pid run.
+        Returns the historic MrControllerParams of the MarginController with its
+        timestamps.
         """
 
-        def func(session: Session):
-            return _get_historic_mr_params(session, self.pubkey_local)
+        qry = _query_margin_controller(local_pub_key=self.pubkey_local)
 
-        return self.db.execute(func)
+        def convert(c: DBPidMarginController) -> tuple[datetime, MrControllerParams]:
+            return (
+                c.pid_run.run.timestamp_start,
+                _convert_from_mr_controller(c.mr_controller),
+            )
+
+        return self.db.query_all_to_list(qry, convert)
 
     def historic_ewma_params(
         self, peer_pub_key: str
@@ -537,24 +451,36 @@ class PidStore:
         the delta time.
         """
 
-        def func(session: Session):
-            return _get_historic_ewma_params(session, self.pubkey_local, peer_pub_key)
+        qry = _query_spread_controller(
+            local_pub_key=self.pubkey_local,
+            peer_pub_key=peer_pub_key,
+            order_by_run_id_asc=True,
+        )
 
-        return self.db.execute(func)
+        def convert(
+            c: DBPidSpreadController,
+        ) -> tuple[datetime, EwmaControllerParams, float]:
+            return (
+                c.pid_run.run.timestamp_start,
+                _convert_from_ewma_controller(c.ewma_controller),
+                c.ewma_controller.delta_time,
+            )
 
-    def last_mr_params(self, pid_run: DBPidRun | None) -> MrControllerParams | None:
+        return self.db.query_all_to_list(qry, convert)
+
+    def last_mr_params(self, run_id: int | None) -> MrControllerParams | None:
         """
         Returns the MrControllerParams of the MarginController for the given pid run.
         """
 
-        def func(session: Session):
-            return _get_last_mr_params(session, pid_run)
+        if not run_id:
+            return None
 
-        return self.db.execute(func)
+        qry = _query_margin_controller(run_id=run_id, order_by_run_id_asc=True)
 
-    def last_ewma_params(
-        self, pid_run: DBPidRun | None
-    ) -> dict[str, EwmaControllerParams]:
+        return self.db.query_first(qry, _convert_from_margin_controller)
+
+    def last_ewma_params(self, run_id: int | None) -> dict[str, EwmaControllerParams]:
         """
         Returns all EwmaControllerParams for the given pid run which were used
         by the SpreadControllers.
@@ -562,44 +488,42 @@ class PidStore:
         Key of the returned dict is the pubkey of the channel peer.
         """
 
-        def func(session: Session):
-            return _get_last_ewma_params(session, pid_run)
+        if not run_id:
+            return {}
 
-        return self.db.execute(func)
+        qry = _query_spread_controller(run_id=run_id)
 
-    def last_policies_end(self, ln_run: DBLnRun | None) -> dict[int, ChannelPolicy]:
-        """Returns the ChannelPolicy of the last run as dict with chan_id as key."""
+        def pub_key(c: DBPidSpreadController) -> str:
+            return c.peer.pub_key
 
-        def func(session: Session):
-            return _get_policies(session, ln_run, 1)
+        return self.db.query_all_to_dict(qry, pub_key, _convert_from_spread_controller)
 
-        return self.db.execute(func)
+    def last_pid_run(self) -> tuple[int, datetime] | tuple[None, None]:
 
-    def last_pid_run(self) -> DBPidRun | None:
-        """Returns the last run of the pid controller"""
+        qry = _query_pid_run(pub_key=self.pubkey_local, order_by_run_id_desc=True)
 
-        def func(session: Session):
-            return _get_last_pid_run(session, self.pubkey_local)
+        def convert(r: DBPidRun) -> tuple[int, datetime]:
+            return r.run_id, r.run.timestamp_start
 
-        return self.db.execute(func)
-
-    def last_ln_run(self) -> DBLnRun | None:
-        """Returns the last ln run associated with last pid prun"""
-
-        def func(session: Session):
-            return _get_ln_run(session, self.last_pid_run())
-
-        return self.db.execute(func)
+        return self.db.query_first(qry, convert, (None, None))
 
     def last_spread_controller_params(
         self, peer_pub_key: str
     ) -> tuple[None, None] | tuple[datetime, EwmaControllerParams]:
         """
-        Returns the EwmaControllerParams of the last execution of spread controller
+        Returns the EwmaControllerParams of the last execution of a spread controller
         for a given peer and its execution time.
         """
 
-        def func(session: Session):
-            return _get_last_spread_controller(session, self.pubkey_local, peer_pub_key)
+        qry = _query_spread_controller(
+            local_pub_key=self.pubkey_local,
+            peer_pub_key=peer_pub_key,
+            order_by_run_id_desc=True,
+        )
 
-        return self.db.execute(func)
+        def convert(c: DBPidSpreadController) -> tuple[datetime, EwmaControllerParams]:
+            return c.pid_run.run.timestamp_start, _convert_from_ewma_controller(
+                c.ewma_controller
+            )
+
+        return self.db.query_first(qry, convert, (None, None))

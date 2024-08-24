@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Generator
 
 from feelancer.lightning.chan_updates import PolicyProposal
+from feelancer.lightning.data import LightningStore
 
 from .aggregator import ChannelAggregator
 from .analytics import EwmaController, MrController
@@ -17,8 +18,8 @@ from .data import (
     PidStore,
     convert_to_margin_controller,
     convert_to_pid_result,
-    convert_to_pid_run,
     convert_to_spread_controller,
+    new_pid_run,
 )
 
 if TYPE_CHECKING:
@@ -286,15 +287,16 @@ class PidController:
 
     def __init__(self, db: FeelancerDB, config: PidConfig, pubkey_local: str) -> None:
         self.config = config
-        self.store = PidStore(db, pubkey_local)
+        self.pid_store = PidStore(db, pubkey_local)
+        self.ln_store = LightningStore(db, pubkey_local)
         self.pubkey_local = pubkey_local
 
         """Fetching the last timestamp from the database"""
-        last_pid_run = self.store.last_pid_run()
-        if not last_pid_run:
-            self.last_timestamp = None
-        else:
-            self.last_timestamp = last_pid_run.run.timestamp_start
+        last_run_id, self.last_timestamp = self.pid_store.last_pid_run()
+        # if not last_pid_run:
+        #     self.last_timestamp = None
+        # else:
+        #     self.last_timestamp = last_pid_run.run.timestamp_start
 
         """
         Fetching the last mean reversion parameters from db and initializing the
@@ -304,7 +306,7 @@ class PidController:
         The parameters are updated again with the current config in the calling
         part of the controller.
         """
-        mr_params = self.store.last_mr_params(last_pid_run)
+        mr_params = self.pid_store.last_mr_params(last_run_id)
         if not mr_params:
             mr_params = self.config.margin.mr_controller
 
@@ -315,7 +317,7 @@ class PidController:
         were used in the last run.
         Controllers for new peers are created in the calling part.
         """
-        last_ewma_params = self.store.last_ewma_params(last_pid_run)
+        last_ewma_params = self.pid_store.last_ewma_params(last_run_id)
         self.spread_controller_map: dict[str, SpreadController] = {}
         for pub_key, params in last_ewma_params.items():
             self.spread_controller_map[pub_key] = SpreadController(
@@ -330,7 +332,7 @@ class PidController:
         fetched from the LN Node.
         """
 
-        last_pid_run = self.store.last_pid_run()
+        last_run_id, _ = self.pid_store.last_pid_run()
         self.config = config
 
         # We need the last margin later we have to recalculate the spread for
@@ -351,11 +353,12 @@ class PidController:
         externally changes of the feerate.
         """
         block_height = ln.lnclient.block_height
-        if not last_pid_run:
+        if not last_run_id:
             last_policies = {}
         else:
-            last_ln_run = self.store.last_ln_run()
-            last_policies = self.store.last_policies_end(last_ln_run)
+            last_policies = self.ln_store.local_policies(last_run_id, 1)
+            # last_ln_run = self.pid_store.last_ln_run()
+            # last_policies = self.pid_store.last_policies_end(last_ln_run)
 
         aggregator = ChannelAggregator.from_channels(
             config=self.config,
@@ -377,7 +380,9 @@ class PidController:
             if not spread_controller:
                 # We check if there was a controller with this peer in the past,
                 # we use this params at starting point for the control variable.
-                timestamp, params = self.store.last_spread_controller_params(pub_key)
+                timestamp, params = self.pid_store.last_spread_controller_params(
+                    pub_key
+                )
 
                 # Fallback to current config if there is no historic controller.
                 if not params:
@@ -417,7 +422,7 @@ class PidController:
                 spread_controller(*call_args)
             except ReinitRequired:
                 logging.info(f"Reinit required for {pub_key}")
-                history = self.store.historic_ewma_params(pub_key)
+                history = self.pid_store.historic_ewma_params(pub_key)
                 spread_controller = self.spread_controller_map[pub_key] = (
                     SpreadController.from_history(peer_config.ewma_controller, history)
                 )
@@ -520,7 +525,7 @@ class PidController:
         the PidController.
         """
 
-        pid_run = convert_to_pid_run(ln_session.db_run, ln_session.ln_node)
+        pid_run = new_pid_run(ln_session.db_run, ln_session.ln_node)
         yield convert_to_margin_controller(pid_run, self.margin_controller)
 
         for pub_key, spread_controller in self.spread_controller_map.items():

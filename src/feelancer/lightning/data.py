@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Query, Session, joinedload
 
 from feelancer.lightning.client import ChannelPolicy, LightningClient
 from feelancer.lightning.models import (
@@ -15,6 +15,7 @@ from feelancer.lightning.models import (
 )
 
 if TYPE_CHECKING:
+    from feelancer.data.db import FeelancerDB
     from feelancer.lightning.client import Channel
     from feelancer.tasks.models import DBRun
 
@@ -23,7 +24,7 @@ ChannelIDX = tuple[int, int]
 PolicyIDX = tuple[int, bool]
 
 
-def convert_from_channel_policy(policy: DBLnChannelPolicy) -> ChannelPolicy:
+def _convert_from_channel_policy(policy: DBLnChannelPolicy) -> ChannelPolicy:
     return ChannelPolicy(
         fee_rate_ppm=policy.fee_rate_ppm,
         base_fee_msat=policy.base_fee_msat,
@@ -117,10 +118,52 @@ def _get_channels_static(
     }
 
 
+def _query_local_policies(
+    run_id: int | None = None, sequence_id: int | None = None
+) -> Query[DBLnChannelPolicy]:
+    """
+    Returns a for selecting the local policies out of DBLnChannelPolicy
+    """
+
+    qry = (
+        Query(DBLnChannelPolicy)
+        .options(joinedload(DBLnChannelPolicy.static, DBLnChannelStatic.peer))
+        .join(DBLnChannelPolicy.ln_run)
+        .filter(DBLnChannelPolicy.local)
+    )
+
+    if run_id:
+        qry = qry.filter(DBLnChannelPolicy.run_id == run_id)
+
+    if sequence_id:
+        qry = qry.filter(DBLnChannelPolicy.sequence_id == sequence_id)
+
+    return qry
+
+
+class LightningStore:
+    """
+    LightningStore is the interface for all lightning relevant data from the database.
+    """
+
+    def __init__(self, db: FeelancerDB, pubkey_local: str) -> None:
+        self.db = db
+        self.pubkey_local = pubkey_local
+
+    def local_policies(self, run_id: int, sequence_id: int) -> dict[int, ChannelPolicy]:
+
+        qry = _query_local_policies(run_id=run_id, sequence_id=sequence_id)
+
+        def key(p: DBLnChannelPolicy) -> int:
+            return p.static.chan_id
+
+        return self.db.query_all_to_dict(qry, key, _convert_from_channel_policy)
+
+
 class LightningSessionCache:
     """
     Caching lightning data from the db and the lightning client during a session
-    of sqlalchemy.
+    of sqlalchemy when creating a new run.
     """
 
     def __init__(self, ln: LightningCache, session: Session, db_run: DBRun) -> None:

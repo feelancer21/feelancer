@@ -161,11 +161,9 @@ class TaskRunner:
 
             return db_run
 
-        # Callback for receiving the run id in the database session.
-        def get_run_id(db_run: DBRun) -> int:
-            return db_run.id
-
-        run_id = self.db.execute_post(store_data, get_run_id)
+        # Execute the callable. The lambda function returns the run id
+        # for logging.
+        run_id = self.db.execute_post(store_data, lambda db_run: db_run.id)
 
         run_time = timestamp_end - timestamp_start
         logging.info(
