@@ -212,22 +212,6 @@ def query_margin_controller(
     return qry
 
 
-# def query_pid_run(
-#     pub_key: str | None = None, order_by_run_id_desc: bool = False
-# ) -> Select[tuple[DBPidRun]:
-#     qry = Query(DBPidRun).join(DBPidRun.ln_node)
-
-#     if pub_key:
-#         qry = qry.where(DBLnNode.pub_key == pub_key)
-
-#     qry = qry.options(joinedload(DBPidRun.run))
-
-#     if order_by_run_id_desc:
-#         qry = qry.order_by(DBPidRun.run_id.desc())
-
-#     return qry
-
-
 def query_pid_run(
     pub_key: str | None = None, order_by_run_id_desc: bool = False
 ) -> Select[tuple[DBPidRun]]:
