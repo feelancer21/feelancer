@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, TypeVar
 
 from sqlalchemy.orm import Query, joinedload
+
 from feelancer.utils import GenericConf, defaults_from_type, get_peers_config
 
 from .models import (
@@ -415,25 +416,28 @@ class PidStore:
         self.pubkey_local = pubkey_local
         self.db.create_base(Base)
 
-    def historic_mr_params(
-        self,
-    ) -> list[tuple[datetime, MrControllerParams]]:
+    def ewma_params_last_by_peer(
+        self, peer_pub_key: str
+    ) -> tuple[None, None] | tuple[datetime, EwmaControllerParams]:
         """
-        Returns the historic MrControllerParams of the MarginController with its
-        timestamps.
+        Returns the EwmaControllerParams of the last execution of a spread controller
+        for a given peer and its execution time.
         """
 
-        qry = query_margin_controller(local_pub_key=self.pubkey_local)
+        qry = query_spread_controller(
+            local_pub_key=self.pubkey_local,
+            peer_pub_key=peer_pub_key,
+            order_by_run_id_desc=True,
+        )
 
-        def convert(c: DBPidMarginController) -> tuple[datetime, MrControllerParams]:
-            return (
-                c.pid_run.run.timestamp_start,
-                _convert_mr_controller(c.mr_controller),
+        def convert(c: DBPidSpreadController) -> tuple[datetime, EwmaControllerParams]:
+            return c.pid_run.run.timestamp_start, _convert_ewma_controller(
+                c.ewma_controller
             )
 
-        return self.db.query_all_to_list(qry, convert)
+        return self.db.query_first(qry, convert, (None, None))
 
-    def historic_ewma_params(
+    def ewma_params_by_pub_key(
         self, peer_pub_key: str
     ) -> list[tuple[datetime, EwmaControllerParams, float]]:
         """
@@ -458,28 +462,13 @@ class PidStore:
 
         return self.db.query_all_to_list(qry, convert)
 
-    def last_mr_params(self, run_id: int | None) -> MrControllerParams | None:
-        """
-        Returns the MrControllerParams of the MarginController for the given pid run.
-        """
-
-        if not run_id:
-            return None
-
-        qry = query_margin_controller(run_id=run_id, order_by_run_id_asc=True)
-
-        return self.db.query_first(qry, _convert_margin_controller)
-
-    def last_ewma_params(self, run_id: int | None) -> dict[str, EwmaControllerParams]:
+    def ewma_params_by_run(self, run_id: int) -> dict[str, EwmaControllerParams]:
         """
         Returns all EwmaControllerParams for the given pid run which were used
         by the SpreadControllers.
 
         Key of the returned dict is the pubkey of the channel peer.
         """
-
-        if not run_id:
-            return {}
 
         qry = query_spread_controller(run_id=run_id)
 
@@ -488,32 +477,38 @@ class PidStore:
 
         return self.db.query_all_to_dict(qry, pub_key, _convert_spread_controller)
 
-    def last_pid_run(self) -> tuple[int, datetime] | tuple[None, None]:
+    def mr_params_by_run(self, run_id: int) -> MrControllerParams | None:
+        """
+        Returns the MrControllerParams of the MarginController for the given pid run.
+        """
+
+        qry = query_margin_controller(run_id=run_id, order_by_run_id_asc=True)
+
+        return self.db.query_first(qry, _convert_margin_controller)
+
+    def mr_params_history(
+        self,
+    ) -> list[tuple[datetime, MrControllerParams]]:
+        """
+        Returns the historic MrControllerParams of the MarginController with its
+        timestamps.
+        """
+
+        qry = query_margin_controller(local_pub_key=self.pubkey_local)
+
+        def convert(c: DBPidMarginController) -> tuple[datetime, MrControllerParams]:
+            return (
+                c.pid_run.run.timestamp_start,
+                _convert_mr_controller(c.mr_controller),
+            )
+
+        return self.db.query_all_to_list(qry, convert)
+
+    def pid_run_last(self) -> tuple[int, datetime] | tuple[None, None]:
 
         qry = query_pid_run(pub_key=self.pubkey_local, order_by_run_id_desc=True)
 
         def convert(r: DBPidRun) -> tuple[int, datetime]:
             return r.run_id, r.run.timestamp_start
-
-        return self.db.query_first(qry, convert, (None, None))
-
-    def last_spread_controller_params(
-        self, peer_pub_key: str
-    ) -> tuple[None, None] | tuple[datetime, EwmaControllerParams]:
-        """
-        Returns the EwmaControllerParams of the last execution of a spread controller
-        for a given peer and its execution time.
-        """
-
-        qry = query_spread_controller(
-            local_pub_key=self.pubkey_local,
-            peer_pub_key=peer_pub_key,
-            order_by_run_id_desc=True,
-        )
-
-        def convert(c: DBPidSpreadController) -> tuple[datetime, EwmaControllerParams]:
-            return c.pid_run.run.timestamp_start, _convert_ewma_controller(
-                c.ewma_controller
-            )
 
         return self.db.query_first(qry, convert, (None, None))

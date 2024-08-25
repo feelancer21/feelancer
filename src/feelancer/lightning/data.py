@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy.orm import Query, Session, joinedload
 
+from feelancer.data.db import SessionExecutor
 from feelancer.lightning.client import ChannelPolicy, LightningClient
 from feelancer.lightning.models import (
     DBLnChannelLiquidity,
@@ -13,7 +14,6 @@ from feelancer.lightning.models import (
     DBLnNode,
     DBLnRun,
 )
-from feelancer.data.db import SessionExecutor
 
 if TYPE_CHECKING:
     from feelancer.data.db import FeelancerDB
@@ -192,6 +192,7 @@ class LightningSessionCache:
             query_channel_peers(), lambda c: c.pub_key, lambda c: c
         )
 
+        """ Creating DBLnChannelPeer for new peers."""
         for channel in self.ln.channels.values():
             if self._channel_peer.get(pub_key := channel.pub_key):
                 continue
@@ -218,6 +219,7 @@ class LightningSessionCache:
                 qry, lambda c: (c.ln_node_id, c.chan_id), lambda c: c
             )
 
+        """"Creating DBLnChannelStatic for new channels """
         for channel in self.ln.channels.values():
             idx = self._create_chan_idx(channel)
 
@@ -274,9 +276,11 @@ class LightningSessionCache:
         return policies
 
     def channel_peer_by(self, pub_key: str) -> DBLnChannelPeer:
+        """Returns DBLnChannelPeer for a given pub_key"""
         return self.channel_peer[pub_key]
 
     def channel_static_by(self, channel: Channel) -> DBLnChannelStatic:
+        """Returns DBLnChannelStatic for a given channel"""
         return self.channel_static[self._create_chan_idx(channel)]
 
     def _local_node(self) -> DBLnNode:

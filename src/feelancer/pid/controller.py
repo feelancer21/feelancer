@@ -18,8 +18,8 @@ from .data import (
     PidStore,
     new_margin_controller,
     new_pid_result,
-    new_spread_controller,
     new_pid_run,
+    new_spread_controller,
 )
 
 if TYPE_CHECKING:
@@ -290,11 +290,7 @@ class PidController:
         self.pubkey_local = pubkey_local
 
         """Fetching the last timestamp from the database"""
-        last_run_id, self.last_timestamp = self.pid_store.last_pid_run()
-        # if not last_pid_run:
-        #     self.last_timestamp = None
-        # else:
-        #     self.last_timestamp = last_pid_run.run.timestamp_start
+        last_run_id, self.last_timestamp = self.pid_store.pid_run_last()
 
         """
         Fetching the last mean reversion parameters from db and initializing the
@@ -304,7 +300,11 @@ class PidController:
         The parameters are updated again with the current config in the calling
         part of the controller.
         """
-        mr_params = self.pid_store.last_mr_params(last_run_id)
+
+        mr_params = None
+        if last_run_id:
+            mr_params = self.pid_store.mr_params_by_run(last_run_id)
+
         if not mr_params:
             mr_params = self.config.margin.mr_controller
 
@@ -315,7 +315,9 @@ class PidController:
         were used in the last run.
         Controllers for new peers are created in the calling part.
         """
-        last_ewma_params = self.pid_store.last_ewma_params(last_run_id)
+        last_ewma_params = {}
+        if last_run_id:
+            last_ewma_params = self.pid_store.ewma_params_by_run(last_run_id)
         self.spread_controller_map: dict[str, SpreadController] = {}
         for pub_key, params in last_ewma_params.items():
             self.spread_controller_map[pub_key] = SpreadController(
@@ -330,7 +332,7 @@ class PidController:
         fetched from the LN Node.
         """
 
-        last_run_id, _ = self.pid_store.last_pid_run()
+        last_run_id, _ = self.pid_store.pid_run_last()
         self.config = config
 
         # We need the last margin later we have to recalculate the spread for
@@ -378,9 +380,7 @@ class PidController:
             if not spread_controller:
                 # We check if there was a controller with this peer in the past,
                 # we use this params at starting point for the control variable.
-                timestamp, params = self.pid_store.last_spread_controller_params(
-                    pub_key
-                )
+                timestamp, params = self.pid_store.ewma_params_last_by_peer(pub_key)
 
                 # Fallback to current config if there is no historic controller.
                 if not params:
@@ -420,7 +420,7 @@ class PidController:
                 spread_controller(*call_args)
             except ReinitRequired:
                 logging.info(f"Reinit required for {pub_key}")
-                history = self.pid_store.historic_ewma_params(pub_key)
+                history = self.pid_store.ewma_params_by_pub_key(pub_key)
                 spread_controller = self.spread_controller_map[pub_key] = (
                     SpreadController.from_history(peer_config.ewma_controller, history)
                 )
