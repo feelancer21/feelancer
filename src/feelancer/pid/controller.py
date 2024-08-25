@@ -16,9 +16,9 @@ from .aggregator import ChannelAggregator
 from .analytics import EwmaController, MrController
 from .data import (
     PidStore,
-    convert_to_margin_controller,
-    convert_to_pid_result,
-    convert_to_spread_controller,
+    new_margin_controller,
+    new_pid_result,
+    new_spread_controller,
     new_pid_run,
 )
 
@@ -256,9 +256,7 @@ def yield_pid_results(
     pass
 
 
-def convert_to_policy_proposal(
-    pid_result: PidResult, set_inbound: bool
-) -> PolicyProposal:
+def new_policy_proposal(pid_result: PidResult, set_inbound: bool) -> PolicyProposal:
     """
     Converts the PidResult to a PolicyProposal
 
@@ -477,9 +475,9 @@ class PidController:
         to a db session.
         """
 
-        ln_session.set_channel_policies(0, True)
-        ln_session.set_channel_policies(0, False)
-        ln_session.set_channel_policies(1, True)
+        ln_session.channel_policies(0, True)
+        ln_session.channel_policies(0, False)
+        ln_session.channel_policies(1, True)
 
         """
         We'd like log bigger changes of the fee rates to find them faster.
@@ -487,8 +485,8 @@ class PidController:
         determine the differences on channel level.
         TODO: This can be removed in a later stage of the project.
         """
-        channels_0 = ln_session.ln.get_channels(0)
-        channels_1 = ln_session.ln.get_channels(1)
+        channels_0 = ln_session.ln.channels_by_sequence(0)
+        channels_1 = ln_session.ln.channels_by_sequence(1)
 
         for chan_id in channels_0.keys() & channels_1.keys():
             p_0 = channels_0[chan_id].policy_local
@@ -526,20 +524,20 @@ class PidController:
         """
 
         pid_run = new_pid_run(ln_session.db_run, ln_session.ln_node)
-        yield convert_to_margin_controller(pid_run, self.margin_controller)
+        yield new_margin_controller(pid_run, self.margin_controller)
 
         for pub_key, spread_controller in self.spread_controller_map.items():
-            peer = ln_session.get_channel_peer(pub_key)
+            peer = ln_session.channel_peer_by(pub_key=pub_key)
 
-            yield convert_to_spread_controller(spread_controller, peer, pid_run)
+            yield new_spread_controller(spread_controller, peer, pid_run)
 
             peer_config = self.config.peer_config(pub_key)
             margin_idio = peer_config.margin_idiosyncratic
             for res in yield_pid_results(
                 self.margin_controller, spread_controller, margin_idio
             ):
-                channel = ln_session.get_channel_static(res.channel)
-                yield convert_to_pid_result(res, channel, pid_run)
+                channel = ln_session.channel_static_by(channel=res.channel)
+                yield new_pid_result(res, channel, pid_run)
 
     def policy_proposals(self) -> list[PolicyProposal]:
         """
@@ -559,6 +557,6 @@ class PidController:
             for r in yield_pid_results(
                 self.margin_controller, spread_controller, margin_idio
             ):
-                res.append(convert_to_policy_proposal(r, set_inbound))
+                res.append(new_policy_proposal(r, set_inbound))
 
         return res

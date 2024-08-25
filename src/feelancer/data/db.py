@@ -117,7 +117,7 @@ class FeelancerDB:
         self, qry: Query[T], key: Callable[[T], V], value: Callable[[T], W]
     ) -> dict[V, W]:
         """
-        Executes the qry Query. Each element of the result is stored in dict.
+        Executes the qry Query. Each element of the result is stored in a dict.
         For deriving key and value the identical named callbacks are used.
         """
 
@@ -150,3 +150,43 @@ class FeelancerDB:
             return convert(result)
 
         return self._execute(get_data, convert_default)
+
+
+class SessionExecutor:
+    """
+    For executing queries in an existing session and transforming the data in a
+    target format.
+    """
+
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def query_all_to_list(self, qry: Query[T], convert: Callable[[T], V]) -> list[V]:
+        """
+        Executes the query in this session. Returns a list with the converted
+        results.
+
+        """
+        return [convert(r) for r in self.session.execute(qry).scalars().all()]
+
+    def query_all_to_dict(
+        self, qry: Query[T], key: Callable[[T], V], value: Callable[[T], W]
+    ) -> dict[V, W]:
+        """
+        Executes the query in this session. Returns a dict with the converted
+        results.
+        """
+        return {key(r): value(r) for r in self.session.execute(qry).scalars().all()}
+
+    def query_first(
+        self, qry: Query[T], convert: Callable[[T], V], default: W = None
+    ) -> V | W:
+        """
+        Returns the conversion with the callback of the first element of the query.
+        If the first element is None, the default value is returned.
+        """
+
+        res = self.session.execute(qry).scalars().first()
+        if not res:
+            return default
+        return convert(res)

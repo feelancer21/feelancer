@@ -60,7 +60,7 @@ class DBLnChannelPeer(Base):
 
 class DBLnChannelStatic(Base):
     """
-    All channel data changing over time, like balances and fee_rates
+    All channel data not changing over time, like balances and fee_rates
     """
 
     __tablename__ = "ln_channel_static"

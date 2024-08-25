@@ -8,9 +8,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, TypeVar
 
-from sqlalchemy.orm import Query, Session, joinedload
-
-from feelancer.lightning.data import DBLnRun
+from sqlalchemy.orm import Query, joinedload
 from feelancer.utils import GenericConf, defaults_from_type, get_peers_config
 
 from .models import (
@@ -84,20 +82,11 @@ def _query_pid_run(
     return qry
 
 
-def _get_ln_run(session: Session, run_id: int | None) -> DBLnRun | None:
-    """Returns the DBLnRun associated with DBPidRun"""
-    if not run_id:
-        return None
-
-    res = session.query(DBLnRun).filter(DBLnRun.run_id == run_id).first()
-    return res
-
-
 def new_pid_run(run: DBRun, ln_node: DBLnNode) -> DBPidRun:
     return DBPidRun(run=run, ln_node=ln_node)
 
 
-def convert_to_pid_result(
+def new_pid_result(
     pid_result: PidResult,
     channel_static: DBLnChannelStatic,
     pid_run: DBPidRun,
@@ -111,7 +100,7 @@ def convert_to_pid_result(
     )
 
 
-def _convert_to_ewma_controller(ewma_controller: EwmaController) -> DBPidEwmaController:
+def _new_ewma_controller(ewma_controller: EwmaController) -> DBPidEwmaController:
     ewma_params = ewma_controller.ewma_params
     return DBPidEwmaController(
         alpha_d=ewma_params.alpha_d,
@@ -134,7 +123,7 @@ def _convert_to_ewma_controller(ewma_controller: EwmaController) -> DBPidEwmaCon
     )
 
 
-def _convert_from_ewma_controller(
+def _convert_ewma_controller(
     ewma_controller: DBPidEwmaController,
 ) -> EwmaControllerParams:
     return EwmaControllerParams(
@@ -151,7 +140,7 @@ def _convert_from_ewma_controller(
     )
 
 
-def _convert_to_mr_controller(mr_controller: MrController) -> DBPidMrController:
+def _new_mr_controller(mr_controller: MrController) -> DBPidMrController:
     mr_params = mr_controller.mr_params
     return DBPidMrController(
         alpha=mr_params.alpha,
@@ -162,7 +151,7 @@ def _convert_to_mr_controller(mr_controller: MrController) -> DBPidMrController:
     )
 
 
-def _convert_from_mr_controller(
+def _convert_mr_controller(
     mr_controller: DBPidMrController,
 ) -> MrControllerParams:
     return MrControllerParams(
@@ -172,13 +161,13 @@ def _convert_from_mr_controller(
     )
 
 
-def _convert_from_spread_controller(
+def _convert_spread_controller(
     pid_spread_controller: DBPidSpreadController,
 ) -> EwmaControllerParams:
-    return _convert_from_ewma_controller(pid_spread_controller.ewma_controller)
+    return _convert_ewma_controller(pid_spread_controller.ewma_controller)
 
 
-def convert_to_spread_controller(
+def new_spread_controller(
     spread_controller: SpreadController,
     channel_peer: DBLnChannelPeer,
     pid_run: DBPidRun,
@@ -186,23 +175,23 @@ def convert_to_spread_controller(
     return DBPidSpreadController(
         pid_run=pid_run,
         peer=channel_peer,
-        ewma_controller=_convert_to_ewma_controller(spread_controller.ewma_controller),
+        ewma_controller=_new_ewma_controller(spread_controller.ewma_controller),
         target=spread_controller.target,
     )
 
 
-def _convert_from_margin_controller(
+def _convert_margin_controller(
     margin_controller: DBPidMarginController,
 ) -> MrControllerParams:
-    return _convert_from_mr_controller(margin_controller.mr_controller)
+    return _convert_mr_controller(margin_controller.mr_controller)
 
 
-def convert_to_margin_controller(
+def new_margin_controller(
     pid_run: DBPidRun, margin_controller: MarginController
 ) -> DBPidMarginController:
     return DBPidMarginController(
         pid_run=pid_run,
-        mr_controller=_convert_to_mr_controller(margin_controller.mr_controller),
+        mr_controller=_new_mr_controller(margin_controller.mr_controller),
     )
 
 
@@ -418,6 +407,7 @@ class PidConfig:
 class PidStore:
     """
     PidStore is the interface for all pid relevant data from the database.
+    The methods return non ORM objects only.
     """
 
     def __init__(self, db: FeelancerDB, pubkey_local: str) -> None:
@@ -438,7 +428,7 @@ class PidStore:
         def convert(c: DBPidMarginController) -> tuple[datetime, MrControllerParams]:
             return (
                 c.pid_run.run.timestamp_start,
-                _convert_from_mr_controller(c.mr_controller),
+                _convert_mr_controller(c.mr_controller),
             )
 
         return self.db.query_all_to_list(qry, convert)
@@ -462,7 +452,7 @@ class PidStore:
         ) -> tuple[datetime, EwmaControllerParams, float]:
             return (
                 c.pid_run.run.timestamp_start,
-                _convert_from_ewma_controller(c.ewma_controller),
+                _convert_ewma_controller(c.ewma_controller),
                 c.ewma_controller.delta_time,
             )
 
@@ -478,7 +468,7 @@ class PidStore:
 
         qry = _query_margin_controller(run_id=run_id, order_by_run_id_asc=True)
 
-        return self.db.query_first(qry, _convert_from_margin_controller)
+        return self.db.query_first(qry, _convert_margin_controller)
 
     def last_ewma_params(self, run_id: int | None) -> dict[str, EwmaControllerParams]:
         """
@@ -496,7 +486,7 @@ class PidStore:
         def pub_key(c: DBPidSpreadController) -> str:
             return c.peer.pub_key
 
-        return self.db.query_all_to_dict(qry, pub_key, _convert_from_spread_controller)
+        return self.db.query_all_to_dict(qry, pub_key, _convert_spread_controller)
 
     def last_pid_run(self) -> tuple[int, datetime] | tuple[None, None]:
 
@@ -522,7 +512,7 @@ class PidStore:
         )
 
         def convert(c: DBPidSpreadController) -> tuple[datetime, EwmaControllerParams]:
-            return c.pid_run.run.timestamp_start, _convert_from_ewma_controller(
+            return c.pid_run.run.timestamp_start, _convert_ewma_controller(
                 c.ewma_controller
             )
 
