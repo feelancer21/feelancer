@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import copy
 import logging
 from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Iterable
+
+from .client import ChannelPolicy
 
 if TYPE_CHECKING:
     from feelancer.config import FeelancerConfig
@@ -28,6 +31,26 @@ class PolicyProposal:
     disabled: bool | None = None
 
 
+@dataclass
+class PolicyUpdateInfo:
+    """
+    Used to store aggregated policy and proposal information at the individual
+    peer level.
+    We don't want to spam the network with tiny policy dates in short time
+    ranges. Therefore store the maximum of the last policy update timestamp
+    for all channels. Moreover we have to distinguish whether we want update
+    the outbound policy and/or the inbound policy, because we want to make the
+    channel with a update on side not unusable on the other side.
+    """
+
+    # The last update timestamp over all channels
+    max_last_update: int = 0
+    # Is a update for the outbound policy needed
+    outbound_changed: bool = False
+    # Is a update for the inbound policy needed
+    inbound_changed: bool = False
+
+
 def _get_max_min(input: int, max_value: int, min_value: int) -> int:
     return max(min(input, max_value), min_value)
 
@@ -37,6 +60,34 @@ def _is_changed(value_current: int, value_old: int, min_up: int, min_down: int) 
     if delta >= min_up or -delta >= min_down:
         return True
     return False
+
+
+def _create_update_policy(
+    policy: ChannelPolicy, proposal: PolicyProposal, info: PolicyUpdateInfo
+) -> ChannelPolicy:
+    """
+    Merges the information of the existing policy, the proposal and the update
+    info together and creates a final policy
+    """
+
+    res = copy.copy(policy)
+    if info.outbound_changed:
+        res.fee_rate_ppm = proposal.fee_rate_ppm or res.fee_rate_ppm
+        res.base_fee_msat = proposal.base_fee_msat or res.base_fee_msat
+        res.time_lock_delta = proposal.time_lock_delta or res.time_lock_delta
+        res.max_htlc_msat = proposal.max_htlc_msat or res.max_htlc_msat
+        res.min_htlc_msat = proposal.min_htlc_msat or res.min_htlc_msat
+        res.disabled = proposal.disabled or res.disabled
+
+    if info.inbound_changed:
+        res.inbound_fee_rate_ppm = (
+            proposal.inbound_fee_rate_ppm or res.inbound_fee_rate_ppm
+        )
+        res.inbound_base_fee_msat = (
+            proposal.inbound_base_fee_msat or res.inbound_base_fee_msat
+        )
+
+    return res
 
 
 def update_channel_policies(
@@ -51,13 +102,11 @@ def update_channel_policies(
     policies.
     """
 
-    # We don't want to spam the network with tiny policy dates in short time
-    # ranges. Therefore store the maximum of the last policy update timestamp
-    # for all peers.
-    max_last_update: dict[str, int] = {}
-
     # dict pub_key -> chan_point -> PolicyProposal
     prop_dict: dict[str, dict[str, PolicyProposal]] = {}
+
+    # dict pub_key -> PolicyUpdateInfo
+    info_dict: dict[str, PolicyUpdateInfo] = {}
 
     for r in proposals:
         if not (policy := r.channel.policy_local):
@@ -112,61 +161,66 @@ def update_channel_policies(
             inbound_fee_rate_ppm=inbound_fee_rate,
         )
 
-        if not any([fee_rate_changed, inbound_fee_rate_changed]):
-            logging.debug(
-                f"no policy update for {chan_point} needed because the values only "
-                f"changed slightly."
-            )
-            continue
+        if not (info := info_dict.get(pub_key)):
+            info = info_dict[pub_key] = PolicyUpdateInfo()
 
-        # Looking for the maximum of all update timestamps now
-        if not (m := max_last_update.get(pub_key)):
-            max_last_update[pub_key] = policy.last_update
-        else:
-            max_last_update[pub_key] = max(m, policy.last_update)
+        # Updating the info. The booleans are concatenated with an OR operation,
+        # i.e. it is sufficient that one channel with this peer requires an update
+        info.max_last_update = max(info.max_last_update, policy.last_update)
+        info.outbound_changed |= fee_rate_changed
+        info.inbound_changed |= inbound_fee_rate_changed
 
     """
     Iterating over all peers with a max last update. If the time delta fits
     with the config we update all channels with this peer.
     """
-    for pub_key, timestamp in max_last_update.items():
+    for pub_key, info in info_dict.items():
+        logging.debug(f"{pub_key}, {info}")
         peer_config = config.peer_config(pub_key)
-        if (dt := timenow.timestamp() - timestamp) < peer_config.min_seconds:
+        if (dt := timenow.timestamp() - info.max_last_update) < peer_config.min_seconds:
             logging.debug(
                 f"no policy updates for {pub_key}; last update was {dt}s ago "
                 f"which is less than min_seconds {peer_config.min_seconds}s."
             )
             continue
 
-        if not (update := prop_dict.get(pub_key)):
+        update = prop_dict.get(pub_key)
+        if not update:
             continue
 
+        # Check on peer level whether an update is needed. If not we skip all
+        # channels.
+        if not (info.outbound_changed or info.inbound_changed):
+            logging.debug(f"no policy update for {pub_key} needed.")
+            continue
+
+        # Looping over all channels with this peer now.
         for chan_point, r in update.items():
             p = r.channel.policy_local
             if not p:
                 continue
 
-            fee_rate = r.fee_rate_ppm or p.fee_rate_ppm
-            inbound_fee_rate = r.inbound_fee_rate_ppm or p.inbound_fee_rate_ppm
+            final = _create_update_policy(p, r, info)
 
             # common part of log message
             msg = (
-                f"for chan_point: {chan_point}; fee_rate_ppm: {fee_rate}; "
-                f"inbound_fee_rate_ppm: {inbound_fee_rate}"
+                f"for chan_point: {chan_point}; fee_rate_ppm: {final.fee_rate_ppm}; "
+                f"inbound_fee_rate_ppm: {final.inbound_fee_rate_ppm}"
             )
 
             try:
                 ln.update_channel_policy(
                     chan_point,
-                    fee_rate,
-                    p.base_fee_msat,
-                    p.time_lock_delta,
-                    inbound_fee_rate,
-                    p.inbound_base_fee_msat,
+                    final.fee_rate_ppm,
+                    final.base_fee_msat,
+                    final.time_lock_delta,
+                    final.inbound_fee_rate_ppm,
+                    final.inbound_base_fee_msat,
                 )
 
                 logging.info(f"policy update successful {msg}")
             except Exception as e:
+                # RpcErrors are absorbed here too.
                 logging.error(f"policy update failed {msg}; error {e}")
 
     return None

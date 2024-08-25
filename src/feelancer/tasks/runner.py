@@ -127,7 +127,7 @@ class TaskRunner:
 
         """
         Now we have to send the results to the lightning backend and store the
-        results to database. There is the minimal risk that one of them is down
+        results to database. There is the minimal risk that one of both is down
         now.
         We want to store the channel policies at the end of the run too. That's
         the reason we do it at first.
