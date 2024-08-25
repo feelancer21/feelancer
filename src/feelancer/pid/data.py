@@ -66,20 +66,43 @@ class MrControllerParams:
     control_variable: float = 0
 
 
-def _query_pid_run(
-    pub_key: str | None = None, order_by_run_id_desc: bool = False
-) -> Query[DBPidRun]:
-    qry = Query(DBPidRun).join(DBPidRun.ln_node)
+def _convert_mr_controller(
+    mr_controller: DBPidMrController,
+) -> MrControllerParams:
+    return MrControllerParams(
+        k_m=mr_controller.k_m,
+        alpha=mr_controller.alpha,
+        control_variable=mr_controller.control_variable,
+    )
 
-    if pub_key:
-        qry = qry.filter(DBLnNode.pub_key == pub_key)
 
-    qry = qry.options(joinedload(DBPidRun.run))
+def _convert_ewma_controller(
+    ewma_controller: DBPidEwmaController,
+) -> EwmaControllerParams:
+    return EwmaControllerParams(
+        alpha_i=ewma_controller.alpha_i,
+        alpha_d=ewma_controller.alpha_d,
+        k_t=ewma_controller.k_t,
+        k_p=ewma_controller.k_p,
+        k_i=ewma_controller.k_i,
+        k_d=ewma_controller.k_d,
+        error=ewma_controller.error,
+        error_ewma=ewma_controller.error_ewma,
+        error_delta_residual=ewma_controller.error_delta_residual,
+        control_variable=ewma_controller.control_variable,
+    )
 
-    if order_by_run_id_desc:
-        qry = qry.order_by(DBPidRun.run_id.desc())
 
-    return qry
+def _convert_spread_controller(
+    pid_spread_controller: DBPidSpreadController,
+) -> EwmaControllerParams:
+    return _convert_ewma_controller(pid_spread_controller.ewma_controller)
+
+
+def _convert_margin_controller(
+    margin_controller: DBPidMarginController,
+) -> MrControllerParams:
+    return _convert_mr_controller(margin_controller.mr_controller)
 
 
 def new_pid_run(run: DBRun, ln_node: DBLnNode) -> DBPidRun:
@@ -123,23 +146,6 @@ def _new_ewma_controller(ewma_controller: EwmaController) -> DBPidEwmaController
     )
 
 
-def _convert_ewma_controller(
-    ewma_controller: DBPidEwmaController,
-) -> EwmaControllerParams:
-    return EwmaControllerParams(
-        alpha_i=ewma_controller.alpha_i,
-        alpha_d=ewma_controller.alpha_d,
-        k_t=ewma_controller.k_t,
-        k_p=ewma_controller.k_p,
-        k_i=ewma_controller.k_i,
-        k_d=ewma_controller.k_d,
-        error=ewma_controller.error,
-        error_ewma=ewma_controller.error_ewma,
-        error_delta_residual=ewma_controller.error_delta_residual,
-        control_variable=ewma_controller.control_variable,
-    )
-
-
 def _new_mr_controller(mr_controller: MrController) -> DBPidMrController:
     mr_params = mr_controller.mr_params
     return DBPidMrController(
@@ -149,22 +155,6 @@ def _new_mr_controller(mr_controller: MrController) -> DBPidMrController:
         gain=mr_controller.gain,
         control_variable=mr_controller.control_variable,
     )
-
-
-def _convert_mr_controller(
-    mr_controller: DBPidMrController,
-) -> MrControllerParams:
-    return MrControllerParams(
-        k_m=mr_controller.k_m,
-        alpha=mr_controller.alpha,
-        control_variable=mr_controller.control_variable,
-    )
-
-
-def _convert_spread_controller(
-    pid_spread_controller: DBPidSpreadController,
-) -> EwmaControllerParams:
-    return _convert_ewma_controller(pid_spread_controller.ewma_controller)
 
 
 def new_spread_controller(
@@ -180,12 +170,6 @@ def new_spread_controller(
     )
 
 
-def _convert_margin_controller(
-    margin_controller: DBPidMarginController,
-) -> MrControllerParams:
-    return _convert_mr_controller(margin_controller.mr_controller)
-
-
 def new_margin_controller(
     pid_run: DBPidRun, margin_controller: MarginController
 ) -> DBPidMarginController:
@@ -195,7 +179,7 @@ def new_margin_controller(
     )
 
 
-def _query_margin_controller(
+def query_margin_controller(
     local_pub_key: str | None = None,
     run_id: int | None = None,
     order_by_run_id_asc: bool = False,
@@ -224,7 +208,23 @@ def _query_margin_controller(
     return qry
 
 
-def _query_spread_controller(
+def query_pid_run(
+    pub_key: str | None = None, order_by_run_id_desc: bool = False
+) -> Query[DBPidRun]:
+    qry = Query(DBPidRun).join(DBPidRun.ln_node)
+
+    if pub_key:
+        qry = qry.filter(DBLnNode.pub_key == pub_key)
+
+    qry = qry.options(joinedload(DBPidRun.run))
+
+    if order_by_run_id_desc:
+        qry = qry.order_by(DBPidRun.run_id.desc())
+
+    return qry
+
+
+def query_spread_controller(
     local_pub_key: str | None = None,
     peer_pub_key: str | None = None,
     run_id: int | None = None,
@@ -423,7 +423,7 @@ class PidStore:
         timestamps.
         """
 
-        qry = _query_margin_controller(local_pub_key=self.pubkey_local)
+        qry = query_margin_controller(local_pub_key=self.pubkey_local)
 
         def convert(c: DBPidMarginController) -> tuple[datetime, MrControllerParams]:
             return (
@@ -441,7 +441,7 @@ class PidStore:
         the delta time.
         """
 
-        qry = _query_spread_controller(
+        qry = query_spread_controller(
             local_pub_key=self.pubkey_local,
             peer_pub_key=peer_pub_key,
             order_by_run_id_asc=True,
@@ -466,7 +466,7 @@ class PidStore:
         if not run_id:
             return None
 
-        qry = _query_margin_controller(run_id=run_id, order_by_run_id_asc=True)
+        qry = query_margin_controller(run_id=run_id, order_by_run_id_asc=True)
 
         return self.db.query_first(qry, _convert_margin_controller)
 
@@ -481,7 +481,7 @@ class PidStore:
         if not run_id:
             return {}
 
-        qry = _query_spread_controller(run_id=run_id)
+        qry = query_spread_controller(run_id=run_id)
 
         def pub_key(c: DBPidSpreadController) -> str:
             return c.peer.pub_key
@@ -490,7 +490,7 @@ class PidStore:
 
     def last_pid_run(self) -> tuple[int, datetime] | tuple[None, None]:
 
-        qry = _query_pid_run(pub_key=self.pubkey_local, order_by_run_id_desc=True)
+        qry = query_pid_run(pub_key=self.pubkey_local, order_by_run_id_desc=True)
 
         def convert(r: DBPidRun) -> tuple[int, datetime]:
             return r.run_id, r.run.timestamp_start
@@ -505,7 +505,7 @@ class PidStore:
         for a given peer and its execution time.
         """
 
-        qry = _query_spread_controller(
+        qry = query_spread_controller(
             local_pub_key=self.pubkey_local,
             peer_pub_key=peer_pub_key,
             order_by_run_id_desc=True,

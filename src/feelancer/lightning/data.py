@@ -98,15 +98,15 @@ def _new_ln_node(pub_key: str) -> DBLnNode:
     return DBLnNode(pub_key=pub_key)
 
 
-def _query_node(pub_key: str) -> Query[DBLnNode]:
+def query_node(pub_key: str) -> Query[DBLnNode]:
     return Query(DBLnNode).filter_by(pub_key=pub_key)
 
 
-def _query_channel_peers() -> Query[DBLnChannelPeer]:
+def query_channel_peers() -> Query[DBLnChannelPeer]:
     return Query(DBLnChannelPeer)
 
 
-def _query_channel_static(node_id: int) -> Query[DBLnChannelStatic]:
+def query_channel_static(node_id: int) -> Query[DBLnChannelStatic]:
     qry = (
         Query(DBLnChannelStatic)
         .options(joinedload(DBLnChannelStatic.peer))
@@ -115,7 +115,7 @@ def _query_channel_static(node_id: int) -> Query[DBLnChannelStatic]:
     return qry
 
 
-def _query_local_policies(
+def query_local_policies(
     run_id: int | None = None, sequence_id: int | None = None
 ) -> Query[DBLnChannelPolicy]:
     """
@@ -150,7 +150,7 @@ class LightningStore:
 
     def local_policies(self, run_id: int, sequence_id: int) -> dict[int, ChannelPolicy]:
 
-        qry = _query_local_policies(run_id=run_id, sequence_id=sequence_id)
+        qry = query_local_policies(run_id=run_id, sequence_id=sequence_id)
 
         def key(p: DBLnChannelPolicy) -> int:
             return p.static.chan_id
@@ -189,7 +189,7 @@ class LightningSessionCache:
         into a dict with pub_key as key.
         """
         self._channel_peer = self.exec.query_all_to_dict(
-            _query_channel_peers(), lambda c: c.pub_key, lambda c: c
+            query_channel_peers(), lambda c: c.pub_key, lambda c: c
         )
 
         for channel in self.ln.channels.values():
@@ -211,7 +211,7 @@ class LightningSessionCache:
         """
         self._channel_static = {}
         if self.ln_node.id:
-            qry = _query_channel_static(self.ln_node.id)
+            qry = query_channel_static(self.ln_node.id)
 
             # We transform the result to a dict with (node_id, chan_id) as key.
             self._channel_static = self.exec.query_all_to_dict(
@@ -283,7 +283,7 @@ class LightningSessionCache:
         pub_key = self.ln.pubkey_local
 
         return self.exec.query_first(
-            _query_node(pub_key), lambda c: c, _new_ln_node(pub_key)
+            query_node(pub_key), lambda c: c, _new_ln_node(pub_key)
         )
 
     def _create_chan_idx(self, channel: Channel) -> ChannelIDX:
