@@ -175,7 +175,6 @@ def update_channel_policies(
     with the config we update all channels with this peer.
     """
     for pub_key, info in info_dict.items():
-        logging.debug(f"{pub_key}, {info}")
         peer_config = config.peer_config(pub_key)
         if (dt := timenow.timestamp() - info.max_last_update) < peer_config.min_seconds:
             logging.debug(

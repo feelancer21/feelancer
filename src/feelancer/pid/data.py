@@ -8,7 +8,8 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, TypeVar
 
-from sqlalchemy.orm import Query, joinedload
+from sqlalchemy import select
+from sqlalchemy.orm import joinedload
 
 from feelancer.utils import GenericConf, defaults_from_type, get_peers_config
 
@@ -28,6 +29,8 @@ from .models import (
 
 if TYPE_CHECKING:
     from datetime import datetime
+
+    from sqlalchemy import Select
 
     from feelancer.data.db import FeelancerDB
 
@@ -184,22 +187,22 @@ def query_margin_controller(
     local_pub_key: str | None = None,
     run_id: int | None = None,
     order_by_run_id_asc: bool = False,
-) -> Query[DBPidMarginController]:
+) -> Select[tuple[DBPidMarginController]]:
     """
     Returns a query of DBPidMarginController and its associated objects.
     """
 
     qry = (
-        Query(DBPidMarginController)
+        select(DBPidMarginController)
         .join(DBPidMarginController.pid_run)
         .join(DBPidRun.ln_node)
     )
 
     if local_pub_key:
-        qry = qry.filter(DBLnNode.pub_key == local_pub_key)
+        qry = qry.where(DBLnNode.pub_key == local_pub_key)
 
     if run_id:
-        qry = qry.filter(DBPidMarginController.run_id == run_id)
+        qry = qry.where(DBPidMarginController.run_id == run_id)
 
     qry = qry.options(joinedload(DBPidMarginController.mr_controller))
 
@@ -209,13 +212,31 @@ def query_margin_controller(
     return qry
 
 
+# def query_pid_run(
+#     pub_key: str | None = None, order_by_run_id_desc: bool = False
+# ) -> Select[tuple[DBPidRun]:
+#     qry = Query(DBPidRun).join(DBPidRun.ln_node)
+
+#     if pub_key:
+#         qry = qry.where(DBLnNode.pub_key == pub_key)
+
+#     qry = qry.options(joinedload(DBPidRun.run))
+
+#     if order_by_run_id_desc:
+#         qry = qry.order_by(DBPidRun.run_id.desc())
+
+#     return qry
+
+
 def query_pid_run(
     pub_key: str | None = None, order_by_run_id_desc: bool = False
-) -> Query[DBPidRun]:
-    qry = Query(DBPidRun).join(DBPidRun.ln_node)
+) -> Select[tuple[DBPidRun]]:
+    qry = select(DBPidRun)
+
+    qry = qry.join(DBPidRun.ln_node)
 
     if pub_key:
-        qry = qry.filter(DBLnNode.pub_key == pub_key)
+        qry = qry.where(DBLnNode.pub_key == pub_key)
 
     qry = qry.options(joinedload(DBPidRun.run))
 
@@ -231,25 +252,25 @@ def query_spread_controller(
     run_id: int | None = None,
     order_by_run_id_asc: bool = False,
     order_by_run_id_desc: bool = False,
-) -> Query[DBPidSpreadController]:
+) -> Select[tuple[DBPidSpreadController]]:
     """
     Returns a query of DBSpreadController and its associated objects.
     """
 
-    qry: Query[DBPidSpreadController] = (
-        Query(DBPidSpreadController)
+    qry = (
+        select(DBPidSpreadController)
         .join(DBPidSpreadController.peer)
         .join(DBPidSpreadController.pid_run)
         .join(DBPidRun.ln_node)
     )
     if local_pub_key:
-        qry = qry.filter(DBLnNode.pub_key == local_pub_key)
+        qry = qry.where(DBLnNode.pub_key == local_pub_key)
 
     if peer_pub_key:
-        qry = qry.filter(DBLnChannelPeer.pub_key == peer_pub_key)
+        qry = qry.where(DBLnChannelPeer.pub_key == peer_pub_key)
 
     if run_id:
-        qry = qry.filter(DBPidSpreadController.run_id == run_id)
+        qry = qry.where(DBPidSpreadController.run_id == run_id)
 
     qry = qry.options(
         joinedload(DBPidSpreadController.ewma_controller),

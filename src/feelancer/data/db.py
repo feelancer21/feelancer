@@ -15,7 +15,7 @@ MAX_EXECUTIONS = 5
 DELAY = 5
 
 if TYPE_CHECKING:
-    from sqlalchemy.orm import Query
+    from sqlalchemy import Select
 
 
 class FeelancerDB:
@@ -97,7 +97,9 @@ class FeelancerDB:
 
         raise ex
 
-    def query_all_to_list(self, qry: Query[T], convert: Callable[[T], V]) -> list[V]:
+    def query_all_to_list(
+        self, qry: Select[tuple[T]], convert: Callable[[T], V]
+    ) -> list[V]:
         """
         Executes the qry Query. Each element of the result is converted by the
         provided function 'convert' and stored in a list afterwards.
@@ -114,7 +116,7 @@ class FeelancerDB:
         return self._execute(get_data, to_list)
 
     def query_all_to_dict(
-        self, qry: Query[T], key: Callable[[T], V], value: Callable[[T], W]
+        self, qry: Select[tuple[T]], key: Callable[[T], V], value: Callable[[T], W]
     ) -> dict[V, W]:
         """
         Executes the qry Query. Each element of the result is stored in a dict.
@@ -132,7 +134,7 @@ class FeelancerDB:
         return self._execute(get_data, to_dict)
 
     def query_first(
-        self, qry: Query[T], convert: Callable[[T], V], default: W = None
+        self, qry: Select[tuple[T]], convert: Callable[[T], V], default: W = None
     ) -> V | W:
         """
         Returns the conversion with the callback of the first element of the query.
@@ -161,7 +163,9 @@ class SessionExecutor:
     def __init__(self, session: Session) -> None:
         self.session = session
 
-    def query_all_to_list(self, qry: Query[T], convert: Callable[[T], V]) -> list[V]:
+    def query_all_to_list(
+        self, qry: Select[tuple[T]], convert: Callable[[T], V]
+    ) -> list[V]:
         """
         Executes the query in this session. Returns a list with the converted
         results.
@@ -170,7 +174,7 @@ class SessionExecutor:
         return [convert(r) for r in self.session.execute(qry).scalars().all()]
 
     def query_all_to_dict(
-        self, qry: Query[T], key: Callable[[T], V], value: Callable[[T], W]
+        self, qry: Select[tuple[T]], key: Callable[[T], V], value: Callable[[T], W]
     ) -> dict[V, W]:
         """
         Executes the query in this session. Returns a dict with the converted
@@ -179,7 +183,7 @@ class SessionExecutor:
         return {key(r): value(r) for r in self.session.execute(qry).scalars().all()}
 
     def query_first(
-        self, qry: Query[T], convert: Callable[[T], V], default: W = None
+        self, qry: Select[tuple[T]], convert: Callable[[T], V], default: W = None
     ) -> V | W:
         """
         Returns the conversion with the callback of the first element of the query.

@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy.orm import Query, Session, joinedload
+from sqlalchemy import select
+from sqlalchemy.orm import joinedload
 
 from feelancer.data.db import SessionExecutor
 from feelancer.lightning.client import ChannelPolicy, LightningClient
@@ -16,6 +17,9 @@ from feelancer.lightning.models import (
 )
 
 if TYPE_CHECKING:
+    from sqlalchemy import Select
+    from sqlalchemy.orm import Session
+
     from feelancer.data.db import FeelancerDB
     from feelancer.lightning.client import Channel
     from feelancer.tasks.models import DBRun
@@ -98,42 +102,42 @@ def _new_ln_node(pub_key: str) -> DBLnNode:
     return DBLnNode(pub_key=pub_key)
 
 
-def query_node(pub_key: str) -> Query[DBLnNode]:
-    return Query(DBLnNode).filter_by(pub_key=pub_key)
+def query_node(pub_key: str) -> Select[tuple[DBLnNode]]:
+    return select(DBLnNode).filter_by(pub_key=pub_key)
 
 
-def query_channel_peers() -> Query[DBLnChannelPeer]:
-    return Query(DBLnChannelPeer)
+def query_channel_peers() -> Select[tuple[DBLnChannelPeer]]:
+    return select(DBLnChannelPeer)
 
 
-def query_channel_static(node_id: int) -> Query[DBLnChannelStatic]:
+def query_channel_static(node_id: int) -> Select[tuple[DBLnChannelStatic]]:
     qry = (
-        Query(DBLnChannelStatic)
+        select(DBLnChannelStatic)
         .options(joinedload(DBLnChannelStatic.peer))
-        .filter(DBLnChannelStatic.ln_node_id == node_id)
+        .where(DBLnChannelStatic.ln_node_id == node_id)
     )
     return qry
 
 
 def query_local_policies(
     run_id: int | None = None, sequence_id: int | None = None
-) -> Query[DBLnChannelPolicy]:
+) -> Select[tuple[DBLnChannelPolicy]]:
     """
     Returns a for selecting the local policies out of DBLnChannelPolicy
     """
 
     qry = (
-        Query(DBLnChannelPolicy)
+        select(DBLnChannelPolicy)
         .options(joinedload(DBLnChannelPolicy.static, DBLnChannelStatic.peer))
         .join(DBLnChannelPolicy.ln_run)
-        .filter(DBLnChannelPolicy.local)
+        .where(DBLnChannelPolicy.local)
     )
 
     if run_id:
-        qry = qry.filter(DBLnChannelPolicy.run_id == run_id)
+        qry = qry.where(DBLnChannelPolicy.run_id == run_id)
 
     if sequence_id:
-        qry = qry.filter(DBLnChannelPolicy.sequence_id == sequence_id)
+        qry = qry.where(DBLnChannelPolicy.sequence_id == sequence_id)
 
     return qry
 
