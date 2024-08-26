@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import TYPE_CHECKING, Callable, Sequence, Type, TypeVar
+from typing import TYPE_CHECKING, Callable, Generator, Sequence, Type, TypeVar
 
 from sqlalchemy import URL, create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
@@ -16,6 +16,62 @@ DELAY = 5
 
 if TYPE_CHECKING:
     from sqlalchemy import Select
+
+
+def _fields_to_dict(result, relations: dict[str, dict]) -> dict:
+    """
+    Transforms all columns of a result to dictionary.
+    """
+
+    res = {}
+    res |= {col: getattr(result, col) for col in result.__table__.columns.keys()}
+
+    if len(relations) == 0:
+        return res
+
+    for rel_name in relations.keys():
+        res |= _fields_to_dict(getattr(result, rel_name), relations[rel_name])
+    return res
+
+
+def _explore_path(path: Sequence, rel_dict: dict[str, dict]) -> dict[str, dict]:
+    """Explores an option.path of a query recursively."""
+
+    if len(path) > 1:
+        step_name = str(path[1]).split(".")[1]
+        if not rel_dict.get(step_name):
+            rel_dict[step_name] = {}
+        rel_dict[step_name] |= _explore_path(path[2:], rel_dict[step_name])
+
+    return rel_dict
+
+
+def _create_dict_gen_call(
+    qry: Select[tuple[T]],
+) -> Callable[[Sequence], Generator[dict, None, None]]:
+    """
+    Given a query, this function returns a callable which generates dictionaries
+    resolving all fields including the joinedload data.
+    """
+
+    # First step is exploring the joined relationships in the query. Each
+    # relationship with loaded data gets a key in the dict relations.
+    # The value is a dict with its relations as value. If the value is an empty
+    # dict then there is nothing more to resolve.
+    # If it is not empty one can further to explore the next relations.
+    relations: dict[str, dict] = {}
+
+    # We are looping over all options. Each option.path is a Sequence and each
+    # second entry of this sequence is relationship we'd like to explore.
+    for o in qry._with_options:
+        path: Sequence = o.path  # type: ignore
+        relations |= _explore_path(path, relations)
+
+    def func(result: Sequence[T]) -> Generator[dict, None, None]:
+        for r in result:
+            yield _fields_to_dict(r, relations)
+
+    return func
 
 
 class FeelancerDB:
@@ -61,11 +117,11 @@ class FeelancerDB:
 
             with self.session() as session:
                 try:
-                    """
-                    We execute the pre_commit function in the session, check
-                    if a commit is needed and eventually we process the post_commit
-                    function on the result after the commit.
-                    """
+
+                    # We execute the pre_commit function in the session, check
+                    # if a commit is needed and eventually we process the
+                    # post_commit function on the result after the commit.
+
                     res = pre_commit(session)
 
                     if session.new or session.dirty or session.deleted:
@@ -101,7 +157,7 @@ class FeelancerDB:
         self, qry: Select[tuple[T]], convert: Callable[[T], V]
     ) -> list[V]:
         """
-        Executes the qry Query. Each element of the result is converted by the
+        Executes qry query. Each element of the result is converted by the
         provided function 'convert' and stored in a list afterwards.
         """
 
@@ -119,7 +175,7 @@ class FeelancerDB:
         self, qry: Select[tuple[T]], key: Callable[[T], V], value: Callable[[T], W]
     ) -> dict[V, W]:
         """
-        Executes the qry Query. Each element of the result is stored in a dict.
+        Executes the query. Each element of the result is stored in a dict.
         For deriving key and value the identical named callbacks are used.
         """
 
@@ -132,6 +188,20 @@ class FeelancerDB:
             return {key(r): value(r) for r in result}
 
         return self._execute(get_data, to_dict)
+
+    def qry_all_to_field_dict_gen(
+        self, qry: Select[tuple[T]]
+    ) -> Generator[dict, None, None]:
+        """
+        Executes the query and returns a generator of dictionaries. Each dict
+        contains all fields as key value pairs, including the joined load data.
+        """
+
+        # Callback which executes the query and returns the results as ORM objects
+        def get_data(session: Session) -> Sequence[T]:
+            return session.execute(qry).scalars().all()
+
+        return self._execute(get_data, _create_dict_gen_call(qry))
 
     def query_first(
         self, qry: Select[tuple[T]], convert: Callable[[T], V], default: W = None

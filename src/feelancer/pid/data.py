@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING, Generator, TypeVar
 
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
@@ -204,7 +204,10 @@ def query_margin_controller(
     if run_id:
         qry = qry.where(DBPidMarginController.run_id == run_id)
 
-    qry = qry.options(joinedload(DBPidMarginController.mr_controller))
+    qry = qry.options(
+        joinedload(DBPidMarginController.mr_controller),
+        joinedload(DBPidMarginController.pid_run).joinedload(DBPidRun.run),
+    )
 
     if order_by_run_id_asc:
         qry = qry.order_by(DBPidRun.run_id.asc())
@@ -259,6 +262,7 @@ def query_spread_controller(
     qry = qry.options(
         joinedload(DBPidSpreadController.ewma_controller),
         joinedload(DBPidSpreadController.peer),
+        joinedload(DBPidSpreadController.pid_run).joinedload(DBPidRun.run),
     )
 
     if order_by_run_id_asc:
@@ -512,3 +516,31 @@ class PidStore:
             return r.run_id, r.run.timestamp_start
 
         return self.db.query_first(qry, convert, (None, None))
+
+
+class PidDictGen:
+    """
+    Provides methods for selecting data from the database. The results are
+    generators of dictionaries.
+    """
+
+    def __init__(self, db: FeelancerDB) -> None:
+        self.db = db
+
+    def spread_controller(self) -> Generator[dict, None, None]:
+        """
+        Returns a Generator of for DBSpreadController and its joined data.
+        """
+
+        qry = query_spread_controller(order_by_run_id_asc=True)
+
+        return self.db.qry_all_to_field_dict_gen(qry)
+
+    def margin_controller(self) -> Generator[dict, None, None]:
+        """
+        Returns a Generator of for DBMarginController and its joined data.
+        """
+
+        qry = query_margin_controller(order_by_run_id_asc=True)
+
+        return self.db.qry_all_to_field_dict_gen(qry)
