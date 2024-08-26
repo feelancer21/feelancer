@@ -239,8 +239,9 @@ class EwmaController:
         self.control_variable += shift
 
 
-# A mean reversion controller
 class MrController:
+    """A mean reversion controller"""
+
     def __init__(
         self,
         k_m: float,

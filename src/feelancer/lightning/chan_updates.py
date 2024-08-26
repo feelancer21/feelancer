@@ -116,11 +116,10 @@ def update_channel_policies(
         chan_point = r.channel.chan_point
         c = config.peer_config(pub_key)
 
-        """
-        We check for outbound and inbound fee rate whether there is a min or max
-        in the config. Moreover we check whether the delta to the current value
-        is large enough
-        """
+        # We check for outbound and inbound fee rate whether there is a min or
+        # max in the config. Moreover we check whether the delta to the current
+        # value is large enough
+
         fee_rate = None
         fee_rate_changed = False
         if r.fee_rate_ppm:
@@ -147,11 +146,9 @@ def update_channel_policies(
                 c.inbound_fee_rate_ppm_min_down,
             )
 
-        """
-        If one of multiple channels with a peer needs a policy update, we want
-        to update all channels, to avoid different fee rates between them.
-        That's why we store all policy proposals in dict.
-        """
+        # If one of multiple channels with a peer needs a policy update, we want
+        # to update all channels, to avoid different fee rates between them.
+        # That's why we store all policy proposals in dict.
         if not prop_dict.get(pub_key):
             prop_dict[pub_key] = {}
 
@@ -170,10 +167,8 @@ def update_channel_policies(
         info.outbound_changed |= fee_rate_changed
         info.inbound_changed |= inbound_fee_rate_changed
 
-    """
-    Iterating over all peers with a max last update. If the time delta fits
-    with the config we update all channels with this peer.
-    """
+    # Iterating over all peers with a max last update. If the time delta fits
+    # with the config we update all channels with this peer.
     for pub_key, info in info_dict.items():
         peer_config = config.peer_config(pub_key)
         if (dt := timenow.timestamp() - info.max_last_update) < peer_config.min_seconds:

@@ -66,11 +66,9 @@ class ChannelCollection:
         self.channels[channel.chan_id] = channel
         self._pid_channels: list[Channel] | None = None
 
-        """
-        If there is one public we consider the whole collection as public,
-        because each channel can be used for routing as shadow channel.
-        Hence we want to take the liquidity in these channels into account.
-        """
+        # If there is one public we consider the whole collection as public,
+        # because each channel can be used for routing as shadow channel.
+        # Hence we want to take the liquidity in these channels into account.
         if not channel.private:
             self.private_only = False
 
@@ -302,14 +300,13 @@ class ChannelAggregator:
     @property
     def target_default(self) -> float:
         """
-        Calculates the default target for the aggregator.
-        """
+        Calculates the default target for the aggregator with the following
+        methodology.
 
-        """
-        Summed over all channels the following equation has to hold:
-        
+        Wit a sum over all channels, the following equation has to hold:
+
         sum[(liquidity_out + liquidity_in) * target] == sum[liquidity_in].
-        
+
         For some channels we already have targets provided by the config. For
         the residual channels we calculate a default target that satisfies
         the equation.

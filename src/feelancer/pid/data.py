@@ -348,19 +348,14 @@ class PidConfig:
             PidMarginControllerConfig, conf_copy.get("margin")
         )
 
-        """
-        For clear config handling, the ewma controller parameters can be given
-        names. This assumes that named_ewma is a dictionary. 
-        """
+        # For clear config handling, the ewma controller parameters can be given
+        # names. This assumes that named_ewma is a dictionary.
         named_ewma: dict | None = conf_copy.get("named_ewma")
         if named_ewma and not isinstance(named_ewma, dict):
             raise ValueError("'named_ewma' is not a valid dictionary!")
 
-        """
-        get_ewma_controller performs a lookup into named_ewma if a str is provided
-        as parameter. 
-        """
-
+        # get_ewma_controller performs a lookup into named_ewma if a str is
+        # provided as parameter.
         def get_ewma_controller(params: str | dict) -> EwmaControllerParams:
             ewma_params = None
             if isinstance(params, str) and named_ewma:

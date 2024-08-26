@@ -108,7 +108,8 @@ def _get_chan_point(chan_point: str) -> ln.ChannelPoint:
 class LndGrpc(SecureGrpc):
     @property
     def _ln_stub(self) -> lnrpc.LightningStub:
-        """Create a ln_stub dynamically to ensure channel freshness
+        """
+        Create a ln_stub dynamically to ensure channel freshness
 
         If we make a call to the Lightning RPC service when the wallet
         is locked or the server is down we will get back an RpcError with

@@ -69,10 +69,8 @@ class LNDClient:
         for channel in self.lnd.list_channels().channels:
             liq_pending_out, liq_pending_in = _liquidity_pending(channel)
 
-            """
-            Remark: Calling get_node_info once would be faster. But then we still
-            need get_chan_info for private channels.
-            """
+            # Remark: Calling get_node_info once would be faster. But then we
+            # still need get_chan_info for private channels.
             p_local, p_remote = self.get_channel_policies(channel.chan_id)
 
             res[channel.chan_id] = Channel(
@@ -99,6 +97,7 @@ class LNDClient:
         Returns a tuple consisting of the local and remote ChannelPolicy for
         a given chan_id.
         """
+
         edge = self.lnd.get_chan_info(chan_id)
         return _policies_per_side(edge, self.pubkey_local)
 
@@ -107,6 +106,7 @@ class LNDClient:
         """
         Returns the pubkey of the node behind this client.
         """
+
         return self._pubkey_local
 
     def update_channel_policy(

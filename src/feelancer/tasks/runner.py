@@ -47,20 +47,16 @@ class TaskRunner:
 
         self.pid_controller: PidController | None = None
 
-        """
-        Setting up a scheduler which call self._run in an interval of self.seconds.
-        """
+        # Setting up a scheduler which call self._run in an interval of
+        # self.seconds.
         config = FeelancerConfig(self.config_dict)
         self.seconds = config.seconds
 
         scheduler = BlockingScheduler()
         logging.info(f"Running pid every {self.seconds}s")
 
-        """
-        Starts the run and resets objects in the case of an unexpected error,
-        e.g. db loss.
-        """
-
+        # Starts the run and resets objects in the case of an unexpected error,
+        # e.g. db loss.
         def run_wrapper() -> None:
             try:
                 return self._run()
@@ -70,11 +66,8 @@ class TaskRunner:
 
         self.job = scheduler.add_job(run_wrapper, IntervalTrigger(seconds=self.seconds))
 
-        """
-        shutdown_schedule is a callback function which is called when SIGTERM or
-        SIGINT signal is received. It shut down the scheduler. 
-        """
-
+        # shutdown_schedule is a callback function which is called when SIGTERM or
+        # SIGINT signal is received. It shut down the scheduler.
         def shutdown_scheduler(signum, frame):
             logging.info("Shutdown signal received. Shutting down the scheduler...")
             scheduler.shutdown(wait=True)
@@ -125,13 +118,11 @@ class TaskRunner:
 
         timestamp_end = datetime.now(pytz.utc)
 
-        """
-        Now we have to send the results to the lightning backend and store the
-        results to database. There is the minimal risk that one of both is down
-        now.
-        We want to store the channel policies at the end of the run too. That's
-        the reason we do it at first.
-        """
+        # Now we have to send the results to the lightning backend and store the
+        # results to database. There is the minimal risk that one of both is down
+        # now.
+        # We want to store the channel policies at the end of the run too. That's
+        # the reason we do it at first.
         try:
             update_channel_policies(
                 self.lnclient, policy_updates, config, timestamp_end
@@ -140,10 +131,8 @@ class TaskRunner:
             # We log the exception but don't raise it.
             logging.exception("Unexpected error during policy updates occurred")
 
-        """
-        Storing the relevant data in the database by calling the store_funcs
-        with the cached data. We can return early if there is nothing to store.
-        """
+        # Storing the relevant data in the database by calling the store_funcs
+        # with the cached data. We can return early if there is nothing to store.
         if len(store_funcs) == 0:
             return None
 
@@ -171,9 +160,7 @@ class TaskRunner:
             f"{timestamp_start}; end {timestamp_end}; runtime {run_time}."
         )
 
-        """
-        If config.seconds had changed we modify the trigger of the job.
-        """
+        # If config.seconds had changed we modify the trigger of the job.
         if config.seconds != self.seconds:
             self.seconds = config.seconds
             logging.info(f"Interval changed; running pid every {self.seconds}s now")
