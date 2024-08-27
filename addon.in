@@ -1,5 +1,7 @@
 # Additional to feelancer requirements
 streamlit
+streamlit-code-editor
 pandas
 numpy
 scipy
+polars

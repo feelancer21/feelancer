@@ -68,6 +68,8 @@ pandas==2.2.2
     #   streamlit
 pillow==10.4.0
     # via streamlit
+polars==1.5.0
+    # via -r addon.in
 protobuf==5.27.3
     # via
     #   grpcio-tools
@@ -109,6 +111,10 @@ smmap==5.0.1
 sqlalchemy==2.0.32
     # via -r base.in
 streamlit==1.37.1
+    # via
+    #   -r addon.in
+    #   streamlit-code-editor
+streamlit-code-editor==0.1.21
     # via -r addon.in
 tenacity==8.5.0
     # via streamlit
