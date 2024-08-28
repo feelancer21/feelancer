@@ -15,7 +15,6 @@ pages: dict[str, Callable] = {
 
 # Sidebar for navigation
 with st.sidebar:
-    st.button("Clear Cache", on_click=st.cache_data.clear)
     st.title("Navigation")
     selection = str(st.selectbox("Select a page", list(pages.keys())))
 

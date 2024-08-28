@@ -30,19 +30,31 @@ def get_pid_dict_generator() -> PidDictGen:
     return PidDictGen(get_db())
 
 
-@st.cache_data
-def get_df_spread_controller() -> pl.DataFrame:
-    generator = get_pid_dict_generator()
-    return pl.DataFrame(generator.spread_controller())
+def load_dataframes() -> None:
+    g = get_pid_dict_generator()
+    # When running the first time, session state is set.
+    if "spread_controller" not in st.session_state:
+        st.session_state.spread_controller = None
+    if "margin_controller" not in st.session_state:
+        st.session_state.margin_controller = None
+
+    if st.session_state.spread_controller is None:
+        st.session_state.spread_controller = pl.DataFrame(g.spread_controller())
+
+    if st.session_state.margin_controller is None:
+        st.session_state.margin_controller = pl.DataFrame(g.margin_controller())
 
 
-@st.cache_data
-def get_df_margin_controller() -> pl.DataFrame:
-    generator = get_pid_dict_generator()
-    return pl.DataFrame(generator.margin_controller())
+def reload_dataframes() -> None:
+    st.session_state.spread_controller = None
+    st.session_state.margin_controller = None
+    load_dataframes()
 
 
 def page():
+    load_dataframes()
+    with st.sidebar:
+        st.button("Reload Dataframes", on_click=reload_dataframes)
 
     btns = [
         {
@@ -71,8 +83,15 @@ def page():
     focus = False
     wrap = True
     ace_props = {"style": {"borderRadius": "0px 0px 8px 8px"}}
-    code1 = "select * from spread_controller"
-    code2 = "select * from margin_controller"
+
+    code1 = st.session_state.get("code1")
+    code2 = st.session_state.get("code2")
+
+    if not code1:
+        code1 = "select * from spread_controller"
+
+    if not code2:
+        code2 = "select * from margin_controller"
 
     with st.expander("", expanded=True):
         col1, _ = st.columns(2)
@@ -92,11 +111,11 @@ def page():
             )
 
         if res1["type"] == "submit":
-            code1 = res1["text"]
+            st.session_state.code1 = code1 = res1["text"]
 
             with pl.SQLContext(
-                margin_controller=get_df_margin_controller(),
-                spread_controller=get_df_spread_controller(),
+                margin_controller=st.session_state.margin_controller,
+                spread_controller=st.session_state.spread_controller,
                 eager=True,
             ) as ctx:
                 st.session_state.df_res1 = ctx.execute(code1)
@@ -122,11 +141,11 @@ def page():
             )
 
         if res2["type"] == "submit":
-            code2 = res2["text"]
+            st.session_state.code2 = code2 = res2["text"]
 
             with pl.SQLContext(
-                margin_controller=get_df_margin_controller(),
-                spread_controller=get_df_spread_controller(),
+                margin_controller=st.session_state.margin_controller,
+                spread_controller=st.session_state.spread_controller,
                 eager=True,
             ) as ctx:
                 st.session_state.df_res2 = ctx.execute(code2)
