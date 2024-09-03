@@ -419,10 +419,10 @@ class PidController:
             )
 
         # If the channels with a peer has been closed, we can remove the controller
-        # from the map.
-        for pub_key in self.spread_controller_map.keys():
-            if pub_key not in pub_keys_current:
-                del self.spread_controller_map[pub_key]
+        # from the map. Therefore wie create a new map with the current pub keys.
+        self.spread_controller_map = {
+            k: v for k, v in self.spread_controller_map.items() if k in pub_keys_current
+        }
 
         # Last step is the (optional) feature for a pinned peer. If a peer is
         # pinned, you can choice if you want to keep the fee rate or the spread
