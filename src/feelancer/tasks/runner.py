@@ -6,7 +6,8 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Callable
 
 import pytz
-from apscheduler.schedulers.blocking import BlockingScheduler
+from apscheduler.events import EVENT_JOB_EXECUTED
+from apscheduler.schedulers.blocking import BlockingScheduler, Event
 from apscheduler.triggers.interval import IntervalTrigger
 
 from feelancer.config import FeelancerConfig
@@ -33,17 +34,8 @@ class TaskRunner:
         self.config_dict = read_config_file(self.config_file)
         self.lnclient: LightningClient
 
-        if "lnd" in self.config_dict:
-            self.lnclient = LNDClient(LndGrpc.from_file(**self.config_dict["lnd"]))
-        else:
-            raise ValueError("'lnd' section is not included in config-file")
-
-        if "sqlalchemy" in self.config_dict:
-            self.db = FeelancerDB.from_config_dict(
-                self.config_dict["sqlalchemy"]["url"]
-            )
-        else:
-            raise ValueError("'sqlalchemy' section is not included in config-file")
+        self._set_lnclient()
+        self._set_database()
 
         self.pid_controller: PidController | None = None
 
@@ -51,33 +43,6 @@ class TaskRunner:
         # self.seconds.
         config = FeelancerConfig(self.config_dict)
         self.seconds = config.seconds
-
-        scheduler = BlockingScheduler()
-        logging.info(f"Running pid every {self.seconds}s")
-
-        # Starts the run and resets objects in the case of an unexpected error,
-        # e.g. db loss.
-        def run_wrapper() -> None:
-            try:
-                return self._run()
-            except Exception:
-                logging.exception("An unexpected error occurred")
-                self._reset()
-
-        self.job = scheduler.add_job(run_wrapper, IntervalTrigger(seconds=self.seconds))
-
-        # shutdown_schedule is a callback function which is called when SIGTERM or
-        # SIGINT signal is received. It shut down the scheduler.
-        def shutdown_scheduler(signum, frame):
-            logging.info("Shutdown signal received. Shutting down the scheduler...")
-            scheduler.shutdown(wait=True)
-            logging.info("Scheduler shutdown completed")
-
-        signal.signal(signal.SIGTERM, shutdown_scheduler)
-        signal.signal(signal.SIGINT, shutdown_scheduler)
-
-        logging.info("Scheduler starting...")
-        scheduler.start()
 
     def _update_config_dict(self) -> None:
         """
@@ -90,7 +55,7 @@ class TaskRunner:
         except Exception as e:
             logging.error("An error occurred during the update of the config: %s", e)
 
-    def _run(self) -> None:
+    def _run(self, timestamp_start: datetime) -> None:
         """
         Running all jobs associated with this task runner. At the moment only pid.
         """
@@ -101,7 +66,6 @@ class TaskRunner:
 
         ln = LightningCache(self.lnclient)
         config = FeelancerConfig(self.config_dict)
-        timestamp_start = datetime.now(pytz.utc)
 
         store_funcs: list[Callable[[LightningSessionCache], None]] = []
         policy_updates: list[PolicyProposal] = []
@@ -191,3 +155,66 @@ class TaskRunner:
 
         self.pid_controller = None
         logging.debug("Reset of internal objects completed.")
+
+    def _set_database(self) -> None:
+        """
+        Setting the lnclient with the data of the configuration.
+        """
+
+        if "sqlalchemy" in self.config_dict:
+            self.db = FeelancerDB.from_config_dict(
+                self.config_dict["sqlalchemy"]["url"]
+            )
+        else:
+            raise ValueError("'sqlalchemy' section is not included in config-file")
+
+    def _set_lnclient(self) -> None:
+        """
+        Setting the lnclient with the data of the configuration.
+        """
+
+        if "lnd" in self.config_dict:
+            self.lnclient = LNDClient(LndGrpc.from_file(**self.config_dict["lnd"]))
+        else:
+            raise ValueError("'lnd' section is not included in config-file")
+
+    def start(self) -> None:
+        """
+        Initializes a BlockingScheduler and starts it.
+        """
+
+        scheduler = BlockingScheduler()
+        logging.info(f"Running pid every {self.seconds}s")
+
+        # Starts the run and resets objects in the case of an unexpected error,
+        # e.g. db loss.
+        def run_wrapper(event: Event) -> None:
+            try:
+                return self._run(event.scheduled_run_time.astimezone(pytz.utc))  # type: ignore
+            except Exception:
+                logging.exception("An unexpected error occurred")
+                self._reset()
+
+        # We want to start the run with the scheduled_run_time, to avoid
+        # problems with broken delta_times.
+        # That's why we add a job which actually does nothing and is executed
+        # in an interval of self.seconds. After the job is executed the
+        # run_wrapper is called with the event. The run_wrapper starts the
+        # actual run.
+        self.job = scheduler.add_job(
+            lambda: None, IntervalTrigger(seconds=self.seconds)
+        )
+        scheduler.add_listener(run_wrapper, EVENT_JOB_EXECUTED)
+
+        # shutdown_schedule is a callback function which is called when SIGTERM or
+        # SIGINT signal is received. It shut down the scheduler.
+        def shutdown_scheduler(signum, frame):
+            logging.info("Shutdown signal received. Shutting down the scheduler...")
+            scheduler.shutdown(wait=True)
+            logging.info("Scheduler shutdown completed")
+
+        signal.signal(signal.SIGTERM, shutdown_scheduler)
+        signal.signal(signal.SIGINT, shutdown_scheduler)
+
+        logging.info("Scheduler starting...")
+        scheduler.start()

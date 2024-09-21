@@ -42,7 +42,8 @@ def app():
         set_logger(config.get("logging"))
         logging.info("Feelancer starting")
 
-        TaskRunner(config_file)
+        runner = TaskRunner(config_file)
+        runner.start()
 
     except Exception as e:
         logging.exception("An unexpected error occurred")
