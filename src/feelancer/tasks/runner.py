@@ -185,6 +185,10 @@ class TaskRunner:
         Initializes a BlockingScheduler and starts it.
         """
 
+        # Return early if scheduler is already started.
+        if self.scheduler.running:
+            return None
+
         logging.info(f"Starting runner and running pid every {self.seconds}s")
 
         # Starts the run and resets objects in the case of an unexpected error,
@@ -214,6 +218,10 @@ class TaskRunner:
         """
         Stops the BlockingScheduler
         """
+
+        # Return early if scheduler is not running.
+        if not self.scheduler.running:
+            return None
 
         logging.info("Shutting down the scheduler...")
         self.scheduler.shutdown(wait=True)

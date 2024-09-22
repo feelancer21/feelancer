@@ -9,10 +9,10 @@ black-check:
 	black . --check
 
 isort:
-	isort --skip grpc_generated --profile black src/ tests/
+	isort --skip grpc_generated --profile black src/ tests/ itests/
 
 isort-check:
-	isort --skip grpc_generated --profile black --check --diff src/ tests/
+	isort --skip grpc_generated --profile black --check --diff src/ tests/ itests/
 
 ruff:
 	ruff check . --fix --exclude grpc_generated
