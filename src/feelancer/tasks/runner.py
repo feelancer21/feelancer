@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import signal
 from datetime import datetime
 from typing import TYPE_CHECKING, Callable
 
@@ -41,16 +40,6 @@ class TaskRunner:
 
         # Init of a scheduler. Configuration will be done in the start function.
         self.scheduler = BlockingScheduler()
-
-        # stop_runner is a callback function which is called when SIGTERM or
-        # SIGINT signal is received. It shut down the runner.
-        def stop_runner(signum, frame):
-            logging.info("Shutdown signal received. Stopping the runner...")
-            self.stop()
-            logging.info("Runner shutdown completed")
-
-        signal.signal(signal.SIGTERM, stop_runner)
-        signal.signal(signal.SIGINT, stop_runner)
 
         # Setting up a scheduler which call self._run in an interval of
         # self.seconds.
@@ -228,4 +217,4 @@ class TaskRunner:
 
         logging.info("Shutting down the scheduler...")
         self.scheduler.shutdown(wait=True)
-        logging.info("Scheduler shutdown completed")
+        logging.info("Scheduler shutdown completed.")

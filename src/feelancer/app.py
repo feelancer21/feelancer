@@ -7,7 +7,7 @@ import sys
 from . import __version__
 from .log import set_logger
 from .tasks.runner import TaskRunner
-from .utils import read_config_file
+from .utils import SignalHandler, read_config_file
 
 
 def _get_args():
@@ -40,18 +40,24 @@ def app():
         config = read_config_file(config_file)
 
         set_logger(config.get("logging"))
-        logging.info("Feelancer starting")
+        logging.info("Feelancer starting...")
 
         runner = TaskRunner(config_file)
+
+        # sig_handlers executes callables when SIGTERM or SIGINT is received.
+        sig_handler = SignalHandler()
+
+        # Stopping the runner when signal is received.
+        sig_handler.add_handler(runner.stop)
 
         runner.start()
 
     except Exception as e:
-        logging.exception("An unexpected error occurred")
+        logging.exception("An unexpected error occurred.")
         raise e
 
     finally:
-        logging.info("Feelancer shutdown completed\n")
+        logging.info("Feelancer shutdown completed.\n")
 
 
 if __name__ == "__main__":

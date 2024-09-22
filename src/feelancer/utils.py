@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import logging
 import os
+import signal
 from copy import deepcopy
 from dataclasses import dataclass, fields
-from typing import Type, TypeVar
+from typing import Callable, Type, TypeVar
 
 import tomli
 
@@ -75,3 +77,31 @@ def read_config_file(file_name: str) -> dict:
         res = tomli.load(config_file)
 
     return res
+
+
+class SignalHandler:
+    """
+    SignalHandler collects callables which have to be executed if SIGTERM or
+    SIGINT is received to shutdown the application gracefully.
+    """
+
+    def __init__(self) -> None:
+        self.handlers: list[Callable[..., None]] = []
+
+        # Calling _call_handlers if one signal is received, which is wrapper
+        # around all callables.
+        signal.signal(signal.SIGTERM, self._call_handlers)
+        signal.signal(signal.SIGINT, self._call_handlers)
+
+    def add_handler(self, handler: Callable[..., None]) -> None:
+        """Adds a Callable for execution."""
+
+        self.handlers.append(handler)
+
+    def _call_handlers(self, signum, frame):
+        """Calls all added callables."""
+
+        logging.debug(f"Signal received; signum {signum}, frame {frame}.")
+        for h in self.handlers:
+            h()
+        logging.debug("All signal handlers called.")
