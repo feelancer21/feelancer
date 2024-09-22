@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import logging
+import threading
 from datetime import datetime
 from typing import TYPE_CHECKING, Callable
 
 import pytz
-from apscheduler.events import EVENT_JOB_EXECUTED
+from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_SCHEDULER_STARTED
 from apscheduler.schedulers.blocking import BlockingScheduler, Event
 from apscheduler.triggers.interval import IntervalTrigger
 
@@ -32,6 +33,11 @@ class TaskRunner:
         self.config_file = config_file
         self.config_dict = read_config_file(self.config_file)
         self.lnclient: LightningClient
+
+        # Lock to prevent a race between start() and stop(). The stop can only
+        # be executed when the scheduler is running. If the start of the
+        # scheduler hasn't finished, the runner cannot be stopped.
+        self.lock = threading.Lock()
 
         self._set_lnclient()
         self._set_database()
@@ -185,6 +191,8 @@ class TaskRunner:
         Initializes a BlockingScheduler and starts it.
         """
 
+        self.lock.acquire()
+
         # Return early if scheduler is already started.
         if self.scheduler.running:
             return None
@@ -211,6 +219,14 @@ class TaskRunner:
         )
         self.scheduler.add_listener(run_wrapper, EVENT_JOB_EXECUTED)
 
+        # We add a callable as listener to release the lock when the scheduler
+        # is started.
+        def scheduler_started(event) -> None:
+            self.lock.release()
+            logging.debug("Scheduler started and lock released.")
+
+        self.scheduler.add_listener(scheduler_started, EVENT_SCHEDULER_STARTED)
+
         logging.info("Scheduler starting...")
         self.scheduler.start()
 
@@ -219,10 +235,14 @@ class TaskRunner:
         Stops the BlockingScheduler
         """
 
+        self.lock.acquire()
+
         # Return early if scheduler is not running.
         if not self.scheduler.running:
             return None
 
         logging.info("Shutting down the scheduler...")
         self.scheduler.shutdown(wait=True)
+
+        self.lock.release()
         logging.info("Scheduler shutdown completed.")
