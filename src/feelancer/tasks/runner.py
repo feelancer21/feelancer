@@ -39,6 +39,19 @@ class TaskRunner:
 
         self.pid_controller: PidController | None = None
 
+        # Init of a scheduler. Configuration will be done in the start function.
+        self.scheduler = BlockingScheduler()
+
+        # stop_runner is a callback function which is called when SIGTERM or
+        # SIGINT signal is received. It shut down the runner.
+        def stop_runner(signum, frame):
+            logging.info("Shutdown signal received. Stopping the runner...")
+            self.stop()
+            logging.info("Runner shutdown completed")
+
+        signal.signal(signal.SIGTERM, stop_runner)
+        signal.signal(signal.SIGINT, stop_runner)
+
         # Setting up a scheduler which call self._run in an interval of
         # self.seconds.
         config = FeelancerConfig(self.config_dict)
@@ -183,8 +196,7 @@ class TaskRunner:
         Initializes a BlockingScheduler and starts it.
         """
 
-        scheduler = BlockingScheduler()
-        logging.info(f"Running pid every {self.seconds}s")
+        logging.info(f"Starting runner and running pid every {self.seconds}s")
 
         # Starts the run and resets objects in the case of an unexpected error,
         # e.g. db loss.
@@ -201,20 +213,19 @@ class TaskRunner:
         # in an interval of self.seconds. After the job is executed the
         # run_wrapper is called with the event. The run_wrapper starts the
         # actual run.
-        self.job = scheduler.add_job(
+        self.job = self.scheduler.add_job(
             lambda: None, IntervalTrigger(seconds=self.seconds)
         )
-        scheduler.add_listener(run_wrapper, EVENT_JOB_EXECUTED)
-
-        # shutdown_schedule is a callback function which is called when SIGTERM or
-        # SIGINT signal is received. It shut down the scheduler.
-        def shutdown_scheduler(signum, frame):
-            logging.info("Shutdown signal received. Shutting down the scheduler...")
-            scheduler.shutdown(wait=True)
-            logging.info("Scheduler shutdown completed")
-
-        signal.signal(signal.SIGTERM, shutdown_scheduler)
-        signal.signal(signal.SIGINT, shutdown_scheduler)
+        self.scheduler.add_listener(run_wrapper, EVENT_JOB_EXECUTED)
 
         logging.info("Scheduler starting...")
-        scheduler.start()
+        self.scheduler.start()
+
+    def stop(self) -> None:
+        """
+        Stops the BlockingScheduler
+        """
+
+        logging.info("Shutting down the scheduler...")
+        self.scheduler.shutdown(wait=True)
+        logging.info("Scheduler shutdown completed")

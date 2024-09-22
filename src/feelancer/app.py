@@ -43,6 +43,7 @@ def app():
         logging.info("Feelancer starting")
 
         runner = TaskRunner(config_file)
+
         runner.start()
 
     except Exception as e:
