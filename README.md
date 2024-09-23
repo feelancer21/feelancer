@@ -1,23 +1,25 @@
 # feelancer
 
-A fee adjustment tool using a PID Controller. Details about the algo are
-explained [here](docs/math.md)
+A fee adjustment tool using a PID Controller for liquidity spreads and a mean
+reversion controller for a margin. 
 
-**⚠️ Warning:** This project is still in development and has not been used by the
-creator on mainnet. Currently, it only stores the results in a database.
+**⚠️ Warning:** This project is still very early. Changes to the next version can
+be breaking in context of model, configuration and database scheme without providing
+migration scripts. [Documentation](docs/math.md) little outdated due to recent
+changes.
 
 ## Installation
 
 Install the requirements and the project with pip, e.g. in your virtualenv.
 ```
-pip install -r requirements.in .
+pip install -r requirements.txt .
 ```
 
 ## Getting Started
 
-Adjust the feelancer.toml for your needs. Especially choose a database in
-`sqlalchemy.url` section. An example of the configuration file can be found
-[here](docker_demo/app/feelancer.toml).
+Adjust the feelancer.toml for your needs. Especially config your database in
+`sqlalchemy.url` section. For productive use postgres is recommended. 
+An example of the configuration file can be found [here](docker_demo/app/feelancer.toml).
 
 
 ```
@@ -37,3 +39,11 @@ until now.
 be investigated whether all parameters are required. Perhaps a generally 
 different modeling approach is also preferable.
 - Maybe building more analytical tasks.
+
+## Developer hits
+
+For development you need to install
+
+```
+pip install -r dev-requirements.txt -e .
+```
