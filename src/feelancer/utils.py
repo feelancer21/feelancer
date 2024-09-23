@@ -3,8 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import signal
-import sys
-import time
+import threading
 from copy import deepcopy
 from dataclasses import dataclass, fields
 from typing import Callable, Type, TypeVar
@@ -89,7 +88,9 @@ class SignalHandler:
 
     def __init__(self) -> None:
         self.handlers: list[Callable[..., None]] = []
-        self._exit_on_signal: str | None = None
+
+        self.lock = threading.Lock()
+        self.exit_on_signal: Callable[..., None] | None = None
 
         # If one signal is received, self._call_handlers is called, which is a
         # wrapper around all callables.
@@ -101,30 +102,24 @@ class SignalHandler:
 
         self.handlers.append(handler)
 
-    def exit_on_signal(self, active: bool, message: str):
-        """
-        If active the process is exited immediately after all handlers
-        are called.
-        """
-
-        if not active:
-            self._exit_on_signal = None
-            return
-
-        self._exit_on_signal = message
-
     def _receive_signal(self, signum, frame) -> None:
         """Calls all added callables."""
 
         logging.debug(f"Signal received; signum {signum}, frame {frame}.")
+
         self.call_handlers()
         logging.debug("All signal handlers called.")
 
-        if self._exit_on_signal:
-            time.sleep(1)
-            logging.error(self._exit_on_signal)
-            sys.exit(255)
+        if self.exit_on_signal:
+            self.exit_on_signal()
 
     def call_handlers(self) -> None:
+
+        self.lock.acquire()
+
         for h in self.handlers:
             h()
+
+        # Reset handlers to avoid calling them again
+        self.handlers = []
+        self.lock.release()

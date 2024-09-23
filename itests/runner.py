@@ -1,9 +1,12 @@
 import logging
 import os
+import sys
 import tempfile
 import threading
 import time
+from datetime import datetime, timedelta
 
+import pytz
 import toml
 from lnqueue import LnQueueClient, LnQueues
 
@@ -73,7 +76,6 @@ class TestSetup:
         # Creating a signal handler which is used for premature exit, removing
         # the tmp file and stopping the runner later.
         self.sig_handler = SignalHandler()
-        self.sig_handler.exit_on_signal(True, "Feelancer itests aborted.\n")
         self.sig_handler.add_handler(remove_tmp)
 
         logging.debug(f"temporary config file is {self.tmp_file}")
@@ -85,7 +87,35 @@ class TestSetup:
         self.queues = LnQueues()
         self.runner = QueueRunner(self.tmp_file, pubkey_local, self.queues)
 
+    def cleanup(self) -> None:
+        self.sig_handler.call_handlers()
+
+    def stop_runner(self) -> None:
+        """
+        Stops the queue runner gracefully.
+        """
+
+        self.cleanup()
+        self.thread.join()
+        logging.debug("Queue runner stopped.")
+
+    def start_runner(self) -> None:
+        """
+        Starts the queue runner in a separated thread.
+        """
+
+        logging.debug("Starting queue runner...")
         self.sig_handler.add_handler(self.runner.stop)
+
+        def exit():
+            logging.debug("Queue runner aborted.")
+            sys.exit(255)
+
+        self.sig_handler.exit_on_signal = exit
+
+        self.thread = threading.Thread(target=self.runner.start)
+        self.thread.start()
+        logging.debug("Thread started.")
 
     def write_tmp_config(self) -> None:
         """Writes the config as toml format to the created tmp file."""
@@ -94,14 +124,8 @@ class TestSetup:
             toml.dump(self.config, file)
 
 
-if __name__ == "__main__":
-    """
-    Proof of Concept for playing around with the test clients. No real tests.
-    """
-
-    s = TestSetup("mynode")
-
-    s.queues.block_height.put(1_000_000)
+def _example_add_testdata(lnq: LnQueues) -> None:
+    lnq.block_height.put(1_000_000)
 
     local_policy = ChannelPolicy(
         fee_rate_ppm=1000,
@@ -128,17 +152,58 @@ if __name__ == "__main__":
         policy_local=local_policy,
         policy_remote=None,
     )
-    s.queues.channels.put({123: chan})
+    lnq.channels.put({123: chan})
 
-    runner_thread = threading.Thread(target=s.runner.start)
-    runner_thread.start()
-    logging.info("thread started")
-    time.sleep(45)
+
+def _example_run_threaded() -> None:
+    """
+    Remark: Just an example how to work with TestSetup in a separate thread. It
+    is not easy to use for runs which need the BlockingScheduler to be triggered,
+    because you need to fake the time. Tested around with faketimelib
+    ut it is quite difficult to ensure that the time is faked
+    everywhere. Hence I decided to take the Scheduler out of the itest and
+    to call TaskRunner._run directly without the Scheduler.
+    """
+    s = TestSetup("mynode")
+    s.start_runner()
+    try:
+
+        # Doing the actual stuff here
+        _example_add_testdata(s.queues)
+
+        # Sleep until the tests should have finished
+        time.sleep(25)
+
+        # Calling the handlers to stop the scheduler and remove the tmp file.
+        s.stop_runner()
+
+        # Waiting that all threads have finished.
+        logging.info("Feelancer itests successfully finished.\n")
+    except SystemExit:
+        s.thread.join()
+        logging.error("Itest aborted by an user signal.\n")
+
+
+def _example_run_pid_synchronous() -> None:
+    """
+    Proof of Concept for testing pid without using the scheduler
+    """
+    s = TestSetup("mynode")
+    _example_add_testdata(s.queues)
+
+    timestamp = datetime(2021, 1, 1, 0, 0, 0, tzinfo=pytz.utc)
+    dt = timedelta(minutes=15)
+
+    # Executing the runner three times.
+    s.runner._run(timestamp)
+
+    timestamp += dt
+    s.runner._run(timestamp)
+
+    timestamp += dt
+    s.runner._run(timestamp)
 
     # Calling the handlers to stop the scheduler and remove the tmp file.
-    s.sig_handler.call_handlers()
+    s.cleanup()
 
-    # Waiting that all threads have finished.
-    runner_thread.join()
-    logging.info("thread joined")
     logging.info("Feelancer itests successfully finished.\n")
