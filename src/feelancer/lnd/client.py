@@ -96,13 +96,12 @@ class SecureGrpc:
         )
 
 
-def _get_chan_point(chan_point: str) -> ln.ChannelPoint:
-    txid, out_index = chan_point.split(":")
+def set_chan_point(chan_point_str: str, chan_point: ln.ChannelPoint) -> None:
+    txid, out_index = chan_point_str.split(":")
     txid_reversed = bytearray(bytes.fromhex(txid))
     txid_reversed.reverse()
-    return ln.ChannelPoint(
-        funding_txid_bytes=bytes(txid_reversed), output_index=int(out_index)
-    )
+    chan_point.funding_txid_bytes = bytes(txid_reversed)
+    chan_point.output_index = int(out_index)
 
 
 class LndGrpc(SecureGrpc):
@@ -187,33 +186,32 @@ class LndGrpc(SecureGrpc):
         channel policies for all channels globally, or a particular channel.
         """
 
-        kwargs = {
-            "base_fee_msat": base_fee_msat,
-            "fee_rate_ppm": fee_rate_ppm,
-            "time_lock_delta": time_lock_delta,
-            "global": _global,
-        }
+        req = ln.PolicyUpdateRequest()
+        req.base_fee_msat = base_fee_msat
+        req.fee_rate_ppm = fee_rate_ppm
+        req.time_lock_delta = time_lock_delta
+        setattr(req, "global", _global)
+
         if max_htlc_msat:
-            kwargs["max_htlc_msat"] = max_htlc_msat
+            req.max_htlc_msat = max_htlc_msat
 
         if min_htlc_msat:
-            kwargs["min_htlc_msat"] = min_htlc_msat
-            kwargs["min_htlc_msat_specified"] = True
+            req.min_htlc_msat = min_htlc_msat
+            req.min_htlc_msat_specified = True
 
         if chan_point:
-            kwargs["chan_point"] = _get_chan_point(chan_point)
+            c = req.chan_point
+            set_chan_point(chan_point, c)
 
-        ikwargs = {}
-        if inbound_base_fee_msat:
-            ikwargs["base_fee_msat"] = inbound_base_fee_msat
+        if any([inbound_base_fee_msat, inbound_fee_rate_ppm]):
+            infee = req.inbound_fee
 
-        if inbound_fee_rate_ppm:
-            ikwargs["fee_rate_ppm"] = inbound_fee_rate_ppm
+            if inbound_base_fee_msat:
+                infee.base_fee_msat = inbound_base_fee_msat
 
-        if len(ikwargs) > 0:
-            kwargs["inbound_fee"] = ln.InboundFee(**ikwargs)
+            if inbound_fee_rate_ppm:
+                infee.fee_rate_ppm = inbound_fee_rate_ppm
 
-        req = ln.PolicyUpdateRequest(**kwargs)
         return self._ln_stub.UpdateChannelPolicy(req)
 
 
