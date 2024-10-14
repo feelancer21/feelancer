@@ -100,11 +100,12 @@ def test_ewma_1():
         EwmaCall(18000, -4 / 8, 0),
         EwmaCall(18000, -2 / 8, 0),
         EwmaCall(50400, -2 / 8, 0),
-        EwmaCall(532800, 0, 0),
+        EwmaCall(3600, 0, 0),
+        EwmaCall(529200, 0, 0),
     ]
 
     start = 1500
-    expected_cv = 1310.5042338877226
+    expected_cv = 1310.5153013107715
 
     # We call the controller and compare the result with an external calculated
     # value
