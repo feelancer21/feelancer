@@ -5,8 +5,8 @@ reversion controller for a margin.
 
 **⚠️ Warning:** This project is still very early. Changes to the next version can
 be breaking in context of model, configuration and database scheme without providing
-migration scripts. [Documentation](docs/math.md) little outdated due to recent
-changes.
+migration scripts. The mathematical background is described in
+[concept.pdf](docs/concept.pdf).
 
 ## Application Areas of the Tool and Disclaimer
 
