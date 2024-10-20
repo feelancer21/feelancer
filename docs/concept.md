@@ -22,7 +22,20 @@ Created by: feelancer21@github
       1. [P&L Explain for Forwards](#pl-explain-for-forwards)
       2. [P&L Explain for Rebalancing Cost](#pl-explain-for-rebalancing-costs)
    5. [Margin Spread Model with #bLIP19 Inbound Fees](#margin-spread-model-with-blip19-inbound-fees)
+4. [Modelling the Spread Rate with Exponential Moving Averages](#modelling-the-spread-rate-with-exponential-moving-averages)
+   1. [Basics](#basics)
+   2. [Modelling the Dynamic of the Spread Rate](#modelling-the-dynamic-of-the-spread-rate)
+      1. [Proportional Part](#proportional-part)
+      2. [Exponential Decay of a Function](#exponential-decay-of-a-function)
+      3. [Integral Part](#integral-part)
+      4. [Derivative Part](#derivative-part)
+   3. [Behavior after a Simple Impulse](#behavior-after-a-simple-impulse)
+   4. [Example for a Spread Rate Controller](#example-for-a-spread-rate-controller)
+      1. [Scaling the Example](#scaling-the-example)
+   5. [Spread Rate Controller as a Linear Time-Invariant System](#spread-rate-controller-as-a-linear-time-invariant-system)
+   6. [Outlook: Scenario-Based Model Calibration of the Parameters](#outlook-scenario-based-model-calibration-of-the-parameters)
 5. [Modelling the Margin Rate with a Mean Reverting Controller](#modelling-the-margin-rate-with-a-mean-reverting-controller)
+6. [Overall Model Design and Calibration](#overall-model-design-and-calibration)
 
 ## 1. Summary
 
@@ -673,7 +686,7 @@ inbound fees.
 
 ## 4. Modelling the Spread Rate with Exponential Moving Averages
 
-### Basics
+### 4.1. Basics
 
 The model for the spread rate is based on the idea of PID (Proportional-Integral-
 Derivative) controllers. PID controllers utilize a measured process variable, 
@@ -695,7 +708,7 @@ difference between the observed remote balance and the target is mapped to an
 error ($e$) in the range [-0.5, 0.5] using linear interpolation. When the remote 
 balance equals the target, $e$ is set to 0.
 
-### Modelling the Spread with a PID Controller
+### 4.2. Modelling the Dynamic of the Spread Rate
 
 Let $T$ be the current time, and $T_0$ represent the oldest observed historic 
 timestamp.
@@ -750,7 +763,7 @@ e(t)=\beta_1\cdot (t-T_{n-1}) + \beta_0,\ \beta_1=\frac{e(T_n)-e(T_{n-1})}
 {T_n-T_{n-1}},\ \beta_0=e(T_{n-1})
 $$
 
-#### Proportional Part
+#### 4.2.1. Proportional Part
 
 This part is relatively straightforward:
 
@@ -764,7 +777,7 @@ $$
 
 The outcome of the controller scales with the average error of the time period.
 
-#### Exponential Decay of a Function
+#### 4.2.2. Exponential Decay of a Function
 
 Before we go into the concrete definition of our integral and derivative part, 
 some general remarks about the decay of functions: given an integrable input 
@@ -798,7 +811,7 @@ d\tau + \exp(\alpha(T_{n-1}-t))\cdot W_{x,\alpha}(T_{n-1})
 \end{aligned}
 $$
 
-#### Integral Part
+#### 4.2.3. Integral Part
 
 For calculating the integral part, we apply our piecewise linear-defined error 
 function $e(t)$ to $W_x$ as $x(t)$.
@@ -839,7 +852,7 @@ $$
 This allows us to update the controller recursively with only the knowledge of 
 the value of $E_\alpha(T_{n-1})$.
 
-#### Derivative Part
+#### 4.2.4. Derivative Part
 
 For the derivative part, we are using the partial derivative $\frac{\partial e}
 {\partial\tau}$ for $x(t)$. Hence, we have to solve
@@ -869,7 +882,7 @@ $$
 
 This also allows us to update the controller recursively.
 
-### Behavior after a Simple Impulse
+### 4.3. Behavior after a Simple Impulse
 
 To show the dynamics of the spread controller, we want to investigate its long-
 term behavior after a simple impulse. At $T_0=0$, we set $s(T_0)=0$ and $e(T_0)=e_1$, 
@@ -937,7 +950,7 @@ Moreover, the total spread rate adjustment converges to $K_\infty = e_1\cdot(K_p
 K_i)$, and because the bounded error function, the spread rate adjustments are 
 bounded to values in $[-0.5\cdot(K_p+K_i), 0.5\cdot(K_p+K_i)]$.
 
-### Example for a Spread Rate Controller
+### 4.4. Example for a Spread Rate Controller
 
 We want to show how the spread rate controller evolves in the following scenario: 
 The funds in our channel are completely local and haven't moved for a longer time. 
@@ -982,7 +995,7 @@ to the controller on day 3. After day 3, there is almost no contribution anymore
 |----------------------------------------|------------------------------------------------------------|
 | ![](img/spread_rate_controller_der.png) | ![](img/spread_rate_controller_prop_int.png) |
 
-#### Scaling the Example
+#### 4.4.1. Scaling the Example
 
 Interestingly, we can construct other functions for spread adjustments using the 
 given parameters, where the curves have a similar shape. We want to have a 
@@ -1012,7 +1025,7 @@ should be possible to make the curve much smoother.
 
 ![Scaled Spread Rate Controller](img/spread_rate_controller_scaled.png)
 
-### Spread Rate Controller as a Linear Time-Invariant System
+### 4.5. Spread Rate Controller as a Linear Time-Invariant System
 
 Due to the structure of the convolution integral, my research leads me to 
 [linear time-invariant systems](https://en.wikipedia.org/wiki/Linear_time-invariant_system) (LTI). 
@@ -1031,7 +1044,7 @@ calibrates the parameters in a way that the spread rate change is suitable for
 one given change of the error function, then one has also determined the spread 
 rates for all other possible error functions.
 
-### Outlook: Scenario-Based Model Calibration of the Parameters
+### 4.6. Outlook: Scenario-Based Model Calibration of the Parameters
 
 Calibration is the process of finding the optimal parameters for the model. One 
 idea is to use a scenario-based calibration, i.e., the user or another algorithm 
@@ -1107,9 +1120,7 @@ $$
 A way to calibrate $K_m$ is explained in the next section.
 
 
-## 6. Outlook
-
-### 6.1. Overall Model Design and Calibration
+## 6. Overall Model Design and Calibration
 
 There are likely many possibilities to build an overall model with the 
 introduced building blocks. Here is one example the author of this paper will 
