@@ -4,12 +4,13 @@ import copy
 import logging
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING, Iterable
+from typing import TYPE_CHECKING, Callable, Iterable
 from feelancer.utils import first_some
+
 from .client import ChannelPolicy
 
 if TYPE_CHECKING:
-    from feelancer.config import FeelancerConfig
+    from feelancer.config import FeelancerPeersConfig
 
     from .client import Channel, LightningClient
 
@@ -93,7 +94,7 @@ def _create_update_policy(
 def update_channel_policies(
     ln: LightningClient,
     proposals: Iterable[PolicyProposal],
-    config: FeelancerConfig,
+    get_peer_config: Callable[[str], FeelancerPeersConfig],
     timenow: datetime,
 ) -> None:
     """
@@ -114,7 +115,7 @@ def update_channel_policies(
 
         pub_key = r.channel.pub_key
         chan_point = r.channel.chan_point
-        c = config.peer_config(pub_key)
+        c = get_peer_config(pub_key)
 
         # We check for outbound and inbound fee rate whether there is a min or
         # max in the config. Moreover we check whether the delta to the current
@@ -170,7 +171,7 @@ def update_channel_policies(
     # Iterating over all peers with a max last update. If the time delta fits
     # with the config we update all channels with this peer.
     for pub_key, info in info_dict.items():
-        peer_config = config.peer_config(pub_key)
+        peer_config = get_peer_config(pub_key)
         if (dt := timenow.timestamp() - info.max_last_update) < peer_config.min_seconds:
             logging.debug(
                 f"no policy updates for {pub_key}; last update was {dt}s ago "

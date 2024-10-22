@@ -119,7 +119,7 @@ class TaskRunner:
         # the reason we do it at first.
         try:
             update_channel_policies(
-                self.lnclient, policy_updates, config, timestamp_end
+                self.lnclient, policy_updates, config.peer_config, timestamp_end
             )
         except Exception:
             # We log the exception but don't raise it.
