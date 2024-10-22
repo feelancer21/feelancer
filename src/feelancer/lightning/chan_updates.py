@@ -18,7 +18,8 @@ if TYPE_CHECKING:
 @dataclass
 class PolicyProposal:
     """
-    A proposal for a policy update.
+    A proposal for a policy update. If an attribute is set to None, then no
+    update is processed.
     """
 
     channel: Channel
@@ -68,7 +69,7 @@ def _create_update_policy(
 ) -> ChannelPolicy:
     """
     Merges the information of the existing policy, the proposal and the update
-    info together and creates a final policy
+    info together and creates the policy with the data to update.
     """
 
     res = copy.copy(policy)
@@ -91,16 +92,13 @@ def _create_update_policy(
     return res
 
 
-def update_channel_policies(
-    ln: LightningClient,
+def _orders_proposals_by_peer(
     proposals: Iterable[PolicyProposal],
     get_peer_config: Callable[[str], FeelancerPeersConfig],
-    timenow: datetime,
-) -> None:
+) -> tuple[dict[str, dict[str, PolicyProposal]], dict[str, PolicyUpdateInfo]]:
     """
-    Checks if each policy proposal is aligned with update restrictions in the
-    config. In the second step the lightning backend is updated with the new
-    policies.
+    Orders the PolicyProposal's by pub_key and chan_point and creates the
+    aggregated PolicyUpdateInfo for each peer.
     """
 
     # dict pub_key -> chan_point -> PolicyProposal
@@ -159,6 +157,7 @@ def update_channel_policies(
             inbound_fee_rate_ppm=inbound_fee_rate,
         )
 
+        # Creates a new PolicyUpdateInfo for the peer if no exists.
         if not (info := info_dict.get(pub_key)):
             info = info_dict[pub_key] = PolicyUpdateInfo()
 
@@ -167,6 +166,24 @@ def update_channel_policies(
         info.max_last_update = max(info.max_last_update, policy.last_update)
         info.outbound_changed |= fee_rate_changed
         info.inbound_changed |= inbound_fee_rate_changed
+
+    return prop_dict, info_dict
+
+
+def _create_update_policies(
+    proposals: Iterable[PolicyProposal],
+    get_peer_config: Callable[[str], FeelancerPeersConfig],
+    timenow: datetime,
+) -> dict[str, ChannelPolicy]:
+    """
+    Creates a dict of ChannelPolicy's. Peers are skipped, when the last policy
+    update was too recent, or no update is needed because the inbound or outbound
+    fees haven't changed significantly.
+    """
+
+    final_policies: dict[str, ChannelPolicy] = {}
+
+    prop_dict, info_dict = _orders_proposals_by_peer(proposals, get_peer_config)
 
     # Iterating over all peers with a max last update. If the time delta fits
     # with the config we update all channels with this peer.
@@ -179,8 +196,8 @@ def update_channel_policies(
             )
             continue
 
-        update = prop_dict.get(pub_key)
-        if not update:
+        proposal = prop_dict.get(pub_key)
+        if not proposal:
             continue
 
         # Check on peer level whether an update is needed. If not we skip all
@@ -190,32 +207,51 @@ def update_channel_policies(
             continue
 
         # Looping over all channels with this peer now.
-        for chan_point, r in update.items():
+        for chan_point, r in proposal.items():
             p = r.channel.policy_local
             if not p:
                 continue
 
-            final = _create_update_policy(p, r, info)
+            final_policies[chan_point] = _create_update_policy(p, r, info)
 
-            # common part of log message
-            msg = (
-                f"for chan_point: {chan_point}; fee_rate_ppm: {final.fee_rate_ppm}; "
-                f"inbound_fee_rate_ppm: {final.inbound_fee_rate_ppm}"
+    return final_policies
+
+
+def update_channel_policies(
+    ln: LightningClient,
+    proposals: Iterable[PolicyProposal],
+    get_peer_config: Callable[[str], FeelancerPeersConfig],
+    timenow: datetime,
+) -> None:
+    """
+    Checks if each policy proposal is aligned with update restrictions in the
+    config. In the second step the lightning backend is updated with the new
+    policies.
+    """
+
+    update_policies = _create_update_policies(proposals, get_peer_config, timenow)
+
+    # Updating the final policies
+    for chan_point, policy in update_policies.items():
+        # common part of log message
+        msg = (
+            f"for chan_point: {chan_point}; fee_rate_ppm: {policy.fee_rate_ppm}; "
+            f"inbound_fee_rate_ppm: {policy.inbound_fee_rate_ppm}"
+        )
+
+        try:
+            ln.update_channel_policy(
+                chan_point,
+                policy.fee_rate_ppm,
+                policy.base_fee_msat,
+                policy.time_lock_delta,
+                policy.inbound_fee_rate_ppm,
+                policy.inbound_base_fee_msat,
             )
 
-            try:
-                ln.update_channel_policy(
-                    chan_point,
-                    final.fee_rate_ppm,
-                    final.base_fee_msat,
-                    final.time_lock_delta,
-                    final.inbound_fee_rate_ppm,
-                    final.inbound_base_fee_msat,
-                )
-
-                logging.info(f"policy update successful {msg}")
-            except Exception as e:
-                # RpcErrors are absorbed here too.
-                logging.error(f"policy update failed {msg}; error {e}")
+            logging.info(f"policy update successful {msg}")
+        except Exception as e:
+            # RpcErrors are absorbed here too.
+            logging.error(f"policy update failed {msg}; error {e}")
 
     return None
