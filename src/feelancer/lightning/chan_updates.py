@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import copy
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Callable, Iterable
 from feelancer.utils import first_some
@@ -51,6 +51,9 @@ class PolicyUpdateInfo:
     outbound_changed: bool = False
     # Is a update for the inbound policy needed
     inbound_changed: bool = False
+    # List of the proposals with its effective fee rates considering min/max
+    # restrictions
+    proposals: list[PolicyProposal] = field(default_factory=list)
 
 
 def _get_max_min(input: int, max_value: int, min_value: int) -> int:
@@ -72,6 +75,8 @@ def _create_update_policy(
     info together and creates the policy with the data to update.
     """
 
+    # Creates a copy of the current policy with all existing attributes, and
+    # replaces the values with the proposal, if something has changed.
     res = copy.copy(policy)
     if info.outbound_changed:
         res.fee_rate_ppm = first_some(proposal.fee_rate_ppm, res.inbound_fee_rate_ppm)
@@ -94,31 +99,44 @@ def _create_update_policy(
 
 def _orders_proposals_by_peer(
     proposals: Iterable[PolicyProposal],
-    get_peer_config: Callable[[str], FeelancerPeersConfig],
-) -> tuple[dict[str, dict[str, PolicyProposal]], dict[str, PolicyUpdateInfo]]:
+) -> dict[str, list[PolicyProposal]]:
     """
-    Orders the PolicyProposal's by pub_key and chan_point and creates the
-    aggregated PolicyUpdateInfo for each peer.
+    Orders the PolicyProposal and returns a dictionary with pub_key as key and
+    a list of all PolicyProposal as items
     """
 
-    # dict pub_key -> chan_point -> PolicyProposal
-    prop_dict: dict[str, dict[str, PolicyProposal]] = {}
+    res: dict[str, list[PolicyProposal]] = {}
 
-    # dict pub_key -> PolicyUpdateInfo
-    info_dict: dict[str, PolicyUpdateInfo] = {}
+    for r in proposals:
+        pub_key = r.channel.pub_key
 
+        if not res.get(pub_key):
+            res[pub_key] = []
+
+        res[pub_key].append(r)
+
+    return res
+
+
+def _check_value_restrictions(
+    proposals: Iterable[PolicyProposal],
+    peer_config: FeelancerPeersConfig,
+) -> PolicyUpdateInfo:
+    """
+    Checks if the proposed value are aligned with the restrictions in the
+    config and returns an PolicyUpdateInfo with the results. It checks the
+    min/max restrictions and the min/max delta restrictions.
+    """
+
+    info = PolicyUpdateInfo()
+    c = peer_config
     for r in proposals:
         if not (policy := r.channel.policy_local):
             continue
 
-        pub_key = r.channel.pub_key
-        chan_point = r.channel.chan_point
-        c = get_peer_config(pub_key)
-
         # We check for outbound and inbound fee rate whether there is a min or
         # max in the config. Moreover we check whether the delta to the current
         # value is large enough
-
         fee_rate = None
         fee_rate_changed = False
         if r.fee_rate_ppm is not None:
@@ -145,21 +163,15 @@ def _orders_proposals_by_peer(
                 c.inbound_fee_rate_ppm_min_down,
             )
 
-        # If one of multiple channels with a peer needs a policy update, we want
-        # to update all channels, to avoid different fee rates between them.
-        # That's why we store all policy proposals in dict.
-        if not prop_dict.get(pub_key):
-            prop_dict[pub_key] = {}
-
-        prop_dict[pub_key][chan_point] = PolicyProposal(
-            channel=r.channel,
-            fee_rate_ppm=fee_rate,
-            inbound_fee_rate_ppm=inbound_fee_rate,
+        # Creating a new proposal considering the fee rates with min/max
+        # restrictions.
+        info.proposals.append(
+            PolicyProposal(
+                channel=r.channel,
+                fee_rate_ppm=fee_rate,
+                inbound_fee_rate_ppm=inbound_fee_rate,
+            )
         )
-
-        # Creates a new PolicyUpdateInfo for the peer if no exists.
-        if not (info := info_dict.get(pub_key)):
-            info = info_dict[pub_key] = PolicyUpdateInfo()
 
         # Updating the info. The booleans are concatenated with an OR operation,
         # i.e. it is sufficient that one channel with this peer requires an update
@@ -167,12 +179,13 @@ def _orders_proposals_by_peer(
         info.outbound_changed |= fee_rate_changed
         info.inbound_changed |= inbound_fee_rate_changed
 
-    return prop_dict, info_dict
+    return info
 
 
 def _create_update_policies(
     proposals: Iterable[PolicyProposal],
-    get_peer_config: Callable[[str], FeelancerPeersConfig],
+    pub_key: str,
+    peer_config: FeelancerPeersConfig,
     timenow: datetime,
 ) -> dict[str, ChannelPolicy]:
     """
@@ -183,60 +196,55 @@ def _create_update_policies(
 
     final_policies: dict[str, ChannelPolicy] = {}
 
-    prop_dict, info_dict = _orders_proposals_by_peer(proposals, get_peer_config)
+    # Check of min/max restrictions.
+    info = _check_value_restrictions(proposals, peer_config)
 
     # Iterating over all peers with a max last update. If the time delta fits
     # with the config we update all channels with this peer.
-    for pub_key, info in info_dict.items():
-        peer_config = get_peer_config(pub_key)
-        if (dt := timenow.timestamp() - info.max_last_update) < peer_config.min_seconds:
-            logging.debug(
-                f"no policy updates for {pub_key}; last update was {dt}s ago "
-                f"which is less than min_seconds {peer_config.min_seconds}s."
-            )
+    if (dt := timenow.timestamp() - info.max_last_update) < peer_config.min_seconds:
+        logging.debug(
+            f"no policy updates for {pub_key=}; last update was {dt}s ago "
+            f"which is less than min_seconds {peer_config.min_seconds}s."
+        )
+        return final_policies
+
+    # If values haven't changed significantly we can skip the all channels,
+    if not (info.outbound_changed or info.inbound_changed):
+        logging.debug(f"no policy update for {pub_key=} needed.")
+        return final_policies
+
+    # Looping over all proposals now and creating the final policy which
+    for r in info.proposals:
+        p = r.channel.policy_local
+        if not p:
             continue
 
-        proposal = prop_dict.get(pub_key)
-        if not proposal:
-            continue
-
-        # Check on peer level whether an update is needed. If not we skip all
-        # channels.
-        if not (info.outbound_changed or info.inbound_changed):
-            logging.debug(f"no policy update for {pub_key} needed.")
-            continue
-
-        # Looping over all channels with this peer now.
-        for chan_point, r in proposal.items():
-            p = r.channel.policy_local
-            if not p:
-                continue
-
-            final_policies[chan_point] = _create_update_policy(p, r, info)
+        final_policies[r.channel.chan_point] = _create_update_policy(p, r, info)
 
     return final_policies
 
 
-def update_channel_policies(
+def _update_channel_policies_peer(
     ln: LightningClient,
     proposals: Iterable[PolicyProposal],
-    get_peer_config: Callable[[str], FeelancerPeersConfig],
+    pub_key: str,
+    peer_config: FeelancerPeersConfig,
     timenow: datetime,
 ) -> None:
     """
     Checks if each policy proposal is aligned with update restrictions in the
-    config. In the second step the lightning backend is updated with the new
-    policies.
+    config for a specfifc peer.
+    In the second step the lightning backend is updated with the new policies.
     """
 
-    update_policies = _create_update_policies(proposals, get_peer_config, timenow)
+    update_policies = _create_update_policies(proposals, pub_key, peer_config, timenow)
 
     # Updating the final policies
     for chan_point, policy in update_policies.items():
         # common part of log message
         msg = (
-            f"for chan_point: {chan_point}; fee_rate_ppm: {policy.fee_rate_ppm}; "
-            f"inbound_fee_rate_ppm: {policy.inbound_fee_rate_ppm}"
+            f"for {chan_point=}; {policy.fee_rate_ppm=}; "
+            f"{policy.inbound_fee_rate_ppm=}"
         )
 
         try:
@@ -255,3 +263,22 @@ def update_channel_policies(
             logging.error(f"policy update failed {msg}; error {e}")
 
     return None
+
+
+def update_channel_policies(
+    ln: LightningClient,
+    proposals: Iterable[PolicyProposal],
+    get_peer_config: Callable[[str], FeelancerPeersConfig],
+    timenow: datetime,
+) -> None:
+    """
+    Checks if each policy proposal is aligned with update restrictions in the
+    config. In the second step the lightning backend is updated with the new
+    policies.
+    """
+
+    props_by_peer = _orders_proposals_by_peer(proposals)
+
+    for pub_key, props in props_by_peer.items():
+        config = get_peer_config(pub_key)
+        _update_channel_policies_peer(ln, props, pub_key, config, timenow)
