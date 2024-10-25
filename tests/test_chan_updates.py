@@ -87,7 +87,7 @@ class TestCreateUpdatePolicies(unittest.TestCase):
         # base time for the last_update
         time_base = datetime(2021, 1, 1, 0, 0, 0)
 
-        # We use one config for all test cases
+        # config for almost most of the test
         mock_peer_config = cast(FeelancerPeersConfig, MagicMock())
         mock_peer_config.fee_rate_max = 2000
         mock_peer_config.fee_rate_min = 100
@@ -98,6 +98,11 @@ class TestCreateUpdatePolicies(unittest.TestCase):
         mock_peer_config.inbound_fee_rate_ppm_min_up = 30
         mock_peer_config.inbound_fee_rate_ppm_min_down = 15
         mock_peer_config.min_seconds = 3600
+
+        # copy of the config which enables us to set the fee rates to zero
+        mock_peer_config_2 = copy.copy(mock_peer_config)
+        mock_peer_config_2.fee_rate_min = 0
+        mock_peer_config_2.inbound_fee_rate_max = 0
 
         bob_chan_1 = _new_mock_channel(
             fee_rate_ppm=1000,
@@ -389,7 +394,25 @@ class TestCreateUpdatePolicies(unittest.TestCase):
         self.testcases.append(
             TCaseCreateUpdatePolicies(
                 name="11",
-                description="both fee deltas below min_down with hitting the min .",
+                description="set both fee rates to 0",
+                proposals=[
+                    PolicyProposal(
+                        channel=bob_chan_1,
+                        fee_rate_ppm=0,
+                        inbound_fee_rate_ppm=0,
+                    )
+                ],
+                pub_key="bob",
+                peer_config=mock_peer_config_2,
+                timenow=time_base + timedelta(seconds=3600),
+                expected_results={"bob_chan_1": _new_expected_policy(bob_chan_1, 0, 0)},
+            )
+        )
+
+        self.testcases.append(
+            TCaseCreateUpdatePolicies(
+                name="12",
+                description="both fee deltas below min_down with hitting the min.",
                 proposals=[
                     PolicyProposal(
                         channel=bob_chan_4,
@@ -406,8 +429,7 @@ class TestCreateUpdatePolicies(unittest.TestCase):
             )
         )
 
-        #####################
-        # ################################
+        #####################################################
         ##### Testcases with multiple channels per peer #####
         #####################################################
 
