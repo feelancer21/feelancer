@@ -136,6 +136,18 @@ class TestCreateUpdatePolicies(unittest.TestCase):
             pub_key="bob",
         )
 
+        # bob_chan_4 is a channel where the outbound and inbound needs a down
+        # movement less than our min_down to hit the min fee rates
+        bob_chan_4 = _new_mock_channel(
+            fee_rate_ppm=102,
+            base_fee_msat=1,
+            time_lock_delta=144,
+            inbound_fee_rate_ppm=-997,
+            inbound_base_fee_msat=1,
+            last_update=time_base,
+            chan_point="bob_chan_4",
+            pub_key="bob",
+        )
         ###############################################
         ##### Testcases with one channel per peer #####
         ###############################################
@@ -374,7 +386,28 @@ class TestCreateUpdatePolicies(unittest.TestCase):
             )
         )
 
-        #####################################################
+        self.testcases.append(
+            TestCaseCreateUpdatePolicies(
+                name="11",
+                description="both fee deltas below min_down with hitting the min .",
+                proposals=[
+                    PolicyProposal(
+                        channel=bob_chan_4,
+                        fee_rate_ppm=100,
+                        inbound_fee_rate_ppm=-1000,
+                    )
+                ],
+                pub_key="bob",
+                peer_config=mock_peer_config,
+                timenow=time_base + timedelta(hours=2),
+                expected_results={
+                    "bob_chan_4": _new_expected_policy(bob_chan_1, 100, -1000)
+                },
+            )
+        )
+
+        #####################
+        # ################################
         ##### Testcases with multiple channels per peer #####
         #####################################################
 
