@@ -94,7 +94,7 @@ class ChannelCollection:
         # We are updating the ref fee rate now and are looking for the lowest
         # fee rate over all channels in this collection
         if (
-            not self._ref_fee_rate
+            self._ref_fee_rate is None
             or channel.policy_local.fee_rate_ppm < self._ref_fee_rate
         ):
             self._ref_fee_rate = channel.policy_local.fee_rate_ppm
@@ -312,7 +312,7 @@ class ChannelAggregator:
         the equation.
         """
 
-        if self._target_default:
+        if self._target_default is not None:
             return self._target_default
 
         sum_local: int = 0

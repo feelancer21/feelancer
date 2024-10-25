@@ -18,16 +18,17 @@ class GenericConf:
 
 
 T = TypeVar("T", bound=GenericConf)
+U = TypeVar("U")
 
 
 def defaults_from_type(
     defaults: Type[T], conf: dict | None, exclude: list[str] | None = None
 ) -> T:
-    if not conf:
+    if conf is None:
         return defaults()
 
     conf_copy = deepcopy(conf)
-    if exclude:
+    if exclude is not None:
         for key in exclude:
             del conf_copy[key]
 
@@ -37,12 +38,12 @@ def defaults_from_type(
 def defaults_from_instance(
     defaults: T, conf: dict | None, exclude: list[str] | None = None
 ) -> T:
-    if not conf:
+    if conf is None:
         return defaults
 
     conf_copy = deepcopy(conf)
     res = deepcopy(defaults)
-    if exclude:
+    if exclude is not None:
         for key in exclude:
             del conf_copy[key]
 
@@ -123,3 +124,9 @@ class SignalHandler:
         # Reset handlers to avoid calling them again
         self.handlers = []
         self.lock.release()
+
+
+def first_some(value1: U | None, value2: U) -> U:
+    """Returns the first value which is not None"""
+
+    return value1 if value1 is not None else value2
