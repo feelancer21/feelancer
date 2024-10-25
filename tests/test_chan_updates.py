@@ -463,6 +463,26 @@ class TestCreateUpdatePolicies(unittest.TestCase):
             )
         )
 
+        self.testcases.append(
+            TCaseCreateUpdatePolicies(
+                name="14",
+                description="last update before 1 hour; but we force the update",
+                proposals=[
+                    PolicyProposal(
+                        channel=bob_chan_1,
+                        force_update=True,
+                        fee_rate_ppm=995,
+                        inbound_fee_rate_ppm=-214,
+                    )
+                ],
+                pub_key="bob",
+                peer_config=mock_peer_config,
+                timenow=time_base + timedelta(seconds=3599),
+                expected_results={
+                    "bob_chan_1": _new_expected_policy(bob_chan_1, 995, -200)
+                },
+            )
+        )
         #####################################################
         ##### Testcases with multiple channels per peer #####
         #####################################################
@@ -652,10 +672,45 @@ class TestCreateUpdatePolicies(unittest.TestCase):
                 ],
                 pub_key="bob",
                 peer_config=mock_peer_config,
-                # Less than one our after our last_update of bob_chan_2.
-                # With this setting all other channels has passed our min_seconds=36000.
+                # Less than one hour after our last_update of bob_chan_2.
+                # With this setting all other channels has passed our min_seconds=3600.
                 timenow=time_base + timedelta(minutes=30) + timedelta(seconds=3599),
                 expected_results={},
+            )
+        )
+
+        self.testcases.append(
+            TCaseCreateUpdatePolicies(
+                name="106",
+                description="2nd channel triggers update of all inbound and outbound fees; timestamp too recent but force_update flat is set.",
+                proposals=[
+                    PolicyProposal(
+                        channel=bob_chan_1,
+                        fee_rate_ppm=1000,
+                        inbound_fee_rate_ppm=-200,
+                    ),
+                    PolicyProposal(
+                        channel=bob_chan_2,
+                        force_update=True,
+                        fee_rate_ppm=1010,
+                        inbound_fee_rate_ppm=-215,
+                    ),
+                    PolicyProposal(
+                        channel=bob_chan_3,
+                        fee_rate_ppm=1995,
+                        inbound_fee_rate_ppm=29,
+                    ),
+                ],
+                pub_key="bob",
+                peer_config=mock_peer_config,
+                # Less than one hour after our last_update of bob_chan_2.
+                # With this setting all other channels has passed our min_seconds=3600.
+                timenow=time_base + timedelta(minutes=30) + timedelta(seconds=3599),
+                expected_results={
+                    "bob_chan_1": _new_expected_policy(bob_chan_1, 1000, -200),
+                    "bob_chan_2": _new_expected_policy(bob_chan_2, 1010, -215),
+                    "bob_chan_3": _new_expected_policy(bob_chan_3, 1995, 29),
+                },
             )
         )
 

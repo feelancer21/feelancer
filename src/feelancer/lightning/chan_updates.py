@@ -24,6 +24,11 @@ class PolicyProposal:
     """
 
     channel: Channel
+
+    # force_update forces an policy update in the case the last_update with the
+    # peer was too recent
+    force_update: bool = False
+
     fee_rate_ppm: int | None = None
     base_fee_msat: int | None = None
     time_lock_delta: int | None = None
@@ -48,6 +53,9 @@ class PolicyUpdateInfo:
 
     # The last update timestamp over all channels
     max_last_update: int = 0
+    # force_update forces an policy update in the case the last_update with the
+    # peer was too recent
+    force_update: bool = False
     # Is a update for the outbound policy needed
     outbound_changed: bool = False
     # Is a update for the inbound policy needed
@@ -202,6 +210,7 @@ def _check_value_restrictions(
         # Updating the info. The booleans are concatenated with an OR operation,
         # i.e. it is sufficient that one channel with this peer requires an update
         info.max_last_update = max(info.max_last_update, policy.last_update)
+        info.force_update |= r.force_update
         info.outbound_changed |= fee_rate_changed
         info.inbound_changed |= inbound_fee_rate_changed
 
@@ -225,9 +234,12 @@ def _create_update_policies(
     # Check of min/max restrictions.
     info = _check_value_restrictions(proposals, peer_config)
 
-    # Iterating over all peers with a max last update. If the time delta fits
-    # with the config we update all channels with this peer.
-    if (dt := timenow.timestamp() - info.max_last_update) < peer_config.min_seconds:
+    # We return with an empty dict if the last update was too recent and if
+    # we don't want to force the update.
+    if (not info.force_update) and (
+        dt := timenow.timestamp() - info.max_last_update
+    ) < peer_config.min_seconds:
+
         logging.debug(
             f"no policy updates for {pub_key=}; last update was {dt}s ago "
             f"which is less than min_seconds {peer_config.min_seconds}s."
