@@ -62,19 +62,26 @@ def _get_max_min(input: int, max_value: int, min_value: int) -> int:
 
 
 def _is_changed(
-    value_new: int, value_old: int, min_up: int, min_down: int, min_value: int
+    value_new: int,
+    value_old: int,
+    min_up: int,
+    min_down: int,
+    min_value: int,
+    max_value: int,
 ) -> bool:
     """
     Compares the new value with the old value and returns True if a positive
     delta is greater equal than min_up and the absolute value of a negative value
     is greater equal than min_down.
-    If a down movement below min_down hits the min_value restriction we also return
-    True.
+    If a change hits the min/max restriction we also return True.
     """
 
     delta = value_new - value_old
 
     if -delta > 0 and value_new == min_value:
+        return True
+
+    if delta > 0 and value_new == max_value:
         return True
 
     if delta >= min_up or -delta >= min_down:
@@ -164,6 +171,7 @@ def _check_value_restrictions(
                 c.fee_rate_ppm_min_up,
                 c.fee_rate_ppm_min_down,
                 c.fee_rate_min,
+                c.fee_rate_max,
             )
 
         inbound_fee_rate = None
@@ -178,6 +186,7 @@ def _check_value_restrictions(
                 c.inbound_fee_rate_ppm_min_up,
                 c.inbound_fee_rate_ppm_min_down,
                 c.inbound_fee_rate_min,
+                c.inbound_fee_rate_max,
             )
 
         # Creating a new proposal considering the fee rates with min/max

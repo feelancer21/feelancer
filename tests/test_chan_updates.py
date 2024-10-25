@@ -153,6 +153,20 @@ class TestCreateUpdatePolicies(unittest.TestCase):
             chan_point="bob_chan_4",
             pub_key="bob",
         )
+
+        # bob_chan_5 is a channel where the outbound and inbound needs a down
+        # movement less than our min_down to hit the min fee rates
+        bob_chan_5 = _new_mock_channel(
+            fee_rate_ppm=1995,
+            base_fee_msat=1,
+            time_lock_delta=144,
+            inbound_fee_rate_ppm=98,
+            inbound_base_fee_msat=1,
+            last_update=time_base,
+            chan_point="bob_chan_5",
+            pub_key="bob",
+        )
+
         ###############################################
         ##### Testcases with one channel per peer #####
         ###############################################
@@ -416,15 +430,35 @@ class TestCreateUpdatePolicies(unittest.TestCase):
                 proposals=[
                     PolicyProposal(
                         channel=bob_chan_4,
-                        fee_rate_ppm=100,
-                        inbound_fee_rate_ppm=-1000,
+                        fee_rate_ppm=0,
+                        inbound_fee_rate_ppm=-10000,
                     )
                 ],
                 pub_key="bob",
                 peer_config=mock_peer_config,
                 timenow=time_base + timedelta(hours=2),
                 expected_results={
-                    "bob_chan_4": _new_expected_policy(bob_chan_1, 100, -1000)
+                    "bob_chan_4": _new_expected_policy(bob_chan_4, 100, -1000)
+                },
+            )
+        )
+
+        self.testcases.append(
+            TCaseCreateUpdatePolicies(
+                name="13",
+                description="both fee deltas below min_up with hitting the max.",
+                proposals=[
+                    PolicyProposal(
+                        channel=bob_chan_5,
+                        fee_rate_ppm=4000,
+                        inbound_fee_rate_ppm=200,
+                    )
+                ],
+                pub_key="bob",
+                peer_config=mock_peer_config,
+                timenow=time_base + timedelta(hours=2),
+                expected_results={
+                    "bob_chan_5": _new_expected_policy(bob_chan_5, 2000, 100)
                 },
             )
         )
