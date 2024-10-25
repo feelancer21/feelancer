@@ -449,8 +449,7 @@ class PidController:
         # This delta is applied as a shift to all spread controllers, which changes
         # the spreads of all controllers about the value.
         if (pin_peer := config.pin_peer) is not None:
-            pin_controller = self.spread_controller_map[pin_peer]
-            peer_config = config.peer_config(pin_peer)
+            pin_controller = self.spread_controller_map.get(pin_peer)
 
             if pin_controller is not None:
                 peer_config = config.peer_config(pin_peer)
