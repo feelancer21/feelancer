@@ -5,6 +5,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Callable, Iterable
+
 from feelancer.utils import first_some
 
 from .client import ChannelPolicy
