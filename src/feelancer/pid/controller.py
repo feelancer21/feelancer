@@ -448,23 +448,25 @@ class PidController:
         # Then the delta between the pin value and the current value is calculated.
         # This delta is applied as a shift to all spread controllers, which changes
         # the spreads of all controllers about the value.
-        if pin_peer := config.pin_peer:
-            pin_controller = self.spread_controller_map[pin_peer]
-            peer_config = config.peer_config(pin_peer)
+        if (pin_peer := config.pin_peer) is not None:
+            pin_controller = self.spread_controller_map.get(pin_peer)
 
-            shift = 0
-            if config.pin_method == "fee_rate":
-                shift = config.pin_value - (
-                    self.margin_controller.margin
-                    + peer_config.margin_idiosyncratic
-                    + pin_controller.spread
-                )
-            elif config.pin_method == "spread":
-                shift = config.pin_value - pin_controller.spread
+            if pin_controller is not None:
+                peer_config = config.peer_config(pin_peer)
 
-            logging.info(f"Shifting spread controllers by {shift}")
-            for c in self.spread_controller_map.values():
-                c.ewma_controller.apply_shift(shift)
+                shift = 0
+                if config.pin_method == "fee_rate":
+                    shift = config.pin_value - (
+                        self.margin_controller.margin
+                        + peer_config.margin_idiosyncratic
+                        + pin_controller.spread
+                    )
+                elif config.pin_method == "spread":
+                    shift = config.pin_value - pin_controller.spread
+
+                logging.info(f"Shifting spread controllers by {shift}")
+                for c in self.spread_controller_map.values():
+                    c.ewma_controller.apply_shift(shift)
 
         self.last_timestamp = timestamp_start
 
