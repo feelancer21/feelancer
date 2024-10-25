@@ -199,10 +199,10 @@ def query_margin_controller(
         .join(DBPidRun.ln_node)
     )
 
-    if local_pub_key:
+    if local_pub_key is not None:
         qry = qry.where(DBLnNode.pub_key == local_pub_key)
 
-    if run_id:
+    if run_id is not None:
         qry = qry.where(DBPidMarginController.run_id == run_id)
 
     qry = qry.options(
@@ -223,7 +223,7 @@ def query_pid_run(
 
     qry = qry.join(DBPidRun.ln_node)
 
-    if pub_key:
+    if pub_key is not None:
         qry = qry.where(DBLnNode.pub_key == pub_key)
 
     qry = qry.options(joinedload(DBPidRun.run))
@@ -251,13 +251,13 @@ def query_spread_controller(
         .join(DBPidSpreadController.pid_run)
         .join(DBPidRun.ln_node)
     )
-    if local_pub_key:
+    if local_pub_key is not None:
         qry = qry.where(DBLnNode.pub_key == local_pub_key)
 
-    if peer_pub_key:
+    if peer_pub_key is not None:
         qry = qry.where(DBLnChannelPeer.pub_key == peer_pub_key)
 
-    if run_id:
+    if run_id is not None:
         qry = qry.where(DBPidSpreadController.run_id == run_id)
 
     qry = qry.options(
@@ -356,17 +356,17 @@ class PidConfig:
         # For clear config handling, the ewma controller parameters can be given
         # names. This assumes that named_ewma is a dictionary.
         named_ewma: dict | None = conf_copy.get("named_ewma")
-        if named_ewma and not isinstance(named_ewma, dict):
+        if named_ewma is not None and not isinstance(named_ewma, dict):
             raise ValueError("'named_ewma' is not a valid dictionary!")
 
         # get_ewma_controller performs a lookup into named_ewma if a str is
         # provided as parameter.
         def get_ewma_controller(params: str | dict) -> EwmaControllerParams:
             ewma_params = None
-            if isinstance(params, str) and named_ewma:
+            if isinstance(params, str) and named_ewma is not None:
                 ewma_params = named_ewma.get(params)
 
-            if not ewma_params:
+            if ewma_params is None:
                 if not isinstance(params, dict):
                     raise ValueError(
                         f"ewma_controller '{params}' is not valid. "
