@@ -5,7 +5,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Iterable
-
+from feelancer.utils import first_some
 from .client import ChannelPolicy
 
 if TYPE_CHECKING:
@@ -72,19 +72,19 @@ def _create_update_policy(
 
     res = copy.copy(policy)
     if info.outbound_changed:
-        res.fee_rate_ppm = proposal.fee_rate_ppm or res.fee_rate_ppm
-        res.base_fee_msat = proposal.base_fee_msat or res.base_fee_msat
-        res.time_lock_delta = proposal.time_lock_delta or res.time_lock_delta
-        res.max_htlc_msat = proposal.max_htlc_msat or res.max_htlc_msat
-        res.min_htlc_msat = proposal.min_htlc_msat or res.min_htlc_msat
-        res.disabled = proposal.disabled or res.disabled
+        res.fee_rate_ppm = first_some(proposal.fee_rate_ppm, res.inbound_fee_rate_ppm)
+        res.base_fee_msat = first_some(proposal.base_fee_msat, res.base_fee_msat)
+        res.time_lock_delta = first_some(proposal.time_lock_delta, res.time_lock_delta)
+        res.max_htlc_msat = first_some(proposal.max_htlc_msat, res.max_htlc_msat)
+        res.min_htlc_msat = first_some(proposal.min_htlc_msat, res.min_htlc_msat)
+        res.disabled = first_some(proposal.disabled, res.disabled)
 
     if info.inbound_changed:
-        res.inbound_fee_rate_ppm = (
-            proposal.inbound_fee_rate_ppm or res.inbound_fee_rate_ppm
+        res.inbound_fee_rate_ppm = first_some(
+            proposal.inbound_fee_rate_ppm, res.inbound_fee_rate_ppm
         )
-        res.inbound_base_fee_msat = (
-            proposal.inbound_base_fee_msat or res.inbound_base_fee_msat
+        res.inbound_base_fee_msat = first_some(
+            proposal.inbound_base_fee_msat, res.inbound_base_fee_msat
         )
 
     return res
@@ -122,7 +122,7 @@ def update_channel_policies(
 
         fee_rate = None
         fee_rate_changed = False
-        if r.fee_rate_ppm:
+        if r.fee_rate_ppm is not None:
             fee_rate = _get_max_min(
                 r.fee_rate_ppm, c.fee_rate_max, max(c.fee_rate_min, 0)
             )
@@ -135,7 +135,7 @@ def update_channel_policies(
 
         inbound_fee_rate = None
         inbound_fee_rate_changed = False
-        if r.inbound_fee_rate_ppm:
+        if r.inbound_fee_rate_ppm is not None:
             inbound_fee_rate = _get_max_min(
                 r.inbound_fee_rate_ppm, c.inbound_fee_rate_max, c.inbound_fee_rate_min
             )
