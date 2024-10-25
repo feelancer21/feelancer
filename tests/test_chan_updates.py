@@ -13,7 +13,7 @@ from feelancer.lightning.client import Channel, ChannelPolicy
 
 
 @dataclass
-class TestCaseCreateUpdatePolicies:
+class TCaseCreateUpdatePolicies:
     # name of the testcase
     name: str
 
@@ -82,7 +82,7 @@ class TestCreateUpdatePolicies(unittest.TestCase):
 
     def setUp(self):
 
-        self.testcases: list[TestCaseCreateUpdatePolicies] = []
+        self.testcases: list[TCaseCreateUpdatePolicies] = []
 
         # base time for the last_update
         time_base = datetime(2021, 1, 1, 0, 0, 0)
@@ -153,7 +153,7 @@ class TestCreateUpdatePolicies(unittest.TestCase):
         ###############################################
 
         self.testcases.append(
-            TestCaseCreateUpdatePolicies(
+            TCaseCreateUpdatePolicies(
                 name="1",
                 description="fees within min/max bounds",
                 proposals=[
@@ -173,7 +173,7 @@ class TestCreateUpdatePolicies(unittest.TestCase):
         )
 
         self.testcases.append(
-            TestCaseCreateUpdatePolicies(
+            TCaseCreateUpdatePolicies(
                 name="2",
                 description="fees exceeds fee_rate_max",
                 proposals=[
@@ -193,7 +193,7 @@ class TestCreateUpdatePolicies(unittest.TestCase):
         )
 
         self.testcases.append(
-            TestCaseCreateUpdatePolicies(
+            TCaseCreateUpdatePolicies(
                 name="3",
                 description="fees exceeds fee_rate_min",
                 proposals=[
@@ -213,7 +213,7 @@ class TestCreateUpdatePolicies(unittest.TestCase):
         )
 
         self.testcases.append(
-            TestCaseCreateUpdatePolicies(
+            TCaseCreateUpdatePolicies(
                 name="4",
                 description="fees exceeds inbound_fee_rate_max",
                 proposals=[
@@ -233,7 +233,7 @@ class TestCreateUpdatePolicies(unittest.TestCase):
         )
 
         self.testcases.append(
-            TestCaseCreateUpdatePolicies(
+            TCaseCreateUpdatePolicies(
                 name="4",
                 description="fees exceeds inbound_fee_rate_max",
                 proposals=[
@@ -253,7 +253,7 @@ class TestCreateUpdatePolicies(unittest.TestCase):
         )
 
         self.testcases.append(
-            TestCaseCreateUpdatePolicies(
+            TCaseCreateUpdatePolicies(
                 name="5",
                 description="both fee rate delta below min_up",
                 proposals=[
@@ -271,7 +271,7 @@ class TestCreateUpdatePolicies(unittest.TestCase):
         )
 
         self.testcases.append(
-            TestCaseCreateUpdatePolicies(
+            TCaseCreateUpdatePolicies(
                 name="6",
                 description="outbound fee rate delta below min_up, but inbound fee rate above",
                 proposals=[
@@ -291,7 +291,7 @@ class TestCreateUpdatePolicies(unittest.TestCase):
         )
 
         self.testcases.append(
-            TestCaseCreateUpdatePolicies(
+            TCaseCreateUpdatePolicies(
                 name="6",
                 description="inbound fee rate delta below min_up, but outbound fee rate above",
                 proposals=[
@@ -311,7 +311,7 @@ class TestCreateUpdatePolicies(unittest.TestCase):
         )
 
         self.testcases.append(
-            TestCaseCreateUpdatePolicies(
+            TCaseCreateUpdatePolicies(
                 name="7",
                 description="both fee rate delta below min_down",
                 proposals=[
@@ -329,7 +329,7 @@ class TestCreateUpdatePolicies(unittest.TestCase):
         )
 
         self.testcases.append(
-            TestCaseCreateUpdatePolicies(
+            TCaseCreateUpdatePolicies(
                 name="8",
                 description="outbound fee rate delta below min_down, but inbound fee rate above",
                 proposals=[
@@ -349,7 +349,7 @@ class TestCreateUpdatePolicies(unittest.TestCase):
         )
 
         self.testcases.append(
-            TestCaseCreateUpdatePolicies(
+            TCaseCreateUpdatePolicies(
                 name="9",
                 description="inbound fee rate delta below min_down, but outbound fee rate above",
                 proposals=[
@@ -369,7 +369,7 @@ class TestCreateUpdatePolicies(unittest.TestCase):
         )
 
         self.testcases.append(
-            TestCaseCreateUpdatePolicies(
+            TCaseCreateUpdatePolicies(
                 name="10",
                 description="last update before 1 hour",
                 proposals=[
@@ -387,7 +387,7 @@ class TestCreateUpdatePolicies(unittest.TestCase):
         )
 
         self.testcases.append(
-            TestCaseCreateUpdatePolicies(
+            TCaseCreateUpdatePolicies(
                 name="11",
                 description="both fee deltas below min_down with hitting the min .",
                 proposals=[
@@ -418,7 +418,7 @@ class TestCreateUpdatePolicies(unittest.TestCase):
         # if our tool advances the same policy for all channels with one peer.
 
         self.testcases.append(
-            TestCaseCreateUpdatePolicies(
+            TCaseCreateUpdatePolicies(
                 name="101",
                 description="all of three channels require an update with the same proposals",
                 proposals=[
@@ -450,7 +450,7 @@ class TestCreateUpdatePolicies(unittest.TestCase):
         )
 
         self.testcases.append(
-            TestCaseCreateUpdatePolicies(
+            TCaseCreateUpdatePolicies(
                 name="102",
                 description="no channel requires an update; deltas all below min/max up/down",
                 proposals=[
@@ -478,7 +478,7 @@ class TestCreateUpdatePolicies(unittest.TestCase):
         )
 
         self.testcases.append(
-            TestCaseCreateUpdatePolicies(
+            TCaseCreateUpdatePolicies(
                 name="103",
                 description="2nd channel triggers update of all outbound fees; other deltas all below min/max up/down",
                 proposals=[
@@ -510,7 +510,7 @@ class TestCreateUpdatePolicies(unittest.TestCase):
         )
 
         self.testcases.append(
-            TestCaseCreateUpdatePolicies(
+            TCaseCreateUpdatePolicies(
                 name="104",
                 description="2nd channel triggers update of all inbound fees; other deltas all below min/max up/down",
                 proposals=[
@@ -542,7 +542,7 @@ class TestCreateUpdatePolicies(unittest.TestCase):
         )
 
         self.testcases.append(
-            TestCaseCreateUpdatePolicies(
+            TCaseCreateUpdatePolicies(
                 name="105",
                 description="2nd channel triggers update of all inbound and outbound fees; other deltas all below min/max up/down",
                 proposals=[
@@ -574,7 +574,7 @@ class TestCreateUpdatePolicies(unittest.TestCase):
         )
 
         self.testcases.append(
-            TestCaseCreateUpdatePolicies(
+            TCaseCreateUpdatePolicies(
                 name="105",
                 description="2nd channel triggers update of all inbound and outbound fees; but timestamp too recent.",
                 proposals=[
