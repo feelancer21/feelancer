@@ -66,3 +66,6 @@ pyenv_reset:
 
 pdf:
 	docker run --rm --volume "./docs:/data" --user $(UID):$(GID) pandoc/latex:3.2.1 math.md -o math.pdf
+
+cloc:
+	cloc --exclude-dir grpc_generated,.vscode  .
