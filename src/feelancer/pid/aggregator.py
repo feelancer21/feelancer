@@ -330,9 +330,8 @@ class ChannelAggregator:
 
             sum_liquidity += local + remote
 
-            if (peer_config := self.config.peers.get(channel.pub_key)) and (
-                peer_config.target
-            ):
+            peer_config = self.config.peer_config(channel.pub_key)
+            if peer_config.target is not None:
                 sum_liquidity_known_target += local + remote
                 sum_liquidity_target += (local + remote) * peer_config.target
 
