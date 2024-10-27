@@ -429,9 +429,7 @@ class PidConfig:
             raise ValueError(f"Cannot parse section 'pid.spread_level': {e}")
 
     def peer_config(self, pub_key: str) -> PidSpreadControllerConfig:
-        if not (peer_config := self.peers.get(pub_key)):
-            peer_config = self.peers["default"]
-        return peer_config
+        return self.peers.get(pub_key, self.peers["default"])
 
 
 class PidStore:
