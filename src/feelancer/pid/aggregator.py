@@ -80,7 +80,7 @@ class ChannelCollection:
         # the lowest fee_rate.
         if policy_last:
             if (
-                not self.ref_fee_rate_last
+                self.ref_fee_rate_last is None
                 or policy_last.fee_rate_ppm < self.ref_fee_rate_last
             ):
                 self.ref_fee_rate_last = policy_last.fee_rate_ppm
@@ -149,7 +149,7 @@ class ChannelCollection:
         """
 
         ref = self.ref_fee_rate_last
-        if not ref:
+        if ref is None:
             return True
         return ref != self.ref_fee_rate
 
