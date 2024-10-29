@@ -1,7 +1,7 @@
 """
 aggregation module serves the aggregation of channels per peer in context of the
 pid controller.
-Relevant channels are identified, which are all channels with peer where one
+Relevant channels are identified, which are all channels with a peer where one
 announced channel exist. Moreover the default is target is calculated which is
 used if no target is specified in the config.
 """
@@ -169,12 +169,9 @@ class ChannelCollection:
 
     def _get_pid_channels(self) -> list[Channel]:
         """
-        Determine all channels which have to be modelled. We are returning None
-        if there are only private channel in this collection.
-        Public channels without any policy at the moment are not returned too,
-        which can be the case if a channel was opened lately. Otherwise the
-        fee rate of the channel has to be equal to the reference fee rate,
-        which is the minimum fee_rate of all fee_rates.
+        Determine all channels which have to be modelled. We are returning an
+        empty list if there are only private channels in this collection.
+        Channels without a local policy are also not included in the list.
         """
 
         pid_channels: list[Channel] = []
@@ -182,22 +179,11 @@ class ChannelCollection:
             return pid_channels
 
         for channel in self.channels.values():
-            # Skipping public channels without policy
-            if not channel.private and not channel.policy_local:
-                continue
-
-            # Remaining channels without policy are private, shadow channels.
+            # Skipping channels without policy
             if not channel.policy_local:
-                pid_channels.append(channel)
                 continue
 
-            if channel.chan_id in self._new_channels:
-                pid_channels.append(channel)
-                continue
-
-            if channel.policy_local.fee_rate_ppm == self._ref_fee_rate:
-                pid_channels.append(channel)
-                continue
+            pid_channels.append(channel)
 
         return pid_channels
 

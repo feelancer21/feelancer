@@ -251,6 +251,7 @@ class TestPid(unittest.TestCase):
             fee_rate_ppm=0,
         )
 
+        # like bob2 but with raised fee rate
         bob_chan_2_up = _new_mock_channel(
             pub_key="bob",
             chan_id=2,
@@ -264,6 +265,7 @@ class TestPid(unittest.TestCase):
             fee_rate_ppm=200,
         )
 
+        # like bob2 but with lowered fee rate
         bob_chan_2_down = _new_mock_channel(
             pub_key="bob",
             chan_id=2,
@@ -277,7 +279,7 @@ class TestPid(unittest.TestCase):
             fee_rate_ppm=0,
         )
 
-        # Same but opened recently, balance remote
+        # like bob3 but with raised fee rate
         bob_chan_3_up = _new_mock_channel(
             pub_key="bob",
             chan_id=3,
@@ -291,7 +293,7 @@ class TestPid(unittest.TestCase):
             fee_rate_ppm=200,
         )
 
-        # Same but opened recently, balance remote
+        # like bob2 but with lowered fee rate
         bob_chan_3_down = _new_mock_channel(
             pub_key="bob",
             chan_id=3,
@@ -304,6 +306,36 @@ class TestPid(unittest.TestCase):
             liq_in_pen=0,
             fee_rate_ppm=0,
         )
+
+        # like bob3, but no policy
+        bob_chan_5 = _new_mock_channel(
+            pub_key="bob",
+            chan_id=5,
+            capacity=4_000_000,
+            private=False,
+            opening_height=839_000,
+            liq_out=2_000_000,
+            liq_in=0,
+            liq_out_pen=0,
+            liq_in_pen=0,
+            fee_rate_ppm=0,
+        )
+        bob_chan_5.policy_local = None
+
+        # like bob3, but no policy and private
+        bob_chan_6 = _new_mock_channel(
+            pub_key="bob",
+            chan_id=6,
+            capacity=4_000_000,
+            private=True,
+            opening_height=839_000,
+            liq_out=2_000_000,
+            liq_in=0,
+            liq_out_pen=0,
+            liq_in_pen=0,
+            fee_rate_ppm=0,
+        )
+        bob_chan_6.policy_local = None
 
         # The channel with carol is private
         carol_chan_1 = _new_mock_channel(
@@ -1000,6 +1032,114 @@ class TestPid(unittest.TestCase):
                             ref_fee_rate_changed=False,
                             chan_ids=[1, 3],
                         )
+                    },
+                ),
+            )
+        )
+
+        self.testcases_aggregator.append(
+            TCasePidAggregator(
+                name="18",
+                description="carol with two private and one public channel, bob with three public, one channel has no policy",
+                config=pid_config,
+                policies_last={
+                    1: policy_bob_last_1,
+                    2: policy_bob_last_1,
+                    11: policy_carol_last_1,
+                    12: policy_carol_last_1,
+                    13: policy_carol_last_1,
+                },
+                block_height=840_000,
+                channels=[
+                    carol_chan_3,
+                    bob_chan_1,
+                    bob_chan_5,  # Channel has no policy
+                    carol_chan_2,
+                    bob_chan_2,
+                    carol_chan_1,
+                ],  # Mixing the order
+                #
+                # Expected result here
+                expected_result=ERPidAggregator(
+                    target_default=11_000_000 / 18.5,  # 11M / 18.5M * 1e6
+                    channel_collection={
+                        "bob": ERPidChannelCollection(
+                            # channel 5 is skipped because of missing policy
+                            liquidity_out=2_000_000,  # 1M + 1M
+                            liquidity_in=6_000_000,  # 3M +3M
+                            private_only=False,
+                            ref_fee_rate=100,
+                            ref_fee_rate_last=100,
+                            ref_fee_rate_changed=False,
+                            chan_ids=[1, 2],
+                        ),
+                        "carol": ERPidChannelCollection(
+                            liquidity_out=5_500_000,  # 2M + 1M + 2.5M = 5.5M
+                            liquidity_in=5_000_000,  # 0 + 2M + 3M = 5M
+                            private_only=False,  # One channel is public
+                            ref_fee_rate=400,
+                            ref_fee_rate_last=400,
+                            ref_fee_rate_changed=False,
+                            chan_ids=[
+                                11,
+                                12,
+                                13,
+                            ],
+                        ),
+                    },
+                ),
+            )
+        )
+
+        self.testcases_aggregator.append(
+            TCasePidAggregator(
+                name="19",
+                description="carol with two private and one public channel, bob with two public, one private, private channel has no policy",
+                config=pid_config,
+                policies_last={
+                    1: policy_bob_last_1,
+                    2: policy_bob_last_1,
+                    11: policy_carol_last_1,
+                    12: policy_carol_last_1,
+                    13: policy_carol_last_1,
+                },
+                block_height=840_000,
+                channels=[
+                    carol_chan_3,
+                    bob_chan_1,
+                    bob_chan_6,  # Channel has no policy
+                    carol_chan_2,
+                    bob_chan_2,
+                    carol_chan_1,
+                ],  # Mixing the order
+                #
+                # Expected result here
+                expected_result=ERPidAggregator(
+                    target_default=11_000_000 / 18.5,  # 11M / 18.5M * 1e6
+                    channel_collection={
+                        "bob": ERPidChannelCollection(
+                            # channel 5 is skipped because of missing policy
+                            liquidity_out=2_000_000,  # 1M + 1M
+                            liquidity_in=6_000_000,  # 3M +3M
+                            private_only=False,
+                            ref_fee_rate=100,
+                            ref_fee_rate_last=100,
+                            ref_fee_rate_changed=False,
+                            chan_ids=[1, 2],
+                        ),
+                        "carol": ERPidChannelCollection(
+                            liquidity_out=5_500_000,  # 2M + 1M + 2.5M = 5.5M
+                            liquidity_in=5_000_000,  # 0 + 2M + 3M = 5M
+                            private_only=False,  # One channel is public
+                            ref_fee_rate=400,
+                            ref_fee_rate_last=400,
+                            ref_fee_rate_changed=False,
+                            chan_ids=[
+                                11,
+                                12,
+                                13,
+                            ],
+                        ),
                     },
                 ),
             )
