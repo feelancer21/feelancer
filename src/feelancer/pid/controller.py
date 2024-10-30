@@ -296,7 +296,6 @@ class PidController:
         self.config = config
         self.pid_store = PidStore(db, pubkey_local)
         self.ln_store = LightningStore(db, pubkey_local)
-        self.pubkey_local = pubkey_local
 
         # Fetching the last timestamp from the database
         last_run_id, self.last_timestamp = self.pid_store.pid_run_last()
