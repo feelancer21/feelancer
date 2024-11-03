@@ -39,6 +39,38 @@ PEER_TARGET_UNIT = 1_000_000
 LOG_THRESHOLD = 10
 
 
+def _calc_error(
+    liquidity_in: float, liquidity_out: float, target: float, pub_key: str = ""
+) -> float:
+    """
+    Calculates the error for EwmaController.
+
+    The error is 0 if liquidity_in (normalized in millionths) is at the
+    target. If liquidity_in is higher than the target the error is in the
+    range ]0; 0.5]. And if liquidity_in is lower than the target the error
+    is in the range [-0.5; 0[.
+    """
+
+    liquidity_total = liquidity_in + liquidity_out
+    try:
+        ratio_in = liquidity_in / liquidity_total
+        set_point = target / PEER_TARGET_UNIT
+        logging.debug(f"Set point calculated for {pub_key}; {ratio_in=}; {set_point=}")
+
+        # Interpolate with piecewise linear functions between [-0.5; 0.5]
+        if ratio_in >= set_point:
+            error = 0.5 / (1 - set_point) * (ratio_in - set_point)
+        else:
+            error = 0.5 / set_point * (ratio_in - set_point)
+
+        logging.debug(f"Error calculated for {pub_key}; {error=}")
+    except ZeroDivisionError:
+        error = 0
+        logging.debug(f"Error calculated for {pub_key}; {error=}")
+
+    return error
+
+
 class ReinitRequired(Exception):
     def __init__(self, message="Reinit of Controller required"):
         self.message = message
@@ -145,33 +177,13 @@ class SpreadController:
         if e.k_t != ewma_params.k_t:
             self.ewma_controller.set_k_t(ewma_params.k_t)
 
-        # Next step is the calculation of the error we need for the EwmaController.
-        # The error is 0 if liquidity_in (normalized in millionths) is at the
-        # target. If liquidity_in is higher than the target the error is in the
-        # range ]0; 0.5]. And if liquidity_in is lower than the target the error
-        # is in the range [-0.5; 0[.
-        liquidity_out = channel_collection.liquidity_out
-        liquidity_in = channel_collection.liquidity_in
-
-        liquidity_total = liquidity_in + liquidity_out
-        try:
-            ratio_in = liquidity_in / liquidity_total
-            set_point = target / PEER_TARGET_UNIT
-            logging.debug(
-                f"Set point calculated for {self._pub_key}; {ratio_in=}; "
-                f"{set_point=}"
-            )
-
-            # Interpolate with piecewise linear functions between [-0.5; 0.5]
-            if ratio_in >= set_point:
-                error = 0.5 / (1 - set_point) * (ratio_in - set_point)
-            else:
-                error = 0.5 / set_point * (ratio_in - set_point)
-
-            logging.debug(f"Error calculated for {self._pub_key}; {error=}")
-        except ZeroDivisionError:
-            error = 0
-            logging.error(f"ZeroDivisionError for {self._pub_key}; {error=}")
+        # Calculation of the error for EwmaController, it maps our inbound liquidity
+        # to a value in the range [-0.5; 0.5]
+        error = _calc_error(
+            liquidity_in=channel_collection.liquidity_in,
+            liquidity_out=channel_collection.liquidity_out,
+            target=target,
+        )
 
         # If the reference fee rate of the channels has changed due to manual
         # interventions outside of the controller, we have to reset the control
