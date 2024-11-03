@@ -14,7 +14,6 @@ from feelancer.pid.data import EwmaControllerParams, MrControllerParams
 class EwmaCall:
     time_delta: int
     error: float
-    result: float
 
 
 # initializes an ewma controller with a given start value and calls it
@@ -93,15 +92,15 @@ def test_ewma_1():
     )
 
     ewma_calls = [
-        EwmaCall(3600, 0, 0),
-        EwmaCall(7200, -1 / 8, 0),
-        EwmaCall(10800, -3 / 8, 0),
-        EwmaCall(14400, -4 / 8, 0),
-        EwmaCall(18000, -4 / 8, 0),
-        EwmaCall(18000, -2 / 8, 0),
-        EwmaCall(50400, -2 / 8, 0),
-        EwmaCall(3600, 0, 0),
-        EwmaCall(529200, 0, 0),
+        EwmaCall(3600, 0),
+        EwmaCall(7200, -1 / 8),
+        EwmaCall(10800, -3 / 8),
+        EwmaCall(14400, -4 / 8),
+        EwmaCall(18000, -4 / 8),
+        EwmaCall(18000, -2 / 8),
+        EwmaCall(50400, -2 / 8),
+        EwmaCall(3600, 0),
+        EwmaCall(529200, 0),
     ]
 
     start = 1500
