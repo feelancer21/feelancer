@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 
 from feelancer.lightning.client import Channel, ChannelPolicy
 from feelancer.pid.aggregator import ChannelAggregator, ChannelCollection
+from feelancer.pid.controller import _calc_error
 from feelancer.pid.data import PidConfig, PidSpreadControllerConfig
 
 
@@ -118,6 +119,21 @@ class TCasePidAggregator:
     channels: list[Channel]
 
     expected_result: ERPidAggregator
+
+
+@dataclass
+class TCasePidError:
+    # name of the testcase
+    name: str
+
+    # description of the testcase
+    description: str
+
+    liquidity_in: float
+    liquidity_out: float
+    target: float
+
+    expected_error: float
 
 
 class TestPid(unittest.TestCase):
@@ -1210,3 +1226,74 @@ class TestPid(unittest.TestCase):
         e_col_chan_ids = sorted(e_col.chan_ids)
 
         self.assertEqual(col_chan_ids, e_col_chan_ids, msg)
+
+    def test_calc_error(self):
+        testcases: list[TCasePidError] = []
+
+        testcases.append(
+            TCasePidError(
+                name="1",
+                description="zero liquidity",
+                liquidity_in=0,
+                liquidity_out=0,
+                target=100_000,
+                expected_error=0,
+            )
+        )
+
+        testcases.append(
+            TCasePidError(
+                name="2",
+                description="liquidity_in over target",
+                liquidity_in=4_000_000,
+                liquidity_out=2_000_000,
+                target=400_000,
+                # ratio = 4/6; set_point=4/10 => ratio>set_point
+                # error = 1/2 / (1 - 4/10) * (4/6 - 4/10) + 0
+                #       = 1/2 * 5/3 * 16/60 = 80/360 = 2/9
+                expected_error=2 / 9,
+            )
+        )
+
+        testcases.append(
+            TCasePidError(
+                name="3",
+                description="liquidity_in below target",
+                liquidity_in=1_000_000,
+                liquidity_out=11_000_000,
+                target=400_000,
+                # ratio = 1/12; set_point=4/10 => ratio>set_point
+                # error = 1/2 / (4/10 - 0) * (1/12 - 4/10) + 0
+                #       = 1/2 * 5/2 * (-38)/120 = -190/480 = -19/48
+                expected_error=-19 / 48,
+            )
+        )
+
+        testcases.append(
+            TCasePidError(
+                name="4",
+                description="liquidity_in == 0",
+                liquidity_in=0,
+                liquidity_out=11_000_000,
+                target=400_000,
+                expected_error=-1 / 2,
+            )
+        )
+
+        testcases.append(
+            TCasePidError(
+                name="5",
+                description="liquidity_out == 0",
+                liquidity_in=11_000_000,
+                liquidity_out=0,
+                target=400_000,
+                expected_error=1 / 2,
+            )
+        )
+
+        for t in testcases:
+            msg = f"{t.name=}; {t.description=}"
+            err = _calc_error(t.liquidity_in, t.liquidity_out, t.target)
+
+            # Compare on 7 decimal places
+            self.assertAlmostEqual(err, t.expected_error, None, msg)
