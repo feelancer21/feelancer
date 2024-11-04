@@ -79,7 +79,7 @@ def _is_changed(
 ) -> bool:
     """
     Compares the new value with the old value and returns True if a positive
-    delta is greater equal than min_up and the absolute value of a negative value
+    delta is greater equal than min_up or the absolute value of a negative value
     is greater equal than min_down.
     If a change hits the min/max restriction we also return True.
     """
@@ -127,12 +127,12 @@ def _create_update_policy(
     return res
 
 
-def _orders_proposals_by_peer(
+def _sort_proposals_by_peer(
     proposals: Iterable[PolicyProposal],
 ) -> dict[str, list[PolicyProposal]]:
     """
-    Orders the PolicyProposal and returns a dictionary with pub_key as key and
-    a list of all PolicyProposal as items
+    Sorts the PolicyProposal and returns a dictionary with pub_key as key and
+    a list of all PolicyProposal as items.
     """
 
     res: dict[str, list[PolicyProposal]] = {}
@@ -315,7 +315,7 @@ def update_channel_policies(
     policies.
     """
 
-    props_by_peer = _orders_proposals_by_peer(proposals)
+    props_by_peer = _sort_proposals_by_peer(proposals)
 
     for pub_key, props in props_by_peer.items():
         config = get_peer_config(pub_key)
