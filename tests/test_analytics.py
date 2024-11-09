@@ -1,3 +1,4 @@
+from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from math import exp
@@ -14,6 +15,7 @@ from feelancer.pid.data import EwmaControllerParams, MrControllerParams
 class EwmaCall:
     time_delta: int
     error: float
+    params: EwmaControllerParams | None = None
 
 
 # initializes an ewma controller with a given start value and calls it
@@ -31,6 +33,39 @@ def call_ewma(
     pid.control_variable = start
 
     for call in ewma_calls:
+
+        time += timedelta(seconds=call.time_delta)
+        pid(call.error, time)
+
+    return pid
+
+
+def call_ewma_reinit(start: float, ewma_calls: list[EwmaCall]):
+    """
+    Reinit of the pid before each call with the current EwmaControllerParams
+    of EwmaCall.
+    """
+
+    time = datetime.now(pytz.utc)
+
+    pid = None
+    for call in ewma_calls:
+        if call.params is None:
+            continue
+
+        if pid is not None:
+            # Not first call
+            call.params.control_variable = pid.control_variable
+            call.params.error_delta_residual = pid.error_delta_residual
+            call.params.error_ewma = pid.error_ewma
+        else:
+            # First call
+            call.params.control_variable = start
+
+        pid = EwmaController.from_params(
+            ewma_controller_params=call.params,
+            timestamp_last=time,
+        )
         time += timedelta(seconds=call.time_delta)
         pid(call.error, time)
 
@@ -119,6 +154,12 @@ def test_ewma_1():
     assert ewma_ct.error_ewma == spread_ect.error_ewma
     assert ewma_ct.error_delta_residual == spread_ect.error_delta_residual
     assert ewma_ct.control_variable == spread_ect.control_variable
+
+    for c in ewma_calls:
+        c.params = params
+
+    ewma_ct = call_ewma_reinit(start, ewma_calls)
+    assert ewma_ct.control_variable == expected_cv
 
 
 # Direct calculation of the outcome of the mean reversion controller using the
