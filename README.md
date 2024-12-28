@@ -10,6 +10,8 @@ changes.
 
 ## Installation
 
+⚠️  Tested with Python 3.9 only.
+
 Install the requirements and the project with pip, e.g. in your virtualenv.
 ```
 pip install -r requirements.txt .
