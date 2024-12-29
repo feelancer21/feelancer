@@ -67,6 +67,11 @@ class LNDClient:
         res = {}
 
         for channel in self.lnd.list_channels().channels:
+            # needed because private alias channels have channel ids which are
+            # greater than 8 byte bigint for the db.
+            if channel.private:
+                continue
+
             liq_pending_out, liq_pending_in = _liquidity_pending(channel)
 
             # Remark: Calling get_node_info once would be faster. But then we
