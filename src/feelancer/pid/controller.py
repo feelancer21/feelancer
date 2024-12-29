@@ -425,12 +425,20 @@ class PidController:
         }
 
         # Last step is the (optional) feature for a pinned peer. If a peer is
-        # pinned, you can choice if you want to keep the fee rate or the spread
+        # pinned, you can choose if you want to keep the fee rate or the spread
         # constant at specified pin value for this peer.
         # Then the delta between the pin value and the current value is calculated.
         # This delta is applied as a shift to all spread controllers, which changes
         # the spreads of all controllers about the value.
         if pin_peer := config.pin_peer:
+            # Check if the pinned peer exists in the controller map
+            if pin_peer not in self.spread_controller_map:
+                logging.warning(
+                    f"Pinned peer {pin_peer} not found in active controllers - "
+                    "skipping pin adjustment"
+                )
+                return
+
             pin_controller = self.spread_controller_map[pin_peer]
             peer_config = config.peer_config(pin_peer)
 
