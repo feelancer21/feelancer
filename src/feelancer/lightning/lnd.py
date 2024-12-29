@@ -67,6 +67,13 @@ class LNDClient:
         res = {}
 
         for channel in self.lnd.list_channels().channels:
+
+            # Skipping all channel with a chan_id which is not compatible
+            # to BigInteger.
+            # TODO: Remove it when we move to strings as channel_id in the database.
+            if channel.chan_id >= 2**63:
+                continue
+
             liq_pending_out, liq_pending_in = _liquidity_pending(channel)
 
             # Remark: Calling get_node_info once would be faster. But then we
