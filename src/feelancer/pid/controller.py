@@ -99,9 +99,11 @@ class SpreadController:
         self,
         ewma_params: EwmaControllerParams,
         timestamp_last: datetime | None,
+        pub_key: str,
     ):
         self.target = 0
         self._channel_collection: ChannelCollection | None = None
+        self._pub_key = pub_key
 
         self.ewma_controller = EwmaController.from_params(
             ewma_params,
@@ -154,23 +156,34 @@ class SpreadController:
         try:
             ratio_in = liquidity_in / liquidity_total
             set_point = target / PEER_TARGET_UNIT
+            logging.debug(
+                f"Set point calculated for {self._pub_key}; {set_point=}; " f"{target=}"
+            )
 
             # Interpolate with piecewise linear functions between [-0.5; 0.5]
             if ratio_in >= set_point:
                 error = 0.5 / (1 - set_point) * (ratio_in - set_point)
             else:
                 error = 0.5 / set_point * (ratio_in - set_point)
+
+            logging.debug(f"Error calculated for {self._pub_key}; {error=}")
         except ZeroDivisionError:
             error = 0
+            logging.error(f"ZeroDivisionError for {self._pub_key}; {error=}")
 
         # If the reference fee rate of the channels has changed due to manual
         # interventions outside of the controller, we have to reset the control
         # variable. Otherwise the manual intervention will be overwritten by the
         # controller.
         if channel_collection.ref_fee_rate_changed:
-            self.ewma_controller.control_variable = (
-                channel_collection.ref_fee_rate - margin
+            spread_new = channel_collection.ref_fee_rate - margin
+            logging.debug(
+                f"Reference fee rate changed for {self._pub_key}; "
+                f"set control variable to {spread_new=}; "
+                f"{channel_collection.ref_fee_rate_last=}; "
+                f"{channel_collection.ref_fee_rate=}; {margin=}"
             )
+            self.ewma_controller.control_variable = spread_new
 
         # Now we are able to call the actual ewma controller
         self.ewma_controller(error, timestamp)
@@ -200,16 +213,17 @@ class SpreadController:
         cls,
         ewma_params: EwmaControllerParams,
         history: list[tuple[datetime, EwmaControllerParams, float]],
+        pub_key: str,
     ):
         """
         Initializes a new controller with the provided ewma params and calls
         it for the whole history.
         """
         if len(history) == 0:
-            return cls(ewma_params, None)
+            return cls(ewma_params, None, pub_key)
 
         timestamp_init = history[0][0] - timedelta(seconds=history[0][2])
-        controller = cls(ewma_params, timestamp_init)
+        controller = cls(ewma_params, timestamp_init, pub_key)
 
         for timestamp, params, _ in history:
             controller.ewma_controller(params.error, timestamp)
@@ -301,8 +315,8 @@ class PidController:
 
         self.margin_controller = MarginController(mr_params, self.last_timestamp)
 
-        # Next step is creating of the SpreadControllers for all controllers which
-        # were used in the last run.
+        # Next step is to recreate the SpreadControllers for the peers of the last
+        # run.
         # Controllers for new peers are created in the calling part.
         last_ewma_params = {}
         if last_run_id:
@@ -310,7 +324,7 @@ class PidController:
         self.spread_controller_map: dict[str, SpreadController] = {}
         for pub_key, params in last_ewma_params.items():
             self.spread_controller_map[pub_key] = SpreadController(
-                params, self.last_timestamp
+                params, self.last_timestamp, pub_key
             )
 
     def __call__(
@@ -354,6 +368,10 @@ class PidController:
             channels=ln.channels.values(),
         )
 
+        # The default which is used if there is no target specified.
+        target_default = aggregator.target_default
+        logging.debug(f"{target_default=}")
+
         # We want to remove unused spread controllers at the end. That's why
         # we store current pub keys.
         pub_keys_current = []
@@ -380,10 +398,7 @@ class PidController:
                         params = peer_config.ewma_controller
 
                 spread_controller = self.spread_controller_map[pub_key] = (
-                    SpreadController(
-                        params,
-                        self.last_timestamp,
-                    )
+                    SpreadController(params, self.last_timestamp, pub_key)
                 )
 
             # Now we have a spread controller for each peer and we can prepare
@@ -391,7 +406,7 @@ class PidController:
             # If the alpha parameters have changed since the last run, we get a
             # ReinitRequired error. In this case we initialize a new controller
             # from the start with its whole history,
-            target = peer_config.target or aggregator.target_default
+            target = peer_config.target or target_default
             margin_peer = margin_last + peer_config.margin_idiosyncratic
             call_args = (
                 timestamp_start,
@@ -407,7 +422,9 @@ class PidController:
                 logging.info(f"Reinit required for {pub_key}")
                 history = self.pid_store.ewma_params_by_pub_key(pub_key)
                 spread_controller = self.spread_controller_map[pub_key] = (
-                    SpreadController.from_history(peer_config.ewma_controller, history)
+                    SpreadController.from_history(
+                        peer_config.ewma_controller, history, pub_key
+                    )
                 )
                 spread_controller(*call_args)
 
@@ -425,8 +442,8 @@ class PidController:
         }
 
         # Last step is the (optional) feature for a pinned peer. If a peer is
-        # pinned, you can choice if you want to keep the fee rate or the spread
-        # constant at specified pin value for this peer.
+        # pinned, you can choose if you want to keep the fee rate or the spread
+        # constant at the specified pin value for this peer.
         # Then the delta between the pin value and the current value is calculated.
         # This delta is applied as a shift to all spread controllers, which changes
         # the spreads of all controllers about the value.
