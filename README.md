@@ -8,7 +8,7 @@ be breaking in context of model, configuration and database scheme without provi
 migration scripts. [Documentation](docs/math.md) little outdated due to recent
 changes.
 
-## Application Areas of the Tool
+## Application Areas of the Tool and Disclaimer
 
 Currently, it is still unclear for which areas of fee setting the tool can
 be used. The tool adjusts fees according to predefined parameters. These
@@ -37,11 +37,19 @@ represents an opportunity for rebalancing.
 
 ## Installation
 
-⚠️  Tested with Python 3.9 only.
+⚠️ Tested with Python 3.12.8. The file `requirements.txt` lists all dependencies  
+for this Python version. Using Python 3.12.8, you can install the dependencies  
+with:
 
-Install the requirements and the project with pip, e.g. in your virtualenv.
 ```
 pip install -r requirements.txt .
+```
+
+This can be done in a virtual environment or with a [docker setup](docker_demo).
+If you are using a Python version different from 3.12.8, you can try:
+
+```
+pip install -r base.in .
 ```
 
 ## Getting Started
