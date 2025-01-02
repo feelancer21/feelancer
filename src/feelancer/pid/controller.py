@@ -157,7 +157,8 @@ class SpreadController:
             ratio_in = liquidity_in / liquidity_total
             set_point = target / PEER_TARGET_UNIT
             logging.debug(
-                f"Set point calculated for {self._pub_key}; {set_point=}; " f"{target=}"
+                f"Set point calculated for {self._pub_key}; {ratio_in=}; "
+                f"{set_point=}"
             )
 
             # Interpolate with piecewise linear functions between [-0.5; 0.5]
