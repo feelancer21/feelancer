@@ -43,6 +43,10 @@ test:
 	pytest tests --cov-report xml --cov $(PKG)
 
 make compile:
+	# Could require additional tools to be installed.
+	# Debian: apt install libpq-dev gfortran cmake libopenblas-dev liblapack-dev
+	pip install --upgrade pip
+	pip install pip-tools
 	pip-compile --output-file=requirements.txt base.in
 	pip-compile --output-file=addon-requirements.txt base.in addon.in
 	pip-compile --output-file=dev-requirements.txt base.in addon.in dev.in
