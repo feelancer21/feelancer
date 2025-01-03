@@ -99,7 +99,7 @@ class SpreadController:
         self,
         ewma_params: EwmaControllerParams,
         timestamp_last: datetime | None,
-        pub_key: str,
+        pub_key: str = "",
     ):
         self.target = 0
         self._channel_collection: ChannelCollection | None = None
@@ -214,7 +214,7 @@ class SpreadController:
         cls,
         ewma_params: EwmaControllerParams,
         history: list[tuple[datetime, EwmaControllerParams, float]],
-        pub_key: str,
+        pub_key: str = "",
     ):
         """
         Initializes a new controller with the provided ewma params and calls
