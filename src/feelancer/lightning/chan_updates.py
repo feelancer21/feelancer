@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import copy
 import logging
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import TYPE_CHECKING, Callable, Iterable
+from typing import TYPE_CHECKING
 
 from feelancer.utils import first_some
 

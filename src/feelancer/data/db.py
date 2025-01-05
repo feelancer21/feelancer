@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import TYPE_CHECKING, Callable, Generator, Sequence, Type, TypeVar
+from collections.abc import Callable, Generator, Sequence
+from typing import TYPE_CHECKING, TypeVar
 
 from sqlalchemy import URL, create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
@@ -48,7 +49,7 @@ def _explore_path(path: Sequence, rel_dict: dict[str, dict]) -> dict[str, dict]:
 
 def _create_dict_gen_call(
     qry: Select[tuple[T]],
-) -> Callable[[Sequence], Generator[dict, None, None]]:
+) -> Callable[[Sequence], Generator[dict]]:
     """
     Given a query, this function returns a callable which generates dictionaries
     resolving all fields including the joinedload data.
@@ -67,7 +68,7 @@ def _create_dict_gen_call(
         path: Sequence = o.path  # type: ignore
         relations |= _explore_path(path, relations)
 
-    def func(result: Sequence[T]) -> Generator[dict, None, None]:
+    def func(result: Sequence[T]) -> Generator[dict]:
         for r in result:
             yield _fields_to_dict(r, relations)
 
@@ -79,7 +80,7 @@ class FeelancerDB:
         self.engine = create_engine(url_database)
         self.session = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
 
-    def create_base(self, base: Type[DeclarativeBase]):
+    def create_base(self, base: type[DeclarativeBase]):
         base.metadata.create_all(bind=self.engine)
 
     @classmethod
@@ -189,9 +190,7 @@ class FeelancerDB:
 
         return self._execute(get_data, to_dict)
 
-    def qry_all_to_field_dict_gen(
-        self, qry: Select[tuple[T]]
-    ) -> Generator[dict, None, None]:
+    def qry_all_to_field_dict_gen(self, qry: Select[tuple[T]]) -> Generator[dict]:
         """
         Executes the query and returns a generator of dictionaries. Each dict
         contains all fields as key value pairs, including the joined load data.

@@ -1,5 +1,6 @@
+from collections.abc import Callable
+
 import streamlit as st
-from typing_extensions import Callable
 
 from feelancer.addon.streamlit import ewma_data, ewma_simulator
 

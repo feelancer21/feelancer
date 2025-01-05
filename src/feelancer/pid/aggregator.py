@@ -8,7 +8,8 @@ used if no target is specified in the config.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Generator, Iterable
+from collections.abc import Generator, Iterable
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from feelancer.lightning.client import Channel, ChannelPolicy
@@ -153,7 +154,7 @@ class ChannelCollection:
             return True
         return ref != self.ref_fee_rate
 
-    def pid_channels(self) -> Generator[Channel, None, None]:
+    def pid_channels(self) -> Generator[Channel]:
         """
         Generates all channels which are relevant for the pid model.
         """
@@ -164,8 +165,7 @@ class ChannelCollection:
         if not self._pid_channels:
             self._pid_channels = self._get_pid_channels()
 
-        for channel in self._pid_channels:
-            yield channel
+        yield from self._pid_channels
 
     def _get_pid_channels(self) -> list[Channel]:
         """
@@ -265,16 +265,15 @@ class ChannelAggregator:
 
         col.add_channel(channel, policy_last)
 
-    def pid_channels(self) -> Generator[Channel, None, None]:
+    def pid_channels(self) -> Generator[Channel]:
         """
         Generates all channels which are relevant for the pid model.
         """
 
         for col in self.channel_collections.values():
-            for channel in col.pid_channels():
-                yield channel
+            yield from col.pid_channels()
 
-    def pid_collections(self) -> Generator[tuple[str, ChannelCollection], None, None]:
+    def pid_collections(self) -> Generator[tuple[str, ChannelCollection]]:
         """
         Generates all channel collections which are relevant for the pid model.
         """

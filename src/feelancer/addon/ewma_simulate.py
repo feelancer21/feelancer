@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Generator
 from datetime import datetime, timedelta
-from typing import Generator
 
 import numpy as np
 import pandas as pd
@@ -16,7 +16,7 @@ SEED = 2100000
 
 def _gen_ewma_call_args(
     number_days: int, steps: int, time_0: datetime
-) -> Generator[datetime, None, None]:
+) -> Generator[datetime]:
     """
     Generates the datetimes for the EwmaController calls
     """

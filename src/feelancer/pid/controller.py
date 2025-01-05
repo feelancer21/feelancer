@@ -5,9 +5,10 @@ Defines MarginController, SpreadController and the PidController
 from __future__ import annotations
 
 import logging
+from collections.abc import Generator
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Generator
+from typing import TYPE_CHECKING
 
 from feelancer.lightning.chan_updates import PolicyProposal
 from feelancer.lightning.data import LightningStore
@@ -192,15 +193,14 @@ class SpreadController:
         self.target = target
         self._channel_collection = channel_collection
 
-    def channels(self) -> Generator[Channel, None, None]:
+    def channels(self) -> Generator[Channel]:
         """
         Yields all channels associated with this controller.
         """
         if not self._channel_collection:
             return None
 
-        for channel in self._channel_collection.pid_channels():
-            yield channel
+        yield from self._channel_collection.pid_channels()
 
     @property
     def spread(self) -> float:
@@ -248,7 +248,7 @@ def yield_pid_results(
     margin_controller: MarginController,
     spread_controller: SpreadController,
     margin_idiosyncratic: float,
-) -> Generator[PidResult, None, None]:
+) -> Generator[PidResult]:
     """
     Yields the pid results per channel for a pair of margin controller and
     spread controller.
@@ -613,9 +613,7 @@ class PidController:
 
     def _yield_results(
         self, ln_session: LightningSessionCache
-    ) -> Generator[
-        DBPidMarginController | DBPidSpreadController | DBPidResult, None, None
-    ]:
+    ) -> Generator[DBPidMarginController | DBPidSpreadController | DBPidResult]:
         """
         Generates all sqlalchemy objects with the results of the last call of
         the PidController.

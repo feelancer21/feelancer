@@ -331,7 +331,7 @@ class MrController:
         if not self._last_time:
             dt = DEFAULT_TIME_DELTA
         elif (dt := (timestamp.timestamp() - self._last_time)) <= 0:
-            raise ValueError("dt has negative value {}, must be positive".format(dt))
+            raise ValueError(f"dt has negative value {dt}, must be positive")
 
         lambda_m = _lambda(self.alpha, dt)
 

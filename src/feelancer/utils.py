@@ -4,9 +4,10 @@ import logging
 import os
 import signal
 import threading
+from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass, fields
-from typing import Callable, Type, TypeVar
+from typing import TypeVar
 
 import tomli
 
@@ -22,7 +23,7 @@ U = TypeVar("U")
 
 
 def defaults_from_type(
-    defaults: Type[T], conf: dict | None, exclude: list[str] | None = None
+    defaults: type[T], conf: dict | None, exclude: list[str] | None = None
 ) -> T:
     if conf is None:
         return defaults()
@@ -57,7 +58,7 @@ def defaults_from_instance(
     return res
 
 
-def get_peers_config(cls: Type[T], conf: dict) -> dict[str, T]:
+def get_peers_config(cls: type[T], conf: dict) -> dict[str, T]:
     res: dict[str, T] = {}
 
     res["default"] = default = defaults_from_type(cls, conf.get("default"))

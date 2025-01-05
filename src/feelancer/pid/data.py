@@ -5,9 +5,10 @@ Database interactions for the pid controller.
 from __future__ import annotations
 
 import logging
+from collections.abc import Generator
 from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Generator, TypeVar
+from typing import TYPE_CHECKING, TypeVar
 
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
@@ -550,7 +551,7 @@ class PidDictGen:
     def __init__(self, db: FeelancerDB) -> None:
         self.db = db
 
-    def spread_controller(self) -> Generator[dict, None, None]:
+    def spread_controller(self) -> Generator[dict]:
         """
         Returns a Generator of for DBSpreadController and its joined data.
         """
@@ -559,7 +560,7 @@ class PidDictGen:
 
         return self.db.qry_all_to_field_dict_gen(qry)
 
-    def margin_controller(self) -> Generator[dict, None, None]:
+    def margin_controller(self) -> Generator[dict]:
         """
         Returns a Generator of for DBMarginController and its joined data.
         """
