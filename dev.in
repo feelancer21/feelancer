@@ -9,3 +9,4 @@ pyright
 isort
 eralchemy2
 pip-tools
+pyupgrade
