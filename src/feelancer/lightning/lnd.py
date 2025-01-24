@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 from feelancer.lightning.client import Channel, ChannelPolicy
 from feelancer.lightning.utils import opening_height
-from feelancer.lnd.client import update_failure_name
+from feelancer.lnd.client import EdgeNotFound, update_failure_name
 
 if TYPE_CHECKING:
     from feelancer.lnd.client import LndGrpc
@@ -72,13 +72,20 @@ class LNDClient:
             # to BigInteger.
             # TODO: Remove it when we move to strings as channel_id in the database.
             if channel.chan_id >= 2**63:
+                logging.error(
+                    f"Skipping {channel.chan_id=} because chan_id is too large"
+                )
                 continue
-
-            liq_pending_out, liq_pending_in = _liquidity_pending(channel)
 
             # Remark: Calling get_node_info once would be faster. But then we
             # still need get_chan_info for private channels.
-            p_local, p_remote = self.get_channel_policies(channel.chan_id)
+            try:
+                p_local, p_remote = self.get_channel_policies(channel.chan_id)
+            except EdgeNotFound as e:
+                logging.error(f"Skipping {channel.chan_id=} because of '{e}'")
+                continue
+
+            liq_pending_out, liq_pending_in = _liquidity_pending(channel)
 
             res[channel.chan_id] = Channel(
                 chan_id=channel.chan_id,
