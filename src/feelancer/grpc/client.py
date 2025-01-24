@@ -14,23 +14,38 @@ DEFAULT_MAX_CONNECTION_IDLE_MS = 30000
 os.environ["GRPC_SSL_CIPHER_SUITES"] = "HIGH+ECDSA"
 
 
+def default_on_rpc_error(e: grpc.RpcError) -> None:
+    """
+    Default error handling for rpc errors.
+    """
+
+    code = e.code()  # type: ignore
+    details = e.details()  # type: ignore
+    msg = f"RpcError code: {code}; details: {details}"
+    logging.error(msg)
+    logging.debug(e)
+    raise e
+
+
+def default_on_error(e: Exception) -> None:
+    """
+    Default error handling for exceptions.
+    """
+
+    msg = f"unexpected error during rpc call: {e}"
+    logging.error(msg)
+    raise e
+
+
 class RpcResponseHandler:
-    def __init__(self):
-        def on_rpc_error(e: grpc.RpcError) -> None:
-            code = e.code()  # type: ignore
-            details = e.details()  # type: ignore
-            msg = f"RpcError code: {code}; details: {details}"
-            logging.error(msg)
-            logging.debug(e)
-            raise e
+    def __init__(
+        self,
+        on_rpc_error: Callable[[grpc.RpcError], None] = default_on_rpc_error,
+        on_error: Callable[[Exception], None] = default_on_error,
+    ):
 
-        def on_error(e: Exception) -> None:
-            msg = f"unexpected error during rpc call: {e}"
-            logging.error(msg)
-            raise e
-
-        self.on_rpc_error: Callable[[grpc.RpcError], None] = on_rpc_error
-        self.on_error: Callable[[Exception], None] = on_error
+        self.on_rpc_error = on_rpc_error
+        self.on_error = on_error
 
     def handle_rpc_errors(self, fnc):
         """Decorator to add more context to RPC errors"""
