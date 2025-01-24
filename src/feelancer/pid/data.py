@@ -4,6 +4,7 @@ Database interactions for the pid controller.
 
 from __future__ import annotations
 
+import logging
 from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Generator, TypeVar
@@ -402,6 +403,27 @@ class PidConfig:
 
         except Exception as e:
             raise ValueError(f"Cannot parse section 'pid.pin': {e}")
+
+        self.spread_level_max_deviation_ppm: float = 0
+        try:
+            if spread_level_conf := conf_copy.get("spread_level"):
+                self.spread_level_params = EwmaControllerParams(
+                    k_p=float(spread_level_conf["k_p"])
+                )
+                self.spread_level_max_deviation_ppm = float(
+                    spread_level_conf["max_deviation_ppm"]
+                )
+                if self.spread_level_max_deviation_ppm <= 0:
+                    raise ValueError("'max_deviation_ppm' must be a positive")
+
+                if self.pin_peer is not None:
+                    logging.warning(
+                        "Not possible to pin a peer when spread_level is set"
+                    )
+                    self.pin_peer = None
+
+        except Exception as e:
+            raise ValueError(f"Cannot parse section 'pid.spread_level': {e}")
 
     def peer_config(self, pub_key: str) -> PidSpreadControllerConfig:
         if not (peer_config := self.peers.get(pub_key)):
