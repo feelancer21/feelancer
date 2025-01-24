@@ -19,8 +19,8 @@ def default_on_rpc_error(e: grpc.RpcError) -> None:
     Default error handling for rpc errors.
     """
 
-    code = e.code()  # type: ignore
-    details = e.details()  # type: ignore
+    code: grpc.StatusCode = e.code()  # type: ignore
+    details: str = e.details()  # type: ignore
     msg = f"RpcError code: {code}; details: {details}"
     logging.error(msg)
     logging.debug(e)

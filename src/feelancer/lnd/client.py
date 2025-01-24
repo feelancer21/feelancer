@@ -1,11 +1,39 @@
 from __future__ import annotations
 
+import logging
+
+import grpc
+
 from feelancer.grpc.client import RpcResponseHandler, SecureGrpcClient
 
 from .grpc_generated import lightning_pb2 as ln
 from .grpc_generated import lightning_pb2_grpc as lnrpc
 
-lnd_resp_handler = RpcResponseHandler()
+
+class EdgeNotFound(Exception):
+    def __init__(self):
+        super().__init__("edge not found")
+
+
+def lnd_on_rpc_error(e: grpc.RpcError) -> None:
+    """
+    Customized error handling for lnd rpc errors.
+    """
+
+    code: grpc.StatusCode = e.code()  # type: ignore
+    details: str = e.details()  # type: ignore
+
+    if code.name == "UNKNOWN":
+        if details == "edge not found":
+            raise EdgeNotFound
+
+    msg = f"RpcError code: {code}; details: {details}"
+    logging.error(msg)
+    logging.debug(e)
+    raise e
+
+
+lnd_resp_handler = RpcResponseHandler(on_rpc_error=lnd_on_rpc_error)
 lnd_handle_rpc_errors = lnd_resp_handler.handle_rpc_errors
 
 
