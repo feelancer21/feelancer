@@ -1,99 +1,40 @@
 from __future__ import annotations
 
-import codecs
 import logging
-import os
-from functools import wraps
-from typing import Callable
 
 import grpc
+
+from feelancer.grpc.client import RpcResponseHandler, SecureGrpcClient
 
 from .grpc_generated import lightning_pb2 as ln
 from .grpc_generated import lightning_pb2_grpc as lnrpc
 
-DEFAULT_MESSAGE_SIZE_MB = 50 * 1024 * 1024
-DEFAULT_MAX_CONNECTION_IDLE_MS = 30000
 
-os.environ["GRPC_SSL_CIPHER_SUITES"] = "HIGH+ECDSA"
-
-
-class RpcResponseHandler:
+class EdgeNotFound(Exception):
     def __init__(self):
-        def on_rpc_error(e: grpc.RpcError) -> None:
-            code = e.code()  # type: ignore
-            details = e.details()  # type: ignore
-            msg = f"RpcError code: {code}; details: {details}"
-            logging.error(msg)
-            logging.debug(e)
-            raise e
-
-        def on_error(e: Exception) -> None:
-            msg = f"unexpected error during rpc call: {e}"
-            logging.error(msg)
-            raise e
-
-        self.on_rpc_error: Callable[[grpc.RpcError], None] = on_rpc_error
-        self.on_error: Callable[[Exception], None] = on_error
-
-    def handle_rpc_errors(self, fnc):
-        """Decorator to add more context to RPC errors"""
-
-        @wraps(fnc)
-        def wrapper(*args, **kwargs):
-            try:
-                return fnc(*args, **kwargs)
-            except grpc.RpcError as e:
-                self.on_rpc_error(e)
-            except Exception as e:
-                self.on_error(e)
-
-        return wrapper
+        super().__init__("edge not found")
 
 
-resp_handler = RpcResponseHandler()
-handle_rpc_errors = resp_handler.handle_rpc_errors
+def lnd_on_rpc_error(e: grpc.RpcError) -> None:
+    """
+    Customized error handling for lnd rpc errors.
+    """
+
+    code: grpc.StatusCode = e.code()  # type: ignore
+    details: str = e.details()  # type: ignore
+
+    if code.name == "UNKNOWN":
+        if details == "edge not found":
+            raise EdgeNotFound
+
+    msg = f"RpcError code: {code}; details: {details}"
+    logging.error(msg)
+    logging.debug(e)
+    raise e
 
 
-class MacaroonMetadataPlugin(grpc.AuthMetadataPlugin):
-    """Metadata plugin to include macaroon in metadata of each RPC request"""
-
-    def __init__(self, macaroon):
-        self.macaroon = macaroon
-
-    def __call__(self, context, callback):
-        callback([("macaroon", self.macaroon)], None)
-
-
-class SecureGrpc:
-    def __init__(self, ip_address: str, credentials: grpc.ChannelCredentials):
-        self.channel_options = [
-            ("grpc.max_message_length", DEFAULT_MESSAGE_SIZE_MB),
-            ("grpc.max_receive_message_length", DEFAULT_MESSAGE_SIZE_MB),
-            ("grpc.max_connection_idle_ms", DEFAULT_MAX_CONNECTION_IDLE_MS),
-        ]
-        self.ip_address = ip_address
-        self._credentials = credentials
-
-    @classmethod
-    def from_file(cls, ip_address: str, cert_filepath: str, macaroon_filepath: str):
-        tls_certificate = open(cert_filepath, "rb").read()
-        ssl_credentials = grpc.ssl_channel_credentials(tls_certificate)
-
-        macaroon = codecs.encode(open(macaroon_filepath, "rb").read(), "hex")
-
-        metadata_plugin = MacaroonMetadataPlugin(macaroon)
-        auth_credentials = grpc.metadata_call_credentials(metadata_plugin)
-
-        combined_credentials = grpc.composite_channel_credentials(
-            ssl_credentials, auth_credentials
-        )
-        return cls(ip_address, combined_credentials)
-
-    @property
-    def _channel(self):
-        return grpc.secure_channel(
-            self.ip_address, self._credentials, self.channel_options
-        )
+lnd_resp_handler = RpcResponseHandler(on_rpc_error=lnd_on_rpc_error)
+lnd_handle_rpc_errors = lnd_resp_handler.handle_rpc_errors
 
 
 def set_chan_point(chan_point_str: str, chan_point: ln.ChannelPoint) -> None:
@@ -104,7 +45,7 @@ def set_chan_point(chan_point_str: str, chan_point: ln.ChannelPoint) -> None:
     chan_point.output_index = int(out_index)
 
 
-class LndGrpc(SecureGrpc):
+class LndGrpc(SecureGrpcClient):
     @property
     def _ln_stub(self) -> lnrpc.LightningStub:
         """
@@ -118,6 +59,7 @@ class LndGrpc(SecureGrpc):
 
         return lnrpc.LightningStub(self._channel)
 
+    @lnd_handle_rpc_errors
     def get_chan_info(self, chan_id: int) -> ln.ChannelEdge:
         """
         Calls lnrpc.GetChanInfo
@@ -129,7 +71,7 @@ class LndGrpc(SecureGrpc):
         """
         return self._ln_stub.GetChanInfo(ln.ChanInfoRequest(chan_id=chan_id))
 
-    @handle_rpc_errors
+    @lnd_handle_rpc_errors
     def get_info(self) -> ln.GetInfoResponse:
         """
         Calls lnrpc.GetInfo
@@ -141,7 +83,7 @@ class LndGrpc(SecureGrpc):
 
         return self._ln_stub.GetInfo(ln.GetInfoRequest())
 
-    @handle_rpc_errors
+    @lnd_handle_rpc_errors
     def get_node_info(
         self, pub_key: str, include_channels: bool = False
     ) -> ln.NodeInfo:
@@ -155,7 +97,7 @@ class LndGrpc(SecureGrpc):
         req = ln.NodeInfoRequest(pub_key=pub_key, include_channels=include_channels)
         return self._ln_stub.GetNodeInfo(req)
 
-    @handle_rpc_errors
+    @lnd_handle_rpc_errors
     def list_channels(self) -> ln.ListChannelsResponse:
         """
         Calls lnrpc.ListChannels
@@ -166,7 +108,7 @@ class LndGrpc(SecureGrpc):
 
         return self._ln_stub.ListChannels(ln.ListChannelsRequest())
 
-    @handle_rpc_errors
+    @lnd_handle_rpc_errors
     def update_channel_policy(
         self,
         base_fee_msat: int,
