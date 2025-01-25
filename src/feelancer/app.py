@@ -40,7 +40,7 @@ def app():
         config = read_config_file(config_file)
 
         set_logger(config.get("logging"))
-        logging.info("Feelancer starting...")
+        logging.info(f"Feelancer {__version__=} starting...")
 
         runner = TaskRunner(config_file)
 

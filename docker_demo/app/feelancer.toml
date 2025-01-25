@@ -97,10 +97,26 @@ max_age_new_channels = 144
 
 
 [pid.pin]
+# Optional feature. If a peer is pinned, you can choose whether you want to keep
+# the fee rate or the spread constant at the specified pin value for this peer.
+# Then the delta between the pin value and the current value is calculated.
+# This delta is applied as a shift to all spread controllers, which changes
+# the spreads of all controllers about the value.
 peer = "026165850492521f4ac8abd9bd8088123446d126f648ca35e60f88177dc149ceb2"
 # 'fee_rate' or 'spread'
 method = "spread"
 value = 84
+
+
+[pid.spread_level]
+# Optional and experimental feature. A spread level controller is a simple ewma
+# controller set up with k_p only.
+# It uses as error function the difference between the average spread rate 
+# (remote liquidity weighted) and average spread rate (target weighted).
+# The difference is bounded by +/- max_deviation_ppm and normed 
+# by 2 * max_deviation_ppm. Hence we receive an error in the range [-0.5, 0.5].
+k_p = 20
+max_deviation_ppm = 200
 
 
 [pid.margin]

@@ -328,6 +328,8 @@ class PidController:
                 params, self.last_timestamp, pub_key
             )
 
+        self.spread_level_controller: EwmaController | None = None
+
     def __call__(
         self, config: PidConfig, ln: LightningCache, timestamp_start: datetime
     ) -> None:
@@ -442,19 +444,19 @@ class PidController:
             k: v for k, v in self.spread_controller_map.items() if k in pub_keys_current
         }
 
-        # Last step is the (optional) feature for a pinned peer. If a peer is
+        # Pre last step is the (optional) feature for a pinned peer. If a peer is
         # pinned, you can choose if you want to keep the fee rate or the spread
         # constant at the specified pin value for this peer.
         # Then the delta between the pin value and the current value is calculated.
         # This delta is applied as a shift to all spread controllers, which changes
         # the spreads of all controllers about the value.
+        shift = 0
         if (pin_peer := config.pin_peer) is not None:
             pin_controller = self.spread_controller_map.get(pin_peer)
 
             if pin_controller is not None:
                 peer_config = config.peer_config(pin_peer)
 
-                shift = 0
                 if config.pin_method == "fee_rate":
                     shift = config.pin_value - (
                         self.margin_controller.margin
@@ -464,9 +466,104 @@ class PidController:
                 elif config.pin_method == "spread":
                     shift = config.pin_value - pin_controller.spread
 
-                logging.info(f"Shifting spread controllers by {shift}")
-                for c in self.spread_controller_map.values():
-                    c.ewma_controller.apply_shift(shift)
+        # Experimental feature of a spread level controller. It is a simple ewma
+        # controller set up with k_p only.
+        # It uses as error function the difference between the average spread rate
+        # (remote liquidity weighted) and average spread rate (target weighted).
+        # The difference is bounded by +/- max_deviation_ppm and normed
+        # by 2 * max_deviation_ppm. Hence we receive an error in the range [-0.5, 0.5].
+        # TODO: Setup a full ewma controller when we know this is the way to go.
+
+        if (max_dev := config.spread_level_max_deviation_ppm) > 0:
+
+            # sum of spread rate * target
+            sum_target_weighted: float = 0
+            # sum of target
+            sum_target: float = 0
+            # sum of spread rate * remote liquidity
+            sum_remote_weighted: float = 0
+            # sum of remote liquidity
+            sum_remote: float = 0
+
+            margin = self.margin_controller.margin
+
+            for c in self.spread_controller_map.values():
+                if (col := c._channel_collection) is None:
+                    continue
+
+                # We floor the spread by the negative margin, to avoid the usage
+                # of high negative spreads.
+                spread = max(c.spread, -margin)
+
+                liq_remote = col.liquidity_in
+                liq_local = col.liquidity_out
+
+                target_value = (liq_local + liq_remote) * c.target / PEER_TARGET_UNIT
+
+                sum_target_weighted += spread * target_value
+                sum_target += target_value
+                sum_remote_weighted += spread * liq_remote
+                sum_remote += liq_remote
+
+            try:
+                avg_spread_target = sum_target_weighted / sum_target
+                avg_spread_remote = sum_remote_weighted / sum_remote
+                spread_diff_bounded = spread_diff = (
+                    avg_spread_remote - avg_spread_target
+                )
+
+                if spread_diff > max_dev:
+                    spread_diff_bounded = max_dev
+                elif spread_diff < -max_dev:
+                    spread_diff_bounded = -max_dev
+
+                error = spread_diff_bounded / (2 * max_dev)
+                logging.debug(
+                    f"Error calculated for spread level controller: "
+                    f"{avg_spread_target=}, {avg_spread_remote=}, {spread_diff=}, "
+                    f"{max_dev=}, {spread_diff_bounded=}, {error=}"
+                )
+            except ZeroDivisionError:
+                logging.error(
+                    "ZeroDivisionError during calculation of spread "
+                    "level controller error"
+                )
+                error = 0
+
+            # If not set init a new EwmaController. Because it uses only a
+            # proportional component we don't have to care about the starting
+            # values for the ewmas.
+            if self.spread_level_controller is None:
+                self.spread_level_controller = EwmaController.from_params(
+                    config.spread_level_params,
+                    self.last_timestamp,
+                )
+
+                # Workaround: We set the error after init to the current error to
+                # avoid a linear interpolation between 0 and the current after
+                # each restart. We can remove it, when we store the historic
+                # errors in the database.
+                self.spread_level_controller.error = error
+
+            # Maybe k_p has changed since the last run
+            self.spread_level_controller.set_k_p(config.spread_level_params.k_p)
+
+            # Call the controller
+            self.spread_level_controller(error=error, timestamp=timestamp_start)
+            shift = self.spread_level_controller.gain
+            logging.debug(
+                f"Called spread level controller: {timestamp_start=}, "
+                f"spread level controller: {config.spread_level_params}, {shift=}"
+            )
+
+        else:
+            # Reset the spread level controller if not needed.
+            self.spread_level_controller = None
+
+        if shift != 0:
+            logging.debug(f"Shifting spread controllers by {shift}")
+            for c in self.spread_controller_map.values():
+                c.ewma_controller.apply_shift(shift)
 
         self.last_timestamp = timestamp_start
 
