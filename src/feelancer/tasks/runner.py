@@ -47,6 +47,12 @@ class TaskRunner:
         # Init of a scheduler. Configuration will be done in the start function.
         self.scheduler = BlockingScheduler()
 
+        # Is 'True' if the listener is running.
+        self.listener_running: bool = False
+
+        # Lock to check and set listener_running atomic when starting a new listener.
+        self.listener_lock = threading.Lock()
+
         # Setting up a scheduler which call self._run in an interval of
         # self.seconds.
         config = FeelancerConfig(self.config_dict)
@@ -201,23 +207,37 @@ class TaskRunner:
 
         # Starts the run and resets objects in the case of an unexpected error,
         # e.g. db loss.
-        def run_wrapper(event: Event) -> None:
+        def listener_wrapper(event: Event) -> None:
+            # We check if there is a running listener and return early if this is the
+            # case. To be safe we lock the runner.
+            with self.listener_lock:
+                is_running = self.listener_running
+                self.listener_running = True
+
+            if is_running:
+                logging.warning(
+                    "There is a running listener which prevents the start of a new one."
+                )
+                return None
+
             try:
-                return self._run(event.scheduled_run_time.astimezone(pytz.utc))  # type: ignore
+                self._run(event.scheduled_run_time.astimezone(pytz.utc))  # type: ignore
             except Exception:
                 logging.exception("An unexpected error occurred")
                 self._reset()
+            finally:
+                self.listener_running = False
 
         # We want to start the run with the scheduled_run_time, to avoid
         # problems with broken delta_times.
         # That's why we add a job which actually does nothing and is executed
         # in an interval of self.seconds. After the job is executed the
-        # run_wrapper is called with the event. The run_wrapper starts the
+        # listener_wrapper is called with the event. The wrapper starts the
         # actual run.
         self.job = self.scheduler.add_job(
             lambda: None, IntervalTrigger(seconds=self.seconds)
         )
-        self.scheduler.add_listener(run_wrapper, EVENT_JOB_EXECUTED)
+        self.scheduler.add_listener(listener_wrapper, EVENT_JOB_EXECUTED)
 
         # We add a callable as listener to release the lock when the scheduler
         # is started.
