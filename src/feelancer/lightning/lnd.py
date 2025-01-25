@@ -73,7 +73,7 @@ class LNDClient:
             # TODO: Remove it when we move to strings as channel_id in the database.
             if channel.chan_id >= 2**63:
                 logging.error(
-                    f"Skipping {channel.chan_id=} because chan_id is too large"
+                    f"Skipping {channel.channel_point=} because chan_id is too large"
                 )
                 continue
 
@@ -82,7 +82,7 @@ class LNDClient:
             try:
                 p_local, p_remote = self.get_channel_policies(channel.chan_id)
             except EdgeNotFound as e:
-                logging.error(f"Skipping {channel.chan_id=} because of '{e}'")
+                logging.error(f"Skipping {channel.channel_point=} because of '{e}'")
                 continue
 
             liq_pending_out, liq_pending_in = _liquidity_pending(channel)
