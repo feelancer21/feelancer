@@ -15,7 +15,7 @@ os.environ["GRPC_SSL_CIPHER_SUITES"] = "HIGH+ECDSA"
 
 
 def _create_rpc_error_handler(
-    eval_status: Callable[[grpc.StatusCode, str], None] | None = None
+    eval_status: Callable[[grpc.StatusCode, str], bool] | None = None
 ) -> Callable[[grpc.RpcError], None]:
     """
     Creates an RPC error handler that logs the error and optionally calls a
@@ -26,12 +26,22 @@ def _create_rpc_error_handler(
         code: grpc.StatusCode = e.code()  # type: ignore
         details: str = e.details()  # type: ignore
 
-        if eval_status is not None:
-            eval_status(code, details)
-
         msg = f"RpcError code: {code}; details: {details}"
+        if eval_status is not None:
+
+            # If the eval function returns True, we raise the original grpc error
+            if eval_status(code, details) is True:
+                logging.error(msg)
+                raise e
+
+        # We raise the exception for other known errors.
         logging.error(msg)
-        logging.debug(e)
+        if code == grpc.StatusCode.UNAVAILABLE:
+            raise e
+
+        # For unknown errors we log the exception, hence it must not be done
+        # by the caller.
+        logging.exception(e)
         raise e
 
     return rpc_error_handler
@@ -73,7 +83,7 @@ class RpcResponseHandler:
 
     @classmethod
     def with_eval_status(
-        cls, eval_status: Callable[[grpc.StatusCode, str], None]
+        cls, eval_status: Callable[[grpc.StatusCode, str], bool]
     ) -> RpcResponseHandler:
         """Creates an RpcResponseHandler that utilizes a specific evaluation
         function to handle service specific RPC errors.

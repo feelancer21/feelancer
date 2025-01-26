@@ -5,6 +5,7 @@ import threading
 from datetime import datetime
 from typing import TYPE_CHECKING, Callable
 
+import grpc
 import pytz
 from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_SCHEDULER_STARTED
 from apscheduler.schedulers.blocking import BlockingScheduler, Event
@@ -222,6 +223,9 @@ class TaskRunner:
 
             try:
                 self._run(event.scheduled_run_time.astimezone(pytz.utc))  # type: ignore
+            except grpc.RpcError:
+                # Rpc Errors are logged before, but the objects has to be reset.
+                self._reset()
             except Exception:
                 logging.exception("An unexpected error occurred")
                 self._reset()
