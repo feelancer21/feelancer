@@ -41,6 +41,11 @@ class FeelancerConfig:
             else:
                 self.tasks_config[task] = task_config
 
+        if (max_failed := config_feelancer.get("max_listener_attempts")) is None:
+            self.max_listener_attempts = 5
+        else:
+            self.max_listener_attempts = max_failed
+
     def peer_config(self, pub_key: str) -> FeelancerPeersConfig:
         if not (peer_config := self.peers.get(pub_key)):
             peer_config = self.peers["default"]
