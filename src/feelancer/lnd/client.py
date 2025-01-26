@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import logging
-
 import grpc
 
 from feelancer.grpc.client import RpcResponseHandler, SecureGrpcClient
@@ -11,29 +9,34 @@ from .grpc_generated import lightning_pb2_grpc as lnrpc
 
 
 class EdgeNotFound(Exception):
-    def __init__(self):
-        super().__init__("edge not found")
+    def __init__(self, message: str):
+        super().__init__(message)
 
 
-def lnd_on_rpc_error(e: grpc.RpcError) -> None:
+def _eval_lnd_rpc_status(code: grpc.StatusCode, details: str) -> bool:
     """
-    Customized error handling for lnd rpc errors.
+    Callable which evaluates lnd specific grpc error based on StatusCode and
+    details. If a criteria is matched, a specific exception is raised or True
+    is returned. If no criteria is matched False is returned.
     """
 
-    code: grpc.StatusCode = e.code()  # type: ignore
-    details: str = e.details()  # type: ignore
+    edge_not_found = "edge not found"
+    wallet_unlocked = "wallet locked, unlock it to enable full RPC access"
+    wrong_macaroon = "verification failed: signature mismatch after caveat verification"
 
-    if code.name == "UNKNOWN":
+    if code == grpc.StatusCode.UNKNOWN:
         if details == "edge not found":
-            raise EdgeNotFound
+            raise EdgeNotFound(edge_not_found)
 
-    msg = f"RpcError code: {code}; details: {details}"
-    logging.error(msg)
-    logging.debug(e)
-    raise e
+        # Caller should raise the original exception if the wallet is unlocked
+        # or the macaroon is wrong.
+        if details in [wallet_unlocked, wrong_macaroon]:
+            return True
+
+    return False
 
 
-lnd_resp_handler = RpcResponseHandler(on_rpc_error=lnd_on_rpc_error)
+lnd_resp_handler = RpcResponseHandler.with_eval_status(_eval_lnd_rpc_status)
 lnd_handle_rpc_errors = lnd_resp_handler.handle_rpc_errors
 
 

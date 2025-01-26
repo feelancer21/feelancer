@@ -5,6 +5,7 @@ import threading
 from datetime import datetime
 from typing import TYPE_CHECKING, Callable
 
+import grpc
 import pytz
 from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_SCHEDULER_STARTED
 from apscheduler.schedulers.blocking import BlockingScheduler, Event
@@ -34,6 +35,8 @@ class TaskRunner:
         self.config_dict = read_config_file(self.config_file)
         self.lnclient: LightningClient
 
+        config = FeelancerConfig(self.config_dict)
+
         # Lock to prevent a race between start() and stop(). The stop can only
         # be executed when the scheduler is running. If the start of the
         # scheduler hasn't finished, the runner cannot be stopped.
@@ -53,9 +56,12 @@ class TaskRunner:
         # Lock to check and set listener_running atomic when starting a new listener.
         self.listener_lock = threading.Lock()
 
+        # Counter for attempted listener starts
+        self.listener_attempts: int = 0
+        self.max_listener_attempts = config.max_listener_attempts
+
         # Setting up a scheduler which call self._run in an interval of
         # self.seconds.
-        config = FeelancerConfig(self.config_dict)
         self.seconds = config.seconds
 
     def _update_config_dict(self) -> None:
@@ -214,14 +220,26 @@ class TaskRunner:
                 is_running = self.listener_running
                 self.listener_running = True
 
+            self.listener_attempts += 1
             if is_running:
                 logging.warning(
                     "There is a running listener which prevents the start of a new one."
                 )
+                # It acts like a timeout for pending listener jobs.
+                if self.listener_attempts > self.max_listener_attempts:
+                    logging.error(
+                        f"{self.max_listener_attempts=} exceeded. Killing the scheduler..."
+                    )
+                    self.scheduler.shutdown(wait=False)
+
                 return None
 
             try:
                 self._run(event.scheduled_run_time.astimezone(pytz.utc))  # type: ignore
+                self.listener_attempts = 0
+            except grpc.RpcError:
+                # Rpc Errors are logged before, but the objects has to be reset.
+                self._reset()
             except Exception:
                 logging.exception("An unexpected error occurred")
                 self._reset()
@@ -249,6 +267,10 @@ class TaskRunner:
 
         logging.info("Scheduler starting...")
         self.scheduler.start()
+
+        # Signal to the caller that the end of the scheduler was not gracefully.
+        if self.listener_attempts > self.max_listener_attempts:
+            raise Exception(f"{self.max_listener_attempts=} exceeded")
 
     def stop(self) -> None:
         """

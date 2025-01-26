@@ -14,22 +14,42 @@ DEFAULT_MAX_CONNECTION_IDLE_MS = 30000
 os.environ["GRPC_SSL_CIPHER_SUITES"] = "HIGH+ECDSA"
 
 
-def default_on_rpc_error(e: grpc.RpcError) -> None:
+def _create_rpc_error_handler(
+    eval_status: Callable[[grpc.StatusCode, str], bool] | None = None
+) -> Callable[[grpc.RpcError], None]:
     """
-    Default error handling for rpc errors.
+    Creates an RPC error handler that logs the error and optionally calls a
+    service specific evaluation function.
     """
 
-    code: grpc.StatusCode = e.code()  # type: ignore
-    details: str = e.details()  # type: ignore
-    msg = f"RpcError code: {code}; details: {details}"
-    logging.error(msg)
-    logging.debug(e)
-    raise e
+    def rpc_error_handler(e: grpc.RpcError) -> None:
+        code: grpc.StatusCode = e.code()  # type: ignore
+        details: str = e.details()  # type: ignore
+
+        msg = f"RpcError code: {code}; details: {details}"
+        if eval_status is not None:
+
+            # If the eval function returns True, we raise the original grpc error
+            if eval_status(code, details) is True:
+                logging.error(msg)
+                raise e
+
+        # We raise the exception for other known errors.
+        logging.error(msg)
+        if code == grpc.StatusCode.UNAVAILABLE:
+            raise e
+
+        # For unknown errors we log the exception, hence it must not be done
+        # by the caller.
+        logging.exception(e)
+        raise e
+
+    return rpc_error_handler
 
 
-def default_on_error(e: Exception) -> None:
+def default_error_handler(e: Exception) -> None:
     """
-    Default error handling for exceptions.
+    Default error handling for exceptions which are not RPC related.
     """
 
     msg = f"unexpected error during rpc call: {e}"
@@ -40,12 +60,12 @@ def default_on_error(e: Exception) -> None:
 class RpcResponseHandler:
     def __init__(
         self,
-        on_rpc_error: Callable[[grpc.RpcError], None] = default_on_rpc_error,
-        on_error: Callable[[Exception], None] = default_on_error,
+        rpc_error_handler: Callable[[grpc.RpcError], None],
+        error_handler: Callable[[Exception], None],
     ):
 
-        self.on_rpc_error = on_rpc_error
-        self.on_error = on_error
+        self.rpc_error_handler = rpc_error_handler
+        self.error_handler = error_handler
 
     def handle_rpc_errors(self, fnc):
         """Decorator to add more context to RPC errors"""
@@ -55,11 +75,21 @@ class RpcResponseHandler:
             try:
                 return fnc(*args, **kwargs)
             except grpc.RpcError as e:
-                self.on_rpc_error(e)
+                self.rpc_error_handler(e)
             except Exception as e:
-                self.on_error(e)
+                self.error_handler(e)
 
         return wrapper
+
+    @classmethod
+    def with_eval_status(
+        cls, eval_status: Callable[[grpc.StatusCode, str], bool]
+    ) -> RpcResponseHandler:
+        """Creates an RpcResponseHandler that utilizes a specific evaluation
+        function to handle service specific RPC errors.
+        """
+
+        return cls(_create_rpc_error_handler(eval_status), default_error_handler)
 
 
 class MacaroonMetadataPlugin(grpc.AuthMetadataPlugin):

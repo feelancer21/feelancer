@@ -552,7 +552,7 @@ class PidController:
             self.spread_level_controller(error=error, timestamp=timestamp_start)
             shift = self.spread_level_controller.gain
             logging.debug(
-                f"Called spread level controller: {timestamp_start=}, "
+                f"Called spread level controller: {timestamp_start=}, {error=}, "
                 f"spread level controller: {config.spread_level_params}, {shift=}"
             )
 

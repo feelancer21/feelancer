@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 
 from . import __version__
@@ -52,9 +53,11 @@ def app():
 
         runner.start()
 
-    except Exception as e:
+    except Exception:
+        # Hard exit with killing of all threads if there is an unknown error.
         logging.exception("An unexpected error occurred.")
-        raise e
+        logging.error("Killing Feelancer...\n")
+        os._exit(1)
 
     finally:
         logging.info("Feelancer shutdown completed.\n")
