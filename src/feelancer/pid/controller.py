@@ -469,7 +469,8 @@ class PidController:
         # Experimental feature of a spread level controller. It is a simple ewma
         # controller set up with k_p only.
         # It uses as error function the difference between the average spread rate
-        # (remote liquidity weighted) and average spread rate (target weighted).
+        # (remote liquidity weighted) and average spread rate (target weighted)
+        # minus the specified target_ppm.
         # The difference is bounded by +/- max_deviation_ppm and normed
         # by 2 * max_deviation_ppm. Hence we receive an error in the range [-0.5, 0.5].
         # TODO: Setup a full ewma controller when we know this is the way to go.
@@ -506,10 +507,11 @@ class PidController:
                 sum_remote += liq_remote
 
             try:
+                target_ppm = config.spread_level_target_ppm
                 avg_spread_target = sum_target_weighted / sum_target
                 avg_spread_remote = sum_remote_weighted / sum_remote
                 spread_diff_bounded = spread_diff = (
-                    avg_spread_remote - avg_spread_target
+                    avg_spread_remote - avg_spread_target - target_ppm
                 )
 
                 if spread_diff > max_dev:
@@ -520,8 +522,8 @@ class PidController:
                 error = spread_diff_bounded / (2 * max_dev)
                 logging.debug(
                     f"Error calculated for spread level controller: "
-                    f"{avg_spread_target=}, {avg_spread_remote=}, {spread_diff=}, "
-                    f"{max_dev=}, {spread_diff_bounded=}, {error=}"
+                    f"{avg_spread_target=}, {avg_spread_remote=}, {target_ppm=}, "
+                    f"{spread_diff=}, {max_dev=}, {spread_diff_bounded=}, {error=}"
                 )
             except ZeroDivisionError:
                 logging.error(

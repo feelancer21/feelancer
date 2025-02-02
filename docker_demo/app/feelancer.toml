@@ -112,12 +112,13 @@ value = 84
 # Optional and experimental feature. A spread level controller is a simple ewma
 # controller set up with k_p only.
 # It uses as error function the difference between the average spread rate 
-# (remote liquidity weighted) and average spread rate (target weighted).
+# (remote liquidity weighted) and average spread rate (target weighted) minus
+# the specified target_ppm.
 # The difference is bounded by +/- max_deviation_ppm and normed 
 # by 2 * max_deviation_ppm. Hence we receive an error in the range [-0.5, 0.5].
 k_p = 20
 max_deviation_ppm = 200
-
+target_ppm = 100
 
 [pid.margin]
 
