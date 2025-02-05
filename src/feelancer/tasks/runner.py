@@ -15,9 +15,7 @@ from feelancer.config import FeelancerConfig
 from feelancer.data.db import FeelancerDB
 from feelancer.lightning.chan_updates import update_channel_policies
 from feelancer.lightning.data import LightningCache, LightningSessionCache
-from feelancer.lightning.lnd import LNDClient
 from feelancer.lightning.models import DBRun
-from feelancer.lnd.client import LndGrpc
 from feelancer.pid.controller import PidController
 from feelancer.pid.data import PidConfig
 from feelancer.utils import read_config_file
@@ -30,10 +28,11 @@ if TYPE_CHECKING:
 
 
 class TaskRunner:
-    def __init__(self, config_file: str):
+    def __init__(self, config_file: str, lnclient: LightningClient, db: FeelancerDB):
         self.config_file = config_file
         self.config_dict = read_config_file(self.config_file)
-        self.lnclient: LightningClient
+        self.lnclient = lnclient
+        self.db = db
 
         config = FeelancerConfig(self.config_dict)
 
@@ -41,9 +40,6 @@ class TaskRunner:
         # be executed when the scheduler is running. If the start of the
         # scheduler hasn't finished, the runner cannot be stopped.
         self.lock = threading.Lock()
-
-        self._set_lnclient()
-        self._set_database()
 
         self.pid_controller: PidController | None = None
 
@@ -175,28 +171,6 @@ class TaskRunner:
 
         self.pid_controller = None
         logging.debug("Reset of internal objects completed.")
-
-    def _set_database(self) -> None:
-        """
-        Setting the lnclient with the data of the configuration.
-        """
-
-        if "sqlalchemy" in self.config_dict:
-            self.db = FeelancerDB.from_config_dict(
-                self.config_dict["sqlalchemy"]["url"]
-            )
-        else:
-            raise ValueError("'sqlalchemy' section is not included in config-file")
-
-    def _set_lnclient(self) -> None:
-        """
-        Setting the lnclient with the data of the configuration.
-        """
-
-        if "lnd" in self.config_dict:
-            self.lnclient = LNDClient(LndGrpc.from_file(**self.config_dict["lnd"]))
-        else:
-            raise ValueError("'lnd' section is not included in config-file")
 
     def start(self) -> None:
         """

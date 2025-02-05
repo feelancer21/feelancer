@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from feelancer.data.db import FeelancerDB
-from feelancer.lightning.lnd import LNDClient
-from feelancer.lnd.client import LndGrpc
-from feelancer.utils import read_config_file
+from .data.db import FeelancerDB
+from .lightning.lnd import LNDClient
+from .lnd.client import LndGrpc
+from .tasks.runner import TaskRunner
+from .utils import read_config_file
 
 if TYPE_CHECKING:
     from feelancer.lightning.client import LightningClient
@@ -59,8 +61,21 @@ class Server:
     def __init__(self, cfg: AppConfig):
         self.cfg = cfg
 
+        self.lock = threading.Lock()
+
+        self.runner = TaskRunner(self.cfg.config_file, self.cfg.lnclient, self.cfg.db)
+
     def start(self) -> None:
-        raise NotImplementedError
+        """
+        Starts the server.
+        """
+
+        self.runner.start()
 
     def stop(self) -> None:
-        raise NotImplementedError
+        """
+        Stops the server.
+        """
+
+        with self.lock:
+            self.runner.stop()

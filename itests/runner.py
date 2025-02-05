@@ -10,6 +10,7 @@ import pytz
 import toml
 from lnqueue import LnQueueClient, LnQueues
 
+from feelancer.data.db import FeelancerDB
 from feelancer.lightning.client import Channel, ChannelPolicy, LightningClient
 from feelancer.log import DEFAULT_LOG_FORMAT
 from feelancer.tasks.runner import TaskRunner
@@ -32,14 +33,16 @@ class QueueRunner(TaskRunner):
 
     def __init__(self, config_file: str, pubkey_local: str, queues: LnQueues):
 
-        def set_lnclient(self) -> None:
-            ln: LightningClient = LnQueueClient(pubkey_local, queues)
-            self.lnclient = ln
+        config_dict = read_config_file(config_file)
+        if "sqlalchemy" in config_dict:
+            db = FeelancerDB.from_config_dict(config_dict["sqlalchemy"]["url"])
+        else:
+            raise ValueError("'sqlalchemy' section is not included in config-file")
 
-        # Monkey patch of the _set_lnclient function to avoid that a grpc client
-        # is initiated during super.__init__.
-        TaskRunner._set_lnclient = set_lnclient
-        super().__init__(config_file)
+        ln: LightningClient = LnQueueClient(pubkey_local, queues)
+        self.lnclient = ln
+
+        super().__init__(config_file, ln, db)
 
 
 class TestSetup:

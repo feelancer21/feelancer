@@ -7,8 +7,7 @@ import sys
 
 from . import __version__
 from .log import set_logger
-from .server import AppConfig
-from .tasks.runner import TaskRunner
+from .server import AppConfig, Server
 from .utils import SignalHandler
 
 
@@ -44,15 +43,15 @@ def app():
         set_logger(config.log_file, config.log_level)
         logging.info(f"Feelancer {__version__=} starting...")
 
-        runner = TaskRunner(config_file)
+        server = Server(config)
 
         # sig_handlers executes callables when SIGTERM or SIGINT is received.
         sig_handler = SignalHandler()
 
         # Stopping the runner when signal is received.
-        sig_handler.add_handler(runner.stop)
+        sig_handler.add_handler(server.stop)
 
-        runner.start()
+        server.start()
 
     except Exception:
         # Hard exit with killing of all threads if there is an unknown error.
