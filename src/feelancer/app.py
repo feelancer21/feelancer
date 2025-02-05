@@ -7,8 +7,9 @@ import sys
 
 from . import __version__
 from .log import set_logger
+from .server import AppConfig
 from .tasks.runner import TaskRunner
-from .utils import SignalHandler, read_config_file
+from .utils import SignalHandler
 
 
 def _get_args():
@@ -38,9 +39,9 @@ def app():
             sys.exit(0)
 
         config_file = args.config
-        config = read_config_file(config_file)
+        config = AppConfig.from_config_file(config_file)
 
-        set_logger(config.get("logging"))
+        set_logger(config.log_file, config.log_level)
         logging.info(f"Feelancer {__version__=} starting...")
 
         runner = TaskRunner(config_file)
