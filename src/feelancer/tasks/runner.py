@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import logging
 import threading
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 import grpc
 import pytz
@@ -16,9 +18,6 @@ from feelancer.data.db import FeelancerDB
 from feelancer.lightning.chan_updates import update_channel_policies
 from feelancer.lightning.data import LightningCache, LightningSessionCache
 from feelancer.lightning.models import DBRun
-from feelancer.pid.controller import PidController
-from feelancer.pid.data import PidConfig
-from feelancer.utils import read_config_file
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
@@ -27,21 +26,42 @@ if TYPE_CHECKING:
     from feelancer.lightning.client import LightningClient
 
 
+@dataclass
+class RunnerResult:
+    store: Callable[[LightningSessionCache], None] | None
+    proposals: Iterable[PolicyProposal] | None
+
+
+@dataclass
+class RunnerRequest:
+    timestamp: datetime
+    ln: LightningCache
+
+
 class TaskRunner:
-    def __init__(self, config_file: str, lnclient: LightningClient, db: FeelancerDB):
-        self.config_file = config_file
-        self.config_dict = read_config_file(self.config_file)
+    def __init__(
+        self,
+        lnclient: LightningClient,
+        db: FeelancerDB,
+        seconds: int,
+        max_listener_attempts: int,
+        read_feelancer_cfg: Callable[..., FeelancerConfig],
+    ):
         self.lnclient = lnclient
         self.db = db
+        self.read_feelancer_cfg = read_feelancer_cfg
 
-        config = FeelancerConfig(self.config_dict)
+        # Empty list of callables representing the callables which we have
+        # to call.
+        self.tasks: list[Callable[[RunnerRequest], RunnerResult]] = []
+
+        # Empty list of callables which we have to call in an error case.
+        self.resets: list[Callable[..., None]] = []
 
         # Lock to prevent a race between start() and stop(). The stop can only
         # be executed when the scheduler is running. If the start of the
         # scheduler hasn't finished, the runner cannot be stopped.
         self.lock = threading.Lock()
-
-        self.pid_controller: PidController | None = None
 
         # Init of a scheduler. Configuration will be done in the start function.
         self.scheduler = BlockingScheduler()
@@ -54,46 +74,40 @@ class TaskRunner:
 
         # Counter for attempted listener starts
         self.listener_attempts: int = 0
-        self.max_listener_attempts = config.max_listener_attempts
+        self.max_listener_attempts = max_listener_attempts
 
         # Setting up a scheduler which call self._run in an interval of
         # self.seconds.
-        self.seconds = config.seconds
-
-    def _update_config_dict(self) -> None:
-        """
-        Reads the config_dict again from the filesystem. If there is an error
-        we will proceed with current dictionary.
-        """
-
-        try:
-            self.config_dict = read_config_file(self.config_file)
-        except Exception as e:
-            logging.error("An error occurred during the update of the config: %s", e)
+        self.seconds = seconds
 
     def _run(self, timestamp_start: datetime) -> None:
         """
-        Running all jobs associated with this task runner. At the moment only pid.
+        Running all tasks associated with this task runner.
         """
 
-        # Reading the config again from file system to get parameter changes.
-        # It serves as a poor man' api. ;-)
-        self._update_config_dict()
-
         ln = LightningCache(self.lnclient)
-        config = FeelancerConfig(self.config_dict)
+        request = RunnerRequest(timestamp_start, ln)
+
+        # Update the config again by reading from the filesystem
+        config: FeelancerConfig = self.read_feelancer_cfg()
 
         store_funcs: list[Callable[[LightningSessionCache], None]] = []
         policy_updates: list[PolicyProposal] = []
 
         try:
-            func, prop = self._run_pid(ln, config, timestamp_start)
-            store_funcs.append(func)
-            policy_updates += prop
-            logging.info("Finished pid controller")
+            for t in self.tasks:
+                task_result = t(request)
+
+                if task_result.store is not None:
+                    store_funcs.append(task_result.store)
+
+                if task_result.proposals is not None:
+                    policy_updates += task_result.proposals
+
+            logging.info("Finished task execution")
 
         except Exception as e:
-            logging.error("Could not run pid controller")
+            logging.error("Could not run all tasks")
             raise e
 
         timestamp_end = datetime.now(pytz.utc)
@@ -143,25 +157,21 @@ class TaskRunner:
         # If config.seconds had changed we modify the trigger of the job.
         if config.seconds != self.seconds:
             self.seconds = config.seconds
-            logging.info(f"Interval changed; running pid every {self.seconds}s now")
+            logging.info(f"Interval changed; executing tasks every {self.seconds}s now")
             self.job.modify(trigger=IntervalTrigger(seconds=self.seconds))
 
-    def _run_pid(
-        self, ln: LightningCache, config: FeelancerConfig, timestamp: datetime
-    ) -> tuple[Callable[[LightningSessionCache], None], list[PolicyProposal]]:
+    def register_task(self, task: Callable[[RunnerRequest], RunnerResult]) -> None:
         """
-        Runs the the pid model.
+        Register a new task which has to be executed by the runner.
         """
+        self.tasks.append(task)
 
-        pid_config = PidConfig(config.tasks_config["pid"])
-        if not self.pid_controller:
-            self.pid_controller = PidController(self.db, pid_config, ln.pubkey_local)
-
-        self.pid_controller(pid_config, ln, timestamp)
-
-        func = self.pid_controller.store_data
-        prop = self.pid_controller.policy_proposals()
-        return func, prop
+    def register_reset(self, reset: Callable[..., None]) -> None:
+        """
+        Register a new reset task which has to be executed in the case of an
+        error.
+        """
+        self.resets.append(reset)
 
     def _reset(self) -> None:
         """
@@ -169,7 +179,9 @@ class TaskRunner:
         These objects must be reinitialized during the next run.
         """
 
-        self.pid_controller = None
+        for r in self.resets:
+            r()
+
         logging.debug("Reset of internal objects completed.")
 
     def start(self) -> None:
@@ -183,7 +195,7 @@ class TaskRunner:
         if self.scheduler.running:
             return None
 
-        logging.info(f"Starting runner and running pid every {self.seconds}s")
+        logging.info(f"Starting runner and executing tasks every {self.seconds}s")
 
         # Starts the run and resets objects in the case of an unexpected error,
         # e.g. db loss.

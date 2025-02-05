@@ -10,6 +10,7 @@ import pytz
 import toml
 from lnqueue import LnQueueClient, LnQueues
 
+from feelancer.config import FeelancerConfig
 from feelancer.data.db import FeelancerDB
 from feelancer.lightning.client import Channel, ChannelPolicy, LightningClient
 from feelancer.log import DEFAULT_LOG_FORMAT
@@ -42,7 +43,8 @@ class QueueRunner(TaskRunner):
         ln: LightningClient = LnQueueClient(pubkey_local, queues)
         self.lnclient = ln
 
-        super().__init__(config_file, ln, db)
+        # Quick and dirty
+        super().__init__(ln, db, 21, 5, lambda s: FeelancerConfig(config_dict))
 
 
 class TestSetup:
