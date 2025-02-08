@@ -34,7 +34,7 @@ def _create_rpc_error_handler(
                 logging.error(msg)
                 raise e
 
-        # We raise the exception for other known errors.
+        # We raise the exception if the server is not available.
         logging.error(msg)
         if code == grpc.StatusCode.UNAVAILABLE:
             raise e

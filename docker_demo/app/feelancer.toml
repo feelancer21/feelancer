@@ -144,3 +144,14 @@ pubkeys = [
 target = 900_000
 ewma_controller = { k_p = 1 }
 margin_idiosyncratic = -10
+
+
+[reconnect]
+# If the 'reconnect' section is included in file a reconnect service will be started.
+# It reconnects channels with stuck htlcs and maybe inactive channels.
+
+# inactive channels are only included if set to true.
+include_inactive = false
+
+# An htlc is defined as stuck if the expiry is less blocks away than this value
+max_blocks_to_expiry = 13

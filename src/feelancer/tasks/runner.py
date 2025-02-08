@@ -28,8 +28,8 @@ if TYPE_CHECKING:
 
 @dataclass
 class RunnerResult:
-    store: Callable[[LightningSessionCache], None] | None
-    proposals: Iterable[PolicyProposal] | None
+    store: Callable[[LightningSessionCache], None] | None = None
+    proposals: Iterable[PolicyProposal] | None = None
 
 
 @dataclass

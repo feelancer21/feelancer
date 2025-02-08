@@ -58,6 +58,18 @@ class LightningClient(Protocol):
         """
         ...
 
+    def connect_peer(self, pub_key: str) -> None:
+        """
+        Connects a peer specified by its pub_key. Trying clearnet addresses first.
+        """
+        ...
+
+    def disconnect_peer(self, pub_key: str) -> None:
+        """
+        Disconnect a peer specified by its pub_key.
+        """
+        ...
+
     @property
     def pubkey_local(self) -> str:
         """

@@ -35,6 +35,12 @@ class LnQueueClient:
             self._channels = self._q.channels.get()
         return self._channels
 
+    def connect_peer(self, pub_key: str) -> None:
+        return None
+
+    def disconnect_peer(self, pub_key: str) -> None:
+        return None
+
     @property
     def pubkey_local(self) -> str:
         return self._pubkey_local

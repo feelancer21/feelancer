@@ -28,6 +28,8 @@ class PidService:
         Runs the the pid model.
         """
 
+        logging.info("Running pid controller...")
+
         pid_config = self.get_pid_config()
 
         if not self.pid_controller:
