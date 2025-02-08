@@ -34,11 +34,14 @@ class FeelancerConfig:
 
         self.tasks_config: dict[str, dict] = {}
 
-        tasks = ["pid"]
+        tasks = ["pid", "reconnect"]
+        tasks_required = ["pid"]
+
         for task in tasks:
-            if not (task_config := config_dict.get(task)):
+            if not (task_config := config_dict.get(task)) and task in tasks_required:
                 raise ValueError(f"'{task}' section missing in configuration")
-            else:
+
+            if task_config is not None:
                 self.tasks_config[task] = task_config
 
         if (max_failed := config_feelancer.get("max_listener_attempts")) is None:

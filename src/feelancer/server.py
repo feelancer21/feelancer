@@ -11,11 +11,14 @@ from .lightning.lnd import LNDClient
 from .lnd.client import LndGrpc
 from .pid.data import PidConfig
 from .pid.service import PidService
+from .reconnect.reconnector import LNDReconnector
+from .reconnect.service import ReconnectConfig, ReconnectService
 from .tasks.runner import TaskRunner
 from .utils import read_config_file
 
 if TYPE_CHECKING:
     from feelancer.lightning.client import LightningClient
+    from feelancer.reconnect.reconnector import Reconnector
 
 
 @dataclass
@@ -26,6 +29,7 @@ class AppConfig:
     log_file: str | None
     log_level: str | None
     feelancer_cfg: FeelancerConfig
+    reconnector: Reconnector
 
     @classmethod
     def from_config_dict(cls, config_dict: dict, config_file: str) -> AppConfig:
@@ -39,7 +43,9 @@ class AppConfig:
             raise ValueError("'sqlalchemy' section is not included in config-file")
 
         if "lnd" in config_dict:
-            lnclient = LNDClient(LndGrpc.from_file(**config_dict["lnd"]))
+            lndgrpc = LndGrpc.from_file(**config_dict["lnd"])
+            lnclient: LightningClient = LNDClient(lndgrpc)
+            reconnector: Reconnector = LNDReconnector(lndgrpc)
         else:
             raise ValueError("'lnd' section is not included in config-file")
 
@@ -58,7 +64,15 @@ class AppConfig:
         # TODO: Move FeelancerConfig to db and api. Then we can remove it.
         feelancer_config = FeelancerConfig(config_dict)
 
-        return cls(db, lnclient, config_file, logfile, loglevel, feelancer_config)
+        return cls(
+            db,
+            lnclient,
+            config_file,
+            logfile,
+            loglevel,
+            feelancer_config,
+            reconnector,
+        )
 
     @classmethod
     def from_config_file(cls, file_name: str) -> AppConfig:
@@ -71,6 +85,8 @@ class Server:
 
         self.lock = threading.Lock()
 
+        # We init a task runner which controls the scheduler for the job
+        # execution.
         self.runner = TaskRunner(
             self.cfg.lnclient,
             self.cfg.db,
@@ -79,9 +95,15 @@ class Server:
             self.read_feelancer_cfg,
         )
 
+        # pid service is responsible for updating the fees with the pid model.
         pid = PidService(self.cfg.db, self.get_pid_config)
         self.runner.register_task(pid.run)
         self.runner.register_reset(pid.reset)
+
+        # reconnect service is responsible for reconnecting inactive channels
+        # or channels with stuck htlcs.
+        reconnect = ReconnectService(cfg.reconnector, self.get_reconnect_config)
+        self.runner.register_task(reconnect.run)
 
     def read_feelancer_cfg(self) -> FeelancerConfig:
         """
@@ -102,6 +124,13 @@ class Server:
 
     def get_pid_config(self) -> PidConfig:
         return PidConfig(self.cfg.feelancer_cfg.tasks_config["pid"])
+
+    def get_reconnect_config(self) -> ReconnectConfig | None:
+        config_dict = self.cfg.feelancer_cfg.tasks_config.get("reconnect")
+        if config_dict is None:
+            return None
+
+        return ReconnectConfig(config_dict)
 
     def start(self) -> None:
         """

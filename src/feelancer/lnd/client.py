@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 import grpc
 
 from feelancer.grpc.client import RpcResponseHandler, SecureGrpcClient
@@ -8,9 +10,19 @@ from .grpc_generated import lightning_pb2 as ln
 from .grpc_generated import lightning_pb2_grpc as lnrpc
 
 
-class EdgeNotFound(Exception):
-    def __init__(self, message: str):
-        super().__init__(message)
+class EdgeNotFound(Exception): ...
+
+
+class PeerNotConnected(Exception): ...
+
+
+class PeerAlreadyConnected(Exception): ...
+
+
+class DialProxFailed(Exception): ...
+
+
+class EOF(Exception): ...
 
 
 def _eval_lnd_rpc_status(code: grpc.StatusCode, details: str) -> bool:
@@ -25,8 +37,23 @@ def _eval_lnd_rpc_status(code: grpc.StatusCode, details: str) -> bool:
     wrong_macaroon = "verification failed: signature mismatch after caveat verification"
 
     if code == grpc.StatusCode.UNKNOWN:
-        if details == "edge not found":
-            raise EdgeNotFound(edge_not_found)
+        if details == edge_not_found:
+            raise EdgeNotFound(details)
+
+        if details == "EOF":
+            raise EOF(details)
+
+        if re.match(r"unable to disconnect peer: peer (.*) is not connected", details):
+            raise PeerNotConnected(details)
+
+        if re.match(r"already connected to peer: (.*)", details):
+            raise PeerAlreadyConnected(details)
+
+        if re.match(
+            r"dial proxy failed(.*)",
+            details,
+        ):
+            raise DialProxFailed(details)
 
         # Caller should raise the original exception if the wallet is unlocked
         # or the macaroon is wrong.
@@ -61,6 +88,51 @@ class LndGrpc(SecureGrpcClient):
         """
 
         return lnrpc.LightningStub(self._channel)
+
+    @lnd_handle_rpc_errors
+    def connect_peer(
+        self,
+        pub_key: str,
+        host: str,
+        perm: bool | None = None,
+        timeout: int | None = None,
+    ) -> ln.ConnectPeerResponse:
+        """
+        Calls lnrpc.ConnectPeer
+
+        ConnectPeer attempts to establish a connection to a remote peer. This is
+        at the networking level, and is used for communication between nodes.
+        This is distinct from establishing a channel with a peer.
+        """
+        ...
+
+        req = ln.ConnectPeerRequest()
+        ln_addr = req.addr
+
+        ln_addr.pubkey = pub_key
+        ln_addr.host = host
+
+        if perm is not None:
+            req.perm = perm
+
+        if timeout is not None:
+            req.timeout = timeout
+
+        return self._ln_stub.ConnectPeer(req)
+
+    @lnd_handle_rpc_errors
+    def disconnect_peer(self, pub_key: str) -> ln.DisconnectPeerResponse:
+        """
+        Calls lnrp.DisconnectPeer
+
+        DisconnectPeer attempts to disconnect one peer from another identified
+        by a given pubKey. In the case that we currently have a pending or
+        active channel with the target peer, then this action will be not be
+        allowed.
+        """
+        ...
+
+        return self._ln_stub.DisconnectPeer(ln.DisconnectPeerRequest(pub_key=pub_key))
 
     @lnd_handle_rpc_errors
     def get_chan_info(self, chan_id: int) -> ln.ChannelEdge:

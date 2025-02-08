@@ -3,12 +3,11 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+import feelancer.lnd.client as lnd
 from feelancer.lightning.client import Channel, ChannelPolicy
 from feelancer.lightning.utils import opening_height
-from feelancer.lnd.client import EdgeNotFound, update_failure_name
 
 if TYPE_CHECKING:
-    from feelancer.lnd.client import LndGrpc
     from feelancer.lnd.grpc_generated import lightning_pb2 as ln
 
 
@@ -54,7 +53,7 @@ def _policies_per_side(
 
 
 class LNDClient:
-    def __init__(self, lnd: LndGrpc) -> None:
+    def __init__(self, lnd: lnd.LndGrpc) -> None:
         self.lnd = lnd
         self._pubkey_local = self.lnd.get_info().identity_pubkey
 
@@ -81,7 +80,7 @@ class LNDClient:
             # still need get_chan_info for private channels.
             try:
                 p_local, p_remote = self.get_channel_policies(channel.chan_id)
-            except EdgeNotFound as e:
+            except lnd.EdgeNotFound as e:
                 logging.error(f"Skipping {channel.channel_point=} because of '{e}'")
                 continue
 
@@ -103,6 +102,44 @@ class LNDClient:
             )
 
         return res
+
+    def connect_peer(self, pub_key: str) -> None:
+
+        # node info contains alls addresses for the pub key.
+        node: ln.NodeInfo = self.lnd.get_node_info(pub_key)
+
+        # Creating a list where onion addresses are at the end.
+        # a.addr.find("onion") returns -1 if it is not an onion
+        sorted_addresses: list[ln.NodeAddress] = sorted(
+            node.node.addresses, key=lambda a: a.addr.find("onion")
+        )
+
+        # Trying all addresses. Returning early if a connection was successful
+        # or the peer is already connected.
+        for a in sorted_addresses:
+            host = a.addr
+            try:
+                logging.debug(f"Trying to connect: {pub_key=}@{host=}")
+                self.lnd.connect_peer(pub_key=pub_key, host=host)
+                logging.info(f"Connected to {pub_key=}; {host=}")
+                return None
+
+            except lnd.PeerAlreadyConnected as e:
+                logging.debug(f"Received from lnd: {e}")
+                return None
+
+            except (lnd.DialProxFailed, lnd.EOF) as e:
+                logging.error(f"Received from lnd: {e}")
+
+    def disconnect_peer(self, pub_key: str) -> None:
+
+        # Calling the backend to disconnect the peer. We are fine it the peer
+        # is already disconnected.
+        try:
+            self.lnd.disconnect_peer(pub_key)
+            logging.info(f"Disonnected from {pub_key=}")
+        except lnd.PeerNotConnected as e:
+            logging.debug(f"Received from lnd: {e}")
 
     def get_channel_policies(
         self, chan_id: int
@@ -148,7 +185,7 @@ class LNDClient:
         for f in response.failed_updates:
             logging.error(
                 f"update failure for chan_point {chan_point}; error: "
-                + f"{f.update_error}; failure: {update_failure_name(f.reason)}"
+                + f"{f.update_error}; failure: {lnd.update_failure_name(f.reason)}"
             )
         if len(response.failed_updates) > 0:
             raise Exception("update failure during policy update")
