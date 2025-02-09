@@ -65,4 +65,8 @@ pyenv_reset:
 	pyenv virtualenv feelancer-dev
 
 pdf:
-	docker run --rm --volume "./docs:/data" --user $(UID):$(GID) pandoc/latex:3.2.1 math.md -o math.pdf
+	sed -E -i 's/[[:space:]]+$$//' docs/concept.md
+	docker run --rm --volume "./docs:/data" --user $(UID):$(GID) pandoc/latex:3.2.1 concept.md -o concept.pdf -V geometry:margin=2.75cm
+
+cloc:
+	cloc --exclude-dir grpc_generated,.vscode  .
