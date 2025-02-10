@@ -7,7 +7,7 @@ reversion controller for a margin.
 be breaking in context of model, configuration and database scheme without providing
 migration scripts. 
 
-The conceptual ideas are explained in the [document](docs/concept.md).
+The conceptual ideas are explained in this document [[md](docs/concept.md);  [pdf](docs/concept.pdf)].
 
 ## Application Areas of the Tool and Disclaimer
 
