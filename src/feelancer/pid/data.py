@@ -406,7 +406,7 @@ class PidConfig:
             raise ValueError(f"Cannot parse section 'pid.pin': {e}")
 
         self.spread_level_max_deviation_ppm: float = 0
-        self.target_ppm: float = 0
+        self.spread_level_target_ppm: float = 0
         try:
             if spread_level_conf := conf_copy.get("spread_level"):
                 self.spread_level_params = EwmaControllerParams(
