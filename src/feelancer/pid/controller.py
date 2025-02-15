@@ -132,11 +132,9 @@ class SpreadController:
         self,
         ewma_params: EwmaControllerParams,
         timestamp_last: datetime | None,
-        pub_key: str = "",
     ):
         self.target = 0
         self._channel_collection: ChannelCollection | None = None
-        self._pub_key = pub_key
 
         self.ewma_controller = EwmaController.from_params(
             ewma_params,
@@ -149,10 +147,7 @@ class SpreadController:
         channel_collection: ChannelCollection,
         ewma_params: EwmaControllerParams,
         target: float,
-        # The margin for the case we have to recalculate the spread because
-        # the external fee rate had changed. This margin has to be consistent
-        # with the last call of the controller.
-        margin: float,
+        spread_new: float | None = None,
     ) -> None:
         """Updates the parameters and calls the EwmaController"""
 
@@ -185,18 +180,9 @@ class SpreadController:
             target=target,
         )
 
-        # If the reference fee rate of the channels has changed due to manual
-        # interventions outside of the controller, we have to reset the control
-        # variable. Otherwise the manual intervention will be overwritten by the
-        # controller.
-        if channel_collection.ref_fee_rate_changed:
-            spread_new = channel_collection.ref_fee_rate - margin
-            logging.debug(
-                f"Reference fee rate changed for {self._pub_key}; "
-                f"set control variable to {spread_new=}; "
-                f"{channel_collection.ref_fee_rate_last=}; "
-                f"{channel_collection.ref_fee_rate=}; {margin=}"
-            )
+        # Set a new spread if recalibration was needed.
+        if spread_new is not None:
+            logging.debug(f"Set {spread_new=}")
             self.ewma_controller.control_variable = spread_new
 
         # Now we are able to call the actual ewma controller
@@ -226,17 +212,16 @@ class SpreadController:
         cls,
         ewma_params: EwmaControllerParams,
         history: list[tuple[datetime, EwmaControllerParams, float]],
-        pub_key: str = "",
     ):
         """
         Initializes a new controller with the provided ewma params and calls
         it for the whole history.
         """
         if len(history) == 0:
-            return cls(ewma_params, None, pub_key)
+            return cls(ewma_params, None)
 
         timestamp_init = history[0][0] - timedelta(seconds=history[0][2])
-        controller = cls(ewma_params, timestamp_init, pub_key)
+        controller = cls(ewma_params, timestamp_init)
 
         for timestamp, params, _ in history:
             controller.ewma_controller(params.error, timestamp)
@@ -336,7 +321,7 @@ class PidController:
         self.spread_controller_map: dict[str, SpreadController] = {}
         for pub_key, params in last_ewma_params.items():
             self.spread_controller_map[pub_key] = SpreadController(
-                params, self.last_timestamp, pub_key
+                params, self.last_timestamp
             )
 
         self.spread_level_controller: EwmaController | None = None
@@ -395,6 +380,30 @@ class PidController:
             spread_controller = self.spread_controller_map.get(pub_key)
             peer_config = self.config.peer_config(pub_key)
 
+            # The margin for the case we have to recalibrate the spread because
+            # the external fee rate had changed. This margin has to be consistent
+            # with the last call of the controller.
+            # TODO: At the moment it is a proxy, because it is the sum of the last
+            # state of the margin controller (what is right) and the current
+            # idiosyncratic margin.
+            margin_peer = margin_last + peer_config.margin_idiosyncratic
+
+            # spread_new is set, if a recalibration of the spread was needed.
+            spread_new: float | None = None
+
+            # If the reference fee rate of the channels has changed due to manual
+            # interventions outside of the controller, we have to reset the control
+            # variable. Otherwise the manual intervention will be overwritten by the
+            # controller.
+            if channel_collection.ref_fee_rate_changed:
+                spread_new = channel_collection.ref_fee_rate - margin_peer
+                logging.debug(
+                    f"Reference fee rate changed for {pub_key=}; "
+                    f"calculated {spread_new=}; "
+                    f"{channel_collection.ref_fee_rate_last=}; "
+                    f"{channel_collection.ref_fee_rate=}; {margin_peer=}"
+                )
+
             # If there is no existing controller we have to create one
             if not spread_controller:
                 # We check if there was a controller with this peer in the past,
@@ -410,9 +419,13 @@ class PidController:
                     delta_hours = (timestamp_start - timestamp).total_seconds() / 3600
                     if delta_hours > config.max_age_spread_hours:
                         params = peer_config.ewma_controller
+                    else:
+                        # if we use the historic controller, we do not want a
+                        # recalibrated spread.
+                        spread_new = None
 
                 spread_controller = self.spread_controller_map[pub_key] = (
-                    SpreadController(params, self.last_timestamp, pub_key)
+                    SpreadController(params, self.last_timestamp)
                 )
 
             # Now we have a spread controller for each peer and we can prepare
@@ -421,13 +434,12 @@ class PidController:
             # ReinitRequired error. In this case we initialize a new controller
             # from the start with its whole history,
             target = peer_config.target or target_default
-            margin_peer = margin_last + peer_config.margin_idiosyncratic
             call_args = (
                 timestamp_start,
                 channel_collection,
                 peer_config.ewma_controller,
                 target,
-                margin_peer,
+                spread_new,
             )
 
             try:
@@ -436,9 +448,7 @@ class PidController:
                 logging.info(f"Reinit required for {pub_key}")
                 history = self.pid_store.ewma_params_by_pub_key(pub_key)
                 spread_controller = self.spread_controller_map[pub_key] = (
-                    SpreadController.from_history(
-                        peer_config.ewma_controller, history, pub_key
-                    )
+                    SpreadController.from_history(peer_config.ewma_controller, history)
                 )
                 spread_controller(*call_args)
 
