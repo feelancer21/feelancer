@@ -1,14 +1,25 @@
 from __future__ import annotations
 
+import copy
 import unittest
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import cast
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
-from feelancer.lightning.client import Channel, ChannelPolicy
+from test_analytics import EwmaCall, call_ewma
+
+from feelancer.lightning.chan_updates import PolicyProposal
+from feelancer.lightning.client import Channel, ChannelPolicy, LightningClient
+from feelancer.lightning.data import LightningCache
 from feelancer.pid.aggregator import ChannelAggregator, ChannelCollection
-from feelancer.pid.controller import _calc_error
-from feelancer.pid.data import PidConfig, PidSpreadControllerConfig
+from feelancer.pid.analytics import EwmaControllerParams, MrControllerParams
+from feelancer.pid.controller import PidController, SpreadController, _calc_error
+from feelancer.pid.data import (
+    PidConfig,
+    PidMarginControllerConfig,
+    PidSpreadControllerConfig,
+)
 
 
 def _new_mock_channel_policy(fee_rate_ppm: int) -> ChannelPolicy:
@@ -20,6 +31,7 @@ def _new_mock_channel_policy(fee_rate_ppm: int) -> ChannelPolicy:
 def _new_mock_channel(
     pub_key: str,
     chan_id: int,
+    chan_point: str,
     capacity: int,
     private: bool,
     opening_height: int,
@@ -32,6 +44,7 @@ def _new_mock_channel(
     c = cast(Channel, MagicMock())
     c.pub_key = pub_key
     c.chan_id = chan_id
+    c.chan_point = chan_point
     c.capacity_sat = capacity
     c.private = private
     c.opening_height = opening_height
@@ -43,18 +56,30 @@ def _new_mock_channel(
     return c
 
 
+def _new_mock_margin_config(k_m: float, alpha: float) -> PidMarginControllerConfig:
+    c = cast(PidMarginControllerConfig, MagicMock())
+    c.mr_controller = MrControllerParams(k_m=k_m, alpha=alpha)
+
+    return c
+
+
 def _new_mock_pid_config(
     exclude_pubkeys: list[str],
     exclude_chanid: list[int],
     max_age_new_channels: int,
     config: dict[str, PidSpreadControllerConfig],
     default_config: PidSpreadControllerConfig,
+    margin_config: PidMarginControllerConfig,
 ) -> PidConfig:
 
     c = cast(PidConfig, MagicMock())
     c.exclude_pubkeys = exclude_pubkeys
     c.exclude_chanids = exclude_chanid
     c.max_age_new_channels = max_age_new_channels
+    c.margin = margin_config
+    c.db_only = False
+    c.spread_level_max_deviation_ppm = 0
+    c.spread_level_target_ppm = 0
 
     # peer_config returns the value of dict config, and uses default_config
     # as default.
@@ -62,6 +87,13 @@ def _new_mock_pid_config(
         return config.get(pub_key, default_config)
 
     c.peer_config = peer_config
+    return c
+
+
+def _new_mock_lnclient(block_height: int, channels: list[Channel]) -> LightningClient:
+    c = MagicMock(spec=LightningClient)
+    c.channels = {ch.chan_id: ch for ch in channels}
+    c.block_height = block_height
     return c
 
 
@@ -106,6 +138,10 @@ class ERPidAggregator:
 
 @dataclass
 class TCasePidAggregator:
+    """
+    Testcase for a pid aggregator.
+    """
+
     # name of the testcase
     name: str
 
@@ -121,6 +157,66 @@ class TCasePidAggregator:
     channels: list[Channel]
 
     expected_result: ERPidAggregator
+
+
+@dataclass
+class ERSpreadRateController:
+    """
+    Expected result of one call of a spread reate controller.
+    """
+
+    spread: float
+    target: float
+
+
+@dataclass
+class ERPidControllerCall:
+    """
+    Expected result for one call of a pid controller.
+    """
+
+    margin_rate: float
+    spread_controller_results: dict[str, ERSpreadRateController]
+    policy_proposals: list[PolicyProposal]
+
+
+@dataclass
+class PidControllerCall:
+    """
+    Data for one call of a pid controller-
+    """
+
+    timestamp: datetime
+
+    config: PidConfig
+
+    # return value of pid_store.pid_run_last()
+    pid_run_last: tuple[int, datetime] | tuple[None, None]
+    # dict which stores per peer the result of pid_store.ewma_params_last_by_peer
+    ewma_params_last: dict[str, tuple[datetime, EwmaControllerParams]]
+    # dict of the final policies of the last run
+    policies_last: dict[int, ChannelPolicy]
+    # current block height
+    block_height: int
+    # channels which are used to initialize this aggregator
+    channels: list[Channel]
+
+    expected_result: ERPidControllerCall | NoExpectedResult
+
+
+@dataclass
+class TCasePidController:
+    """
+    Testcase for a pid controller.
+    """
+
+    # name of the testcase
+    name: str
+
+    # description of the testcase
+    description: str
+
+    calls: list[PidControllerCall]
 
 
 @dataclass
@@ -142,6 +238,12 @@ class TestPid(unittest.TestCase):
 
     def setUp(self):
         self.testcases_aggregator: list[TCasePidAggregator] = []
+        self.testcases_controller: list[TCasePidController] = []
+
+        # base time for controller calls
+        time_base = datetime(2021, 1, 1, 0, 0, 0)
+
+        margin_1 = _new_mock_margin_config(40, 0.02)
 
         configs_1: dict[str, PidSpreadControllerConfig] = {}
         exclude_pubkeys_1: list[str] = []
@@ -152,43 +254,101 @@ class TestPid(unittest.TestCase):
 
         max_age_new_channels = 1000
 
+        default_ewma = EwmaControllerParams(
+            k_p=120,
+            k_i=480,
+            k_d=240,
+            alpha_d=1.0 * 24,
+            alpha_i=0.04 * 24,
+        )
+
         default_config = PidSpreadControllerConfig(
-            fee_rate_new_local=1000, fee_rate_new_remote=210, target=None
+            fee_rate_new_local=1000,
+            fee_rate_new_remote=210,
+            target=None,
+            ewma_controller=default_ewma,
+        )
+
+        bob_ewma_2 = EwmaControllerParams(
+            k_p=240,
+            k_i=960,
+            k_d=480,
+            alpha_d=1.0 * 24,
+            alpha_i=0.04 * 24,
+            control_variable=210,
+        )
+
+        bob_ewma_3 = EwmaControllerParams(
+            k_p=200,
+            k_i=300,
+            k_d=400,
+            alpha_d=1.0 * 24,
+            alpha_i=0.04 * 24,
+            control_variable=210,
         )
 
         configs_2 = {
             "bob": PidSpreadControllerConfig(
-                fee_rate_new_local=2000, fee_rate_new_remote=420, target=400_000
+                fee_rate_new_local=2000,
+                fee_rate_new_remote=420,
+                target=400_000,
+                ewma_controller=bob_ewma_2,
             )
         }
 
+        configs_3 = {
+            "bob": PidSpreadControllerConfig(
+                fee_rate_new_local=2000,
+                fee_rate_new_remote=420,
+                target=400_000,
+                ewma_controller=bob_ewma_3,
+            )
+        }
+
+        # config is an empty dict.
         pid_config = _new_mock_pid_config(
             exclude_pubkeys=exclude_pubkeys_1,
             exclude_chanid=exclude_chanid_1,
             max_age_new_channels=max_age_new_channels,
             config=configs_1,
             default_config=default_config,
+            margin_config=margin_1,
         )
 
+        # config has SpreadControllerConfig for bob.
         pid_config_2 = _new_mock_pid_config(
             exclude_pubkeys=exclude_pubkeys_1,
             exclude_chanid=exclude_chanid_1,
             max_age_new_channels=max_age_new_channels,
             config=configs_2,
             default_config=default_config,
+            margin_config=margin_1,
         )
 
+        # config with other exclude.
         pid_config_3 = _new_mock_pid_config(
             exclude_pubkeys=exclude_pubkeys_2,
             exclude_chanid=exclude_chanid_2,
             max_age_new_channels=max_age_new_channels,
             config=configs_1,
             default_config=default_config,
+            margin_config=margin_1,
+        )
+
+        # Config with changed ewma parameters.
+        pid_config_4 = _new_mock_pid_config(
+            exclude_pubkeys=exclude_pubkeys_1,
+            exclude_chanid=exclude_chanid_1,
+            max_age_new_channels=max_age_new_channels,
+            config=configs_3,
+            default_config=default_config,
+            margin_config=margin_1,
         )
 
         bob_chan_1 = _new_mock_channel(
             pub_key="bob",
             chan_id=1,
+            chan_point="bob_1",
             capacity=4_000_000,
             private=False,
             opening_height=750_000,
@@ -203,6 +363,7 @@ class TestPid(unittest.TestCase):
         bob_chan_2 = _new_mock_channel(
             pub_key="bob",
             chan_id=2,
+            chan_point="bob_2",
             capacity=4_000_000,
             private=False,
             opening_height=839_000,
@@ -217,6 +378,7 @@ class TestPid(unittest.TestCase):
         bob_chan_3 = _new_mock_channel(
             pub_key="bob",
             chan_id=3,
+            chan_point="bob_3",
             capacity=4_000_000,
             private=False,
             opening_height=839_000,
@@ -231,6 +393,7 @@ class TestPid(unittest.TestCase):
         bob_chan_4 = _new_mock_channel(
             pub_key="bob",
             chan_id=4,
+            chan_point="bob_4",
             capacity=4_000_000,
             private=False,
             opening_height=838_999,
@@ -245,6 +408,7 @@ class TestPid(unittest.TestCase):
         bob_chan_1_up = _new_mock_channel(
             pub_key="bob",
             chan_id=1,
+            chan_point="bob_1",
             capacity=4_000_000,
             private=False,
             opening_height=750_000,
@@ -259,6 +423,7 @@ class TestPid(unittest.TestCase):
         bob_chan_1_down = _new_mock_channel(
             pub_key="bob",
             chan_id=1,
+            chan_point="bob_1",
             capacity=4_000_000,
             private=False,
             opening_height=750_000,
@@ -273,6 +438,7 @@ class TestPid(unittest.TestCase):
         bob_chan_2_up = _new_mock_channel(
             pub_key="bob",
             chan_id=2,
+            chan_point="bob_2",
             capacity=4_000_000,
             private=False,
             opening_height=839_000,
@@ -287,6 +453,7 @@ class TestPid(unittest.TestCase):
         bob_chan_2_down = _new_mock_channel(
             pub_key="bob",
             chan_id=2,
+            chan_point="bob_2",
             capacity=4_000_000,
             private=False,
             opening_height=839_000,
@@ -301,6 +468,7 @@ class TestPid(unittest.TestCase):
         bob_chan_3_up = _new_mock_channel(
             pub_key="bob",
             chan_id=3,
+            chan_point="bob_3",
             capacity=4_000_000,
             private=False,
             opening_height=839_000,
@@ -315,6 +483,7 @@ class TestPid(unittest.TestCase):
         bob_chan_3_down = _new_mock_channel(
             pub_key="bob",
             chan_id=3,
+            chan_point="bob_3",
             capacity=4_000_000,
             private=False,
             opening_height=839_000,
@@ -329,6 +498,7 @@ class TestPid(unittest.TestCase):
         bob_chan_5 = _new_mock_channel(
             pub_key="bob",
             chan_id=5,
+            chan_point="bob_5",
             capacity=4_000_000,
             private=False,
             opening_height=839_000,
@@ -344,6 +514,7 @@ class TestPid(unittest.TestCase):
         bob_chan_6 = _new_mock_channel(
             pub_key="bob",
             chan_id=6,
+            chan_point="bob_6",
             capacity=4_000_000,
             private=True,
             opening_height=839_000,
@@ -359,6 +530,7 @@ class TestPid(unittest.TestCase):
         carol_chan_1 = _new_mock_channel(
             pub_key="carol",
             chan_id=11,
+            chan_point="carol_1",
             capacity=10_000_000,
             private=True,
             opening_height=700_000,
@@ -373,6 +545,7 @@ class TestPid(unittest.TestCase):
         carol_chan_2 = _new_mock_channel(
             pub_key="carol",
             chan_id=12,
+            chan_point="carol_2",
             capacity=10_000_000,
             private=True,
             opening_height=700_000,
@@ -387,6 +560,7 @@ class TestPid(unittest.TestCase):
         carol_chan_3 = _new_mock_channel(
             pub_key="carol",
             chan_id=13,
+            chan_point="carol_3",
             capacity=10_000_000,
             private=False,
             opening_height=700_000,
@@ -1162,6 +1336,882 @@ class TestPid(unittest.TestCase):
             )
         )
 
+        ########################################################
+        ############# Pid Controller: Testcases ################
+        ########################################################
+
+        # Test concept for pid:
+        # Main goal is to test the interplay between the aggregator the analytic
+        # controllers.
+
+        # 1. Two Channel Parties with two channels, two calls. First party uses default
+        #    config for the spread controller and the second an individual config.
+        # 2. Like 1. but the second channel party is new in the second call
+        #    without last param for peer.
+        # 3. Like 1. but the second channel party is new in the second call with
+        #    last param for peer and age less equal than max_age_spread_hours.
+        # 4. Like 1. but the second channel party is new in the second call with
+        #    last param for peer and age greater than max_age_spread_hours.
+        # 5. Like 1. but the second channel party is removed in the second call.
+        # 6. Like 1. but k parameters changed for one party from one call to
+        #    the other.
+        # 7. Like 1. but for one party a change in the ref fee rate.
+
+        # TODO:
+
+        #    - tests with margin idiosyncratic
+        #    - tests with spread level controller
+        #    - tests with pin peer (add, change, remove, different methods)
+
+        # Calculating the expected for the EwmaController calls. We have tested
+        # the controller in separate unit tests. That's why it is ok to test
+        # the interplay in this way.
+
+        # Channel party 1: bob
+        # We want to calculate some reference results for party bob with
+        # bob_chan_1 and bob_chan_3
+        # liquidity_in  = 1.5M + 1.5M + 0 + 0 = 3M
+        # liquidity_out = 0.75M + 0.25M + 2M = 3M
+
+        # first call for bob's channel
+        call_1 = EwmaCall(3600, _calc_error(3_000_000, 3_000_000, 400_000), bob_ewma_2)
+        spread_call_1 = call_ewma(60.0, [call_1]).control_variable
+
+        # creating a copy for the second call. 0.5M more local liquidity and 0.5M
+        # less remote liquidity.
+        bob_chan_1_2 = copy.deepcopy(bob_chan_1)
+        bob_chan_1_2.liquidity_out_settled_sat = 1_250_000
+        bob_chan_1_2.liquidity_in_settled_sat = 1_000_000
+
+        # second call for bob's channel
+        call_2 = EwmaCall(2100, _calc_error(2_500_000, 3_500_000, 400_000), bob_ewma_2)
+        spread_call_2 = call_ewma(60.0, [call_1, call_2]).control_variable
+
+        # Chanel party 2: carol
+        # We use carol_chan_2 and carol_chan_3
+        # liquidity_in  = 2.0M + 3.0M = 5M
+        # liquidity_out = 1.0M + 2.5M = 3.5M
+
+        # first call for carol's channel
+        # calculation of the default target
+        # 6M * 0.4 + 8.5M * X = 8M => X = (8M - 2.4M) / 8.5M
+        target_3 = (8_000_000 - 2_400_000) / 8.5
+        call_3 = EwmaCall(
+            3600, _calc_error(5_000_000, 3_500_000, target_3), default_ewma
+        )
+        spread_call_3 = call_ewma(360.0, [call_3]).control_variable
+
+        # For the second call we keep the balances unchanged. But we have to use
+        # a different target because the liquidity at bob's channels changed
+        # 6M * 0.4 + 8.5M * X = 7.5M => X = (8M - 2.4M) / 8.5M
+        target_4 = (7_500_000 - 2_400_000) / 8.5
+        call_4 = EwmaCall(
+            2100, _calc_error(5_000_000, 3_500_000, target_4), default_ewma
+        )
+        spread_call_4 = call_ewma(360.0, [call_3, call_4]).control_variable
+
+        self.testcases_controller.append(
+            TCasePidController(
+                name="1",
+                description="Two Channel Parties with two channels, two calls. First party uses default config for the spread controller and the second an individual config.",
+                calls=[
+                    # First Call
+                    PidControllerCall(
+                        timestamp=time_base,
+                        config=pid_config_2,  # uses an individual spread controller config for bob and default config for carol
+                        pid_run_last=(None, None),
+                        ewma_params_last={},
+                        policies_last={},
+                        block_height=840_000,
+                        channels=[carol_chan_3, bob_chan_1, carol_chan_2, bob_chan_3],
+                        expected_result=ERPidControllerCall(
+                            margin_rate=40,  # Equals initial margin
+                            spread_controller_results={
+                                "bob": ERSpreadRateController(
+                                    spread=spread_call_1, target=400_000
+                                ),
+                                "carol": ERSpreadRateController(
+                                    spread=spread_call_3, target=target_3
+                                ),
+                            },
+                            policy_proposals=[
+                                PolicyProposal(
+                                    channel=bob_chan_1,
+                                    force_update=True,
+                                    fee_rate_ppm=int(
+                                        spread_call_1 + 40
+                                    ),  # spread + 40ppm margin
+                                    inbound_fee_rate_ppm=int(-spread_call_1),
+                                ),
+                                PolicyProposal(
+                                    channel=bob_chan_3,
+                                    force_update=True,
+                                    fee_rate_ppm=int(spread_call_1 + 40),
+                                    inbound_fee_rate_ppm=int(-spread_call_1),
+                                ),
+                                PolicyProposal(
+                                    channel=carol_chan_2,
+                                    force_update=True,
+                                    fee_rate_ppm=int(
+                                        spread_call_3 + 40
+                                    ),  # spread + 40ppm margin
+                                    inbound_fee_rate_ppm=int(-spread_call_3),
+                                ),
+                                PolicyProposal(
+                                    channel=carol_chan_3,
+                                    force_update=True,
+                                    fee_rate_ppm=int(spread_call_3 + 40),
+                                    inbound_fee_rate_ppm=int(-spread_call_3),
+                                ),
+                            ],
+                        ),
+                    ),  # Second Call
+                    PidControllerCall(
+                        timestamp=time_base + timedelta(seconds=2100),
+                        config=pid_config_2,  # uses an individual spread controller config for bob and default config for carol
+                        pid_run_last=(1, time_base),  # return first run.
+                        ewma_params_last={},
+                        policies_last={
+                            1: policy_bob_last_1,
+                            3: policy_bob_last_1,
+                            12: policy_carol_last_1,
+                            13: policy_carol_last_1,
+                        },  # setting the last policies to avoid recalibration of the spread
+                        block_height=840_000,
+                        channels=[bob_chan_1_2, carol_chan_3, carol_chan_2, bob_chan_3],
+                        expected_result=ERPidControllerCall(
+                            margin_rate=40,  # Equals initial margin
+                            spread_controller_results={
+                                "bob": ERSpreadRateController(
+                                    spread=spread_call_2, target=400_000
+                                ),
+                                "carol": ERSpreadRateController(
+                                    spread=spread_call_4, target=target_4
+                                ),
+                            },
+                            policy_proposals=[
+                                PolicyProposal(
+                                    channel=bob_chan_1_2,
+                                    force_update=False,
+                                    fee_rate_ppm=int(
+                                        spread_call_2 + 40
+                                    ),  # spread + 40ppm margin
+                                    inbound_fee_rate_ppm=int(-spread_call_2),
+                                ),
+                                PolicyProposal(
+                                    channel=bob_chan_3,
+                                    force_update=False,
+                                    fee_rate_ppm=int(spread_call_2 + 40),
+                                    inbound_fee_rate_ppm=int(-spread_call_2),
+                                ),
+                                PolicyProposal(
+                                    channel=carol_chan_2,
+                                    force_update=False,
+                                    fee_rate_ppm=int(
+                                        spread_call_4 + 40
+                                    ),  # spread + 40ppm margin
+                                    inbound_fee_rate_ppm=int(-spread_call_4),
+                                ),
+                                PolicyProposal(
+                                    channel=carol_chan_3,
+                                    force_update=False,
+                                    fee_rate_ppm=int(spread_call_4 + 40),
+                                    inbound_fee_rate_ppm=int(-spread_call_4),
+                                ),
+                            ],
+                        ),
+                    ),
+                ],
+            )
+        )
+
+        # Default target for carol both channels in the first call
+        target_5 = 5_000_000 / 8.5
+        call_5 = EwmaCall(
+            3600, _calc_error(5_000_000, 3_500_000, target_5), default_ewma
+        )
+        spread_call_5 = call_ewma(360.0, [call_5]).control_variable
+
+        # The second the second call for carols channels is call_4. But because
+        # if the first call we expect a different spread,
+        spread_call_6 = call_ewma(360.0, [call_5, call_4]).control_variable
+
+        # We use the same opening height as bob_chan_3. Then the opening is within
+        # max_age_new_channels of 1000blocks at block 840_000.
+        bob_chan_1_2.opening_height = 839_000
+
+        # We also have to recalculate the expected result for bob in the second
+        # call. Target is the same as in testcase 1.
+        call_7 = EwmaCall(2100, _calc_error(2_500_000, 3_500_000, 400_000), bob_ewma_2)
+
+        # The liquidity is more local, i.e. we start with 2000ppm local and a
+        # spread of 2000ppm - 40ppm (margin) = 1960
+        spread_call_7 = call_ewma(1960.0, [call_7]).control_variable
+
+        self.testcases_controller.append(
+            TCasePidController(
+                name="2",
+                description="Like 1. but bob is new in the second call without last param for peer and opening within max_age_new_channels.",
+                calls=[
+                    # First Call
+                    PidControllerCall(
+                        timestamp=time_base,
+                        config=pid_config_2,  # uses an individual spread controller config for bob and default config for carol
+                        pid_run_last=(None, None),
+                        ewma_params_last={},
+                        policies_last={},
+                        block_height=840_000,
+                        channels=[carol_chan_3, carol_chan_2],
+                        expected_result=ERPidControllerCall(
+                            margin_rate=40,  # Equals initial margin
+                            spread_controller_results={
+                                "carol": ERSpreadRateController(
+                                    spread=spread_call_5, target=target_5
+                                ),
+                            },
+                            policy_proposals=[
+                                PolicyProposal(
+                                    channel=carol_chan_2,
+                                    force_update=True,
+                                    fee_rate_ppm=int(
+                                        spread_call_5 + 40
+                                    ),  # spread + 40ppm margin
+                                    inbound_fee_rate_ppm=int(-spread_call_5),
+                                ),
+                                PolicyProposal(
+                                    channel=carol_chan_3,
+                                    force_update=True,
+                                    fee_rate_ppm=int(spread_call_5 + 40),
+                                    inbound_fee_rate_ppm=int(-spread_call_5),
+                                ),
+                            ],
+                        ),
+                    ),  # Second Call
+                    PidControllerCall(
+                        timestamp=time_base + timedelta(seconds=2100),
+                        config=pid_config_2,  # uses an individual spread controller config for bob and default config for carol
+                        pid_run_last=(1, time_base),  # return first run.
+                        ewma_params_last={},
+                        policies_last={
+                            12: policy_carol_last_1,
+                            13: policy_carol_last_1,
+                        },  # setting the last policies to avoid recalibration of the spread
+                        block_height=840_000,
+                        channels=[bob_chan_1_2, carol_chan_3, carol_chan_2, bob_chan_3],
+                        expected_result=ERPidControllerCall(
+                            margin_rate=40,  # Equals initial margin
+                            spread_controller_results={
+                                "bob": ERSpreadRateController(
+                                    spread=spread_call_7, target=400_000
+                                ),
+                                "carol": ERSpreadRateController(
+                                    spread=spread_call_6, target=target_4
+                                ),
+                            },
+                            policy_proposals=[
+                                PolicyProposal(
+                                    channel=bob_chan_1_2,
+                                    force_update=True,
+                                    fee_rate_ppm=int(
+                                        spread_call_7 + 40
+                                    ),  # spread + 40ppm margin
+                                    inbound_fee_rate_ppm=int(-spread_call_7),
+                                ),
+                                PolicyProposal(
+                                    channel=bob_chan_3,
+                                    force_update=True,
+                                    fee_rate_ppm=int(spread_call_7 + 40),
+                                    inbound_fee_rate_ppm=int(-spread_call_7),
+                                ),
+                                PolicyProposal(
+                                    channel=carol_chan_2,
+                                    force_update=False,
+                                    fee_rate_ppm=int(
+                                        spread_call_6 + 40
+                                    ),  # spread + 40ppm margin
+                                    inbound_fee_rate_ppm=int(-spread_call_6),
+                                ),
+                                PolicyProposal(
+                                    channel=carol_chan_3,
+                                    force_update=False,
+                                    fee_rate_ppm=int(spread_call_6 + 40),
+                                    inbound_fee_rate_ppm=int(-spread_call_6),
+                                ),
+                            ],
+                        ),
+                    ),
+                ],
+            )
+        )
+
+        # We test that after an opening with ewma params not older than 2 hours
+        # leads to a usage of the spread, i.e. the control_variable of 210 set
+        # in bob_ewma_2
+        pid_config_2.max_age_spread_hours = 2
+        call_8 = EwmaCall(2100, _calc_error(2_500_000, 3_500_000, 400_000), bob_ewma_2)
+        spread_call_8 = call_ewma(210.0, [call_8]).control_variable
+
+        self.testcases_controller.append(
+            TCasePidController(
+                name="3",
+                description="Like 1. but bob is new in the second call with last param for peer.",
+                calls=[
+                    # First Call
+                    PidControllerCall(
+                        timestamp=time_base,
+                        config=pid_config_2,  # uses an individual spread controller config for bob and default config for carol
+                        pid_run_last=(None, None),
+                        ewma_params_last={},
+                        policies_last={},
+                        block_height=840_000,
+                        channels=[carol_chan_3, carol_chan_2],
+                        expected_result=ERPidControllerCall(
+                            margin_rate=40,  # Equals initial margin
+                            spread_controller_results={
+                                "carol": ERSpreadRateController(
+                                    spread=spread_call_5, target=target_5
+                                ),
+                            },
+                            policy_proposals=[
+                                PolicyProposal(
+                                    channel=carol_chan_2,
+                                    force_update=True,
+                                    fee_rate_ppm=int(
+                                        spread_call_5 + 40
+                                    ),  # spread + 40ppm margin
+                                    inbound_fee_rate_ppm=int(-spread_call_5),
+                                ),
+                                PolicyProposal(
+                                    channel=carol_chan_3,
+                                    force_update=True,
+                                    fee_rate_ppm=int(spread_call_5 + 40),
+                                    inbound_fee_rate_ppm=int(-spread_call_5),
+                                ),
+                            ],
+                        ),
+                    ),  # Second Call
+                    PidControllerCall(
+                        timestamp=time_base + timedelta(seconds=2100),
+                        config=pid_config_2,  # uses an individual spread controller config for bob and default config for carol
+                        pid_run_last=(1, time_base),  # return first run.
+                        ewma_params_last={
+                            "bob": (time_base + timedelta(seconds=-5100), bob_ewma_2)
+                        },
+                        policies_last={
+                            12: policy_carol_last_1,
+                            13: policy_carol_last_1,
+                        },  # setting the last policies to avoid recalibration of the spread
+                        block_height=840_000,
+                        channels=[bob_chan_1_2, carol_chan_3, carol_chan_2, bob_chan_3],
+                        expected_result=ERPidControllerCall(
+                            margin_rate=40,  # Equals initial margin
+                            spread_controller_results={
+                                "bob": ERSpreadRateController(
+                                    spread=spread_call_8, target=400_000
+                                ),
+                                "carol": ERSpreadRateController(
+                                    spread=spread_call_6, target=target_4
+                                ),
+                            },
+                            policy_proposals=[
+                                PolicyProposal(
+                                    channel=bob_chan_1_2,
+                                    force_update=True,
+                                    fee_rate_ppm=int(
+                                        spread_call_8 + 40
+                                    ),  # spread + 40ppm margin
+                                    inbound_fee_rate_ppm=int(-spread_call_8),
+                                ),
+                                PolicyProposal(
+                                    channel=bob_chan_3,
+                                    force_update=True,
+                                    fee_rate_ppm=int(spread_call_8 + 40),
+                                    inbound_fee_rate_ppm=int(-spread_call_8),
+                                ),
+                                PolicyProposal(
+                                    channel=carol_chan_2,
+                                    force_update=False,
+                                    fee_rate_ppm=int(
+                                        spread_call_6 + 40
+                                    ),  # spread + 40ppm margin
+                                    inbound_fee_rate_ppm=int(-spread_call_6),
+                                ),
+                                PolicyProposal(
+                                    channel=carol_chan_3,
+                                    force_update=False,
+                                    fee_rate_ppm=int(spread_call_6 + 40),
+                                    inbound_fee_rate_ppm=int(-spread_call_6),
+                                ),
+                            ],
+                        ),
+                    ),
+                ],
+            )
+        )
+
+        # Now the provided spread is older than 2h. Then we use fee_rate_new_local
+        # again for initial spread calibration. Leads to the same result as
+        # testcase 2.
+        self.testcases_controller.append(
+            TCasePidController(
+                name="4",
+                description="Like 1. but bob is new in the second call with last param for peer, but it is older than max_age_spread_hours.",
+                calls=[
+                    # First Call
+                    PidControllerCall(
+                        timestamp=time_base,
+                        config=pid_config_2,  # uses an individual spread controller config for bob and default config for carol
+                        pid_run_last=(None, None),
+                        ewma_params_last={},
+                        policies_last={},
+                        block_height=840_000,
+                        channels=[carol_chan_3, carol_chan_2],
+                        expected_result=ERPidControllerCall(
+                            margin_rate=40,  # Equals initial margin
+                            spread_controller_results={
+                                "carol": ERSpreadRateController(
+                                    spread=spread_call_5, target=target_5
+                                ),
+                            },
+                            policy_proposals=[
+                                PolicyProposal(
+                                    channel=carol_chan_2,
+                                    force_update=True,
+                                    fee_rate_ppm=int(
+                                        spread_call_5 + 40
+                                    ),  # spread + 40ppm margin
+                                    inbound_fee_rate_ppm=int(-spread_call_5),
+                                ),
+                                PolicyProposal(
+                                    channel=carol_chan_3,
+                                    force_update=True,
+                                    fee_rate_ppm=int(spread_call_5 + 40),
+                                    inbound_fee_rate_ppm=int(-spread_call_5),
+                                ),
+                            ],
+                        ),
+                    ),  # Second Call
+                    PidControllerCall(
+                        timestamp=time_base + timedelta(seconds=2100),
+                        config=pid_config_2,  # uses an individual spread controller config for bob and default config for carol
+                        pid_run_last=(1, time_base),  # return first run.
+                        ewma_params_last={
+                            "bob": (time_base + timedelta(seconds=-5101), bob_ewma_2)
+                        },  # spread 7201s (>2h) old.
+                        policies_last={
+                            12: policy_carol_last_1,
+                            13: policy_carol_last_1,
+                        },  # setting the last policies to avoid recalibration of the spread
+                        block_height=840_000,
+                        channels=[bob_chan_1_2, carol_chan_3, carol_chan_2, bob_chan_3],
+                        expected_result=ERPidControllerCall(
+                            margin_rate=40,  # Equals initial margin
+                            spread_controller_results={
+                                "bob": ERSpreadRateController(
+                                    spread=spread_call_7, target=400_000
+                                ),
+                                "carol": ERSpreadRateController(
+                                    spread=spread_call_6, target=target_4
+                                ),
+                            },
+                            policy_proposals=[
+                                PolicyProposal(
+                                    channel=bob_chan_1_2,
+                                    force_update=True,
+                                    fee_rate_ppm=int(
+                                        spread_call_7 + 40
+                                    ),  # spread + 40ppm margin
+                                    inbound_fee_rate_ppm=int(-spread_call_7),
+                                ),
+                                PolicyProposal(
+                                    channel=bob_chan_3,
+                                    force_update=True,
+                                    fee_rate_ppm=int(spread_call_7 + 40),
+                                    inbound_fee_rate_ppm=int(-spread_call_7),
+                                ),
+                                PolicyProposal(
+                                    channel=carol_chan_2,
+                                    force_update=False,
+                                    fee_rate_ppm=int(
+                                        spread_call_6 + 40
+                                    ),  # spread + 40ppm margin
+                                    inbound_fee_rate_ppm=int(-spread_call_6),
+                                ),
+                                PolicyProposal(
+                                    channel=carol_chan_3,
+                                    force_update=False,
+                                    fee_rate_ppm=int(spread_call_6 + 40),
+                                    inbound_fee_rate_ppm=int(-spread_call_6),
+                                ),
+                            ],
+                        ),
+                    ),
+                ],
+            )
+        )
+
+        # Now we take 1. and remove bob's channels with the second call.
+        # For carol we can use target_5, because balance is unchanged.
+
+        call_8 = EwmaCall(
+            2100, _calc_error(5_000_000, 3_500_000, target_5), default_ewma
+        )
+
+        spread_call_8 = call_ewma(360.0, [call_3, call_8]).control_variable
+
+        self.testcases_controller.append(
+            TCasePidController(
+                name="5",
+                description="Two Channel Parties with two channels, two calls. bob is removed with the second call.",
+                calls=[
+                    # First Call
+                    PidControllerCall(
+                        timestamp=time_base,
+                        config=pid_config_2,  # uses an individual spread controller config for bob and default config for carol
+                        pid_run_last=(None, None),
+                        ewma_params_last={},
+                        policies_last={},
+                        block_height=840_000,
+                        channels=[carol_chan_3, bob_chan_1, carol_chan_2, bob_chan_3],
+                        expected_result=ERPidControllerCall(
+                            margin_rate=40,  # Equals initial margin
+                            spread_controller_results={
+                                "bob": ERSpreadRateController(
+                                    spread=spread_call_1, target=400_000
+                                ),
+                                "carol": ERSpreadRateController(
+                                    spread=spread_call_3, target=target_3
+                                ),
+                            },
+                            policy_proposals=[
+                                PolicyProposal(
+                                    channel=bob_chan_1,
+                                    force_update=True,
+                                    fee_rate_ppm=int(
+                                        spread_call_1 + 40
+                                    ),  # spread + 40ppm margin
+                                    inbound_fee_rate_ppm=int(-spread_call_1),
+                                ),
+                                PolicyProposal(
+                                    channel=bob_chan_3,
+                                    force_update=True,
+                                    fee_rate_ppm=int(spread_call_1 + 40),
+                                    inbound_fee_rate_ppm=int(-spread_call_1),
+                                ),
+                                PolicyProposal(
+                                    channel=carol_chan_2,
+                                    force_update=True,
+                                    fee_rate_ppm=int(
+                                        spread_call_3 + 40
+                                    ),  # spread + 40ppm margin
+                                    inbound_fee_rate_ppm=int(-spread_call_3),
+                                ),
+                                PolicyProposal(
+                                    channel=carol_chan_3,
+                                    force_update=True,
+                                    fee_rate_ppm=int(spread_call_3 + 40),
+                                    inbound_fee_rate_ppm=int(-spread_call_3),
+                                ),
+                            ],
+                        ),
+                    ),  # Second Call
+                    PidControllerCall(
+                        timestamp=time_base + timedelta(seconds=2100),
+                        config=pid_config_2,  # uses an individual spread controller config for bob and default config for carol
+                        pid_run_last=(1, time_base),  # return first run.
+                        ewma_params_last={},
+                        policies_last={
+                            1: policy_bob_last_1,
+                            3: policy_bob_last_1,
+                            12: policy_carol_last_1,
+                            13: policy_carol_last_1,
+                        },  # setting the last policies to avoid recalibration of the spread
+                        block_height=840_000,
+                        channels=[carol_chan_3, carol_chan_2],
+                        expected_result=ERPidControllerCall(
+                            margin_rate=40,  # Equals initial margin
+                            spread_controller_results={
+                                "carol": ERSpreadRateController(
+                                    spread=spread_call_8, target=target_5
+                                ),
+                            },
+                            policy_proposals=[
+                                PolicyProposal(
+                                    channel=carol_chan_2,
+                                    force_update=False,
+                                    fee_rate_ppm=int(
+                                        spread_call_8 + 40
+                                    ),  # spread + 40ppm margin
+                                    inbound_fee_rate_ppm=int(-spread_call_8),
+                                ),
+                                PolicyProposal(
+                                    channel=carol_chan_3,
+                                    force_update=False,
+                                    fee_rate_ppm=int(spread_call_8 + 40),
+                                    inbound_fee_rate_ppm=int(-spread_call_8),
+                                ),
+                            ],
+                        ),
+                    ),
+                ],
+            )
+        )
+
+        # We change the EwmaControllerParams between the calls for bob now.
+        # Starting with call_1 again.
+        # call_9 is like call_2 but with bob_ewma_2 instead of bob_ewma_3
+        call_9 = EwmaCall(2100, _calc_error(2_500_000, 3_500_000, 400_000), bob_ewma_3)
+
+        # the expected result for bob after the second call.
+        spread_call_9 = call_ewma(60, [call_1, call_9]).control_variable
+
+        self.testcases_controller.append(
+            TCasePidController(
+                name="6",
+                description="Like 1. but k parameters changed for one party from one call to the other.",
+                calls=[
+                    # First Call
+                    PidControllerCall(
+                        timestamp=time_base,
+                        config=pid_config_2,  # uses an individual spread controller config for bob and default config for carol
+                        pid_run_last=(None, None),
+                        ewma_params_last={},
+                        policies_last={},
+                        block_height=840_000,
+                        channels=[carol_chan_3, bob_chan_1, carol_chan_2, bob_chan_3],
+                        expected_result=ERPidControllerCall(
+                            margin_rate=40,  # Equals initial margin
+                            spread_controller_results={
+                                "bob": ERSpreadRateController(
+                                    spread=spread_call_1, target=400_000
+                                ),
+                                "carol": ERSpreadRateController(
+                                    spread=spread_call_3, target=target_3
+                                ),
+                            },
+                            policy_proposals=[
+                                PolicyProposal(
+                                    channel=bob_chan_1,
+                                    force_update=True,
+                                    fee_rate_ppm=int(
+                                        spread_call_1 + 40
+                                    ),  # spread + 40ppm margin
+                                    inbound_fee_rate_ppm=int(-spread_call_1),
+                                ),
+                                PolicyProposal(
+                                    channel=bob_chan_3,
+                                    force_update=True,
+                                    fee_rate_ppm=int(spread_call_1 + 40),
+                                    inbound_fee_rate_ppm=int(-spread_call_1),
+                                ),
+                                PolicyProposal(
+                                    channel=carol_chan_2,
+                                    force_update=True,
+                                    fee_rate_ppm=int(
+                                        spread_call_3 + 40
+                                    ),  # spread + 40ppm margin
+                                    inbound_fee_rate_ppm=int(-spread_call_3),
+                                ),
+                                PolicyProposal(
+                                    channel=carol_chan_3,
+                                    force_update=True,
+                                    fee_rate_ppm=int(spread_call_3 + 40),
+                                    inbound_fee_rate_ppm=int(-spread_call_3),
+                                ),
+                            ],
+                        ),
+                    ),  # Second Call
+                    PidControllerCall(
+                        timestamp=time_base + timedelta(seconds=2100),
+                        config=pid_config_4,  # config with the changed controller params
+                        pid_run_last=(1, time_base),  # return first run.
+                        ewma_params_last={},
+                        policies_last={
+                            1: policy_bob_last_1,
+                            3: policy_bob_last_1,
+                            12: policy_carol_last_1,
+                            13: policy_carol_last_1,
+                        },  # setting the last policies to avoid recalibration of the spread
+                        block_height=840_000,
+                        channels=[bob_chan_1_2, carol_chan_3, carol_chan_2, bob_chan_3],
+                        expected_result=ERPidControllerCall(
+                            margin_rate=40,  # Equals initial margin
+                            spread_controller_results={
+                                "bob": ERSpreadRateController(
+                                    spread=spread_call_9, target=400_000
+                                ),
+                                "carol": ERSpreadRateController(
+                                    spread=spread_call_4, target=target_4
+                                ),
+                            },
+                            policy_proposals=[
+                                PolicyProposal(
+                                    channel=bob_chan_1_2,
+                                    force_update=False,
+                                    fee_rate_ppm=int(
+                                        spread_call_9 + 40
+                                    ),  # spread + 40ppm margin
+                                    inbound_fee_rate_ppm=int(-spread_call_9),
+                                ),
+                                PolicyProposal(
+                                    channel=bob_chan_3,
+                                    force_update=False,
+                                    fee_rate_ppm=int(spread_call_9 + 40),
+                                    inbound_fee_rate_ppm=int(-spread_call_9),
+                                ),
+                                PolicyProposal(
+                                    channel=carol_chan_2,
+                                    force_update=False,
+                                    fee_rate_ppm=int(
+                                        spread_call_4 + 40
+                                    ),  # spread + 40ppm margin
+                                    inbound_fee_rate_ppm=int(-spread_call_4),
+                                ),
+                                PolicyProposal(
+                                    channel=carol_chan_3,
+                                    force_update=False,
+                                    fee_rate_ppm=int(spread_call_4 + 40),
+                                    inbound_fee_rate_ppm=int(-spread_call_4),
+                                ),
+                            ],
+                        ),
+                    ),
+                ],
+            )
+        )
+
+        # Creating a copy of bob_chan_1_2 and lowering the fee rate from 100 ppm
+        # to 50 ppm.
+        bob_chan_1_3 = copy.deepcopy(bob_chan_1_2)
+        bob_chan_1_3.policy_local.fee_rate_ppm = 50  # type: ignore
+
+        # Spread is recalibrated to 10 ppm (margin at 40 ppm) before second call.
+        # call_10 is like call_2 but with a control variable of ten 10 for
+        # for second call
+        call_10 = EwmaCall(
+            2100,
+            _calc_error(2_500_000, 3_500_000, 400_000),
+            bob_ewma_2,
+            control_variable=10,
+        )
+
+        spread_call_10 = call_ewma(60, [call_1, call_10]).control_variable
+
+        self.testcases_controller.append(
+            TCasePidController(
+                name="1",
+                description="Like 1. but for one party a change in the ref fee rate.",
+                calls=[
+                    # First Call
+                    PidControllerCall(
+                        timestamp=time_base,
+                        config=pid_config_2,  # uses an individual spread controller config for bob and default config for carol
+                        pid_run_last=(None, None),
+                        ewma_params_last={},
+                        policies_last={},
+                        block_height=840_000,
+                        channels=[carol_chan_3, bob_chan_1, carol_chan_2, bob_chan_3],
+                        expected_result=ERPidControllerCall(
+                            margin_rate=40,  # Equals initial margin
+                            spread_controller_results={
+                                "bob": ERSpreadRateController(
+                                    spread=spread_call_1, target=400_000
+                                ),
+                                "carol": ERSpreadRateController(
+                                    spread=spread_call_3, target=target_3
+                                ),
+                            },
+                            policy_proposals=[
+                                PolicyProposal(
+                                    channel=bob_chan_1,
+                                    force_update=True,
+                                    fee_rate_ppm=int(
+                                        spread_call_1 + 40
+                                    ),  # spread + 40ppm margin
+                                    inbound_fee_rate_ppm=int(-spread_call_1),
+                                ),
+                                PolicyProposal(
+                                    channel=bob_chan_3,
+                                    force_update=True,
+                                    fee_rate_ppm=int(spread_call_1 + 40),
+                                    inbound_fee_rate_ppm=int(-spread_call_1),
+                                ),
+                                PolicyProposal(
+                                    channel=carol_chan_2,
+                                    force_update=True,
+                                    fee_rate_ppm=int(
+                                        spread_call_3 + 40
+                                    ),  # spread + 40ppm margin
+                                    inbound_fee_rate_ppm=int(-spread_call_3),
+                                ),
+                                PolicyProposal(
+                                    channel=carol_chan_3,
+                                    force_update=True,
+                                    fee_rate_ppm=int(spread_call_3 + 40),
+                                    inbound_fee_rate_ppm=int(-spread_call_3),
+                                ),
+                            ],
+                        ),
+                    ),  # Second Call
+                    PidControllerCall(
+                        timestamp=time_base + timedelta(seconds=2100),
+                        config=pid_config_2,  # uses an individual spread controller config for bob and default config for carol
+                        pid_run_last=(1, time_base),  # return first run.
+                        ewma_params_last={},
+                        policies_last={
+                            1: policy_bob_last_1,
+                            3: policy_bob_last_1,
+                            12: policy_carol_last_1,
+                            13: policy_carol_last_1,
+                        },  # setting the last policies to avoid recalibration of the spread
+                        block_height=840_000,
+                        channels=[bob_chan_1_3, carol_chan_3, carol_chan_2, bob_chan_3],
+                        expected_result=ERPidControllerCall(
+                            margin_rate=40,  # Equals initial margin
+                            spread_controller_results={
+                                "bob": ERSpreadRateController(
+                                    spread=spread_call_10, target=400_000
+                                ),
+                                "carol": ERSpreadRateController(
+                                    spread=spread_call_4, target=target_4
+                                ),
+                            },
+                            policy_proposals=[
+                                PolicyProposal(
+                                    channel=bob_chan_1_3,
+                                    force_update=True,  # because of ref rate change
+                                    fee_rate_ppm=int(
+                                        spread_call_10 + 40
+                                    ),  # spread + 40ppm margin
+                                    inbound_fee_rate_ppm=int(-spread_call_10),
+                                ),
+                                PolicyProposal(
+                                    channel=bob_chan_3,
+                                    force_update=True,  # because of ref rate change
+                                    fee_rate_ppm=int(spread_call_10 + 40),
+                                    inbound_fee_rate_ppm=int(-spread_call_10),
+                                ),
+                                PolicyProposal(
+                                    channel=carol_chan_2,
+                                    force_update=False,
+                                    fee_rate_ppm=int(
+                                        spread_call_4 + 40
+                                    ),  # spread + 40ppm margin
+                                    inbound_fee_rate_ppm=int(-spread_call_4),
+                                ),
+                                PolicyProposal(
+                                    channel=carol_chan_3,
+                                    force_update=False,
+                                    fee_rate_ppm=int(spread_call_4 + 40),
+                                    inbound_fee_rate_ppm=int(-spread_call_4),
+                                ),
+                            ],
+                        ),
+                    ),
+                ],
+            )
+        )
+
     def test_aggregator(self):
         """
         Runs all testcases for the aggregator.
@@ -1228,6 +2278,115 @@ class TestPid(unittest.TestCase):
         e_col_chan_ids = sorted(e_col.chan_ids)
 
         self.assertEqual(col_chan_ids, e_col_chan_ids, msg)
+
+    def test_pid_controller(self):
+
+        for t in self.testcases_controller:
+            # Creating a new pid controller using the first config to init the
+            # margin controller.
+
+            # patch to mock pid_run_last which is executed in PidController.__init__
+            with patch(
+                "feelancer.pid.data.PidStore.pid_run_last",
+                return_value=t.calls[0].pid_run_last,
+            ):
+                controller = PidController(
+                    db=MagicMock(), config=t.calls[0].config, pubkey_local="alice"
+                )
+
+            # message body
+            msg = f"{t.name=}; {t.description}"
+
+            # Calling the controller
+            for i, c in enumerate(t.calls):
+                msgcall = f"call {i=}; " + msg
+
+                # Create a new lncache with our testdata.
+                lncache = LightningCache(
+                    lnclient=_new_mock_lnclient(
+                        block_height=c.block_height, channels=c.channels
+                    )
+                )
+
+                controller.ln_store.local_policies = MagicMock(
+                    return_value=c.policies_last
+                )
+
+                controller.pid_store.pid_run_last = MagicMock(
+                    return_value=c.pid_run_last
+                )
+
+                # Callable for mocking ewma_params_last_by_peer, it returns,
+                # the value of the dict ewma_params_last and if not defined
+                # (None, None) as default.
+                def params_last(
+                    peer_pub_key: str,
+                ) -> tuple[None, None] | tuple[datetime, EwmaControllerParams]:
+                    return c.ewma_params_last.get(peer_pub_key, (None, None))
+
+                controller.pid_store.ewma_params_last_by_peer = params_last
+
+                # Now all is mocked and we can call the controller.
+                controller(c.config, lncache, c.timestamp)
+
+                # We can proceed with the next call if there is no expected result.
+                if isinstance(c.expected_result, NoExpectedResult):
+                    continue
+
+                self._assert_pid_controller_call(controller, c.expected_result, msgcall)
+
+    def _assert_pid_controller_call(
+        self, c: PidController, e: ERPidControllerCall, msg: str
+    ):
+        """
+        Validation of a pid controller after a call using the expected results.
+        """
+
+        self.assertEqual(c.margin_controller.margin, e.margin_rate, msg)
+
+        # Assert the spread rate controller. First we determine the union set
+        # of pub_keys
+        pub_keys = c.spread_controller_map.keys() | e.spread_controller_results.keys()
+        for pub_key in pub_keys:
+            msgpub = f"{pub_key=}; " + msg
+
+            s = c.spread_controller_map.get(pub_key)
+            # Ensures also that it is not None.
+            self.assertIsInstance(s, SpreadController, msgpub)
+
+            r = e.spread_controller_results.get(pub_key)
+            # Ensures also that it is not None.
+            self.assertIsInstance(r, ERSpreadRateController, msgpub)
+
+            self._assert_spread_controller(s, r, msgpub)  # type: ignore
+
+        # Create a dict of the generated PolicyProposal. And afterward a set
+        # of all chan_points.
+        props: dict[str, PolicyProposal] = {
+            p.channel.chan_point: p for p in c.policy_proposals()
+        }
+        e_props: dict[str, PolicyProposal] = {
+            p.channel.chan_point: p for p in e.policy_proposals
+        }
+
+        # Assert the the PolicyProposal's for each chan_point now.
+        chan_points = props.keys() | e_props.keys()
+        for chan in chan_points:
+            msgchan = f"{chan=}; " + msg
+            p = props.get(chan)
+            self.assertIsInstance(p, PolicyProposal, msgchan)
+
+            r = e_props.get(chan)
+            self.assertIsInstance(r, PolicyProposal, msgchan)
+
+            # We assert the whole PolicyProposal objects here.
+            self.assertEqual(p, r, msgchan)
+
+    def _assert_spread_controller(
+        self, con: SpreadController, e_con: ERSpreadRateController, msg: str
+    ) -> None:
+        self.assertEqual(con.spread, e_con.spread, msg)
+        self.assertEqual(con.target, e_con.target, msg)
 
     def test_calc_error(self):
         testcases: list[TCasePidError] = []
