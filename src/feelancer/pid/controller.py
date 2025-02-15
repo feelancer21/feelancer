@@ -262,7 +262,9 @@ def yield_pid_results(
     pass
 
 
-def new_policy_proposal(pid_result: PidResult, set_inbound: bool) -> PolicyProposal:
+def new_policy_proposal(
+    pid_result: PidResult, set_inbound: bool, force_update: bool
+) -> PolicyProposal:
     """
     Converts the PidResult to a PolicyProposal
 
@@ -281,6 +283,7 @@ def new_policy_proposal(pid_result: PidResult, set_inbound: bool) -> PolicyPropo
         channel=pid_result.channel,
         fee_rate_ppm=int(max(fee_rate_ppm, 0)),
         inbound_fee_rate_ppm=inbound_fee_rate_ppm,
+        force_update=force_update,
     )
 
 
@@ -326,6 +329,10 @@ class PidController:
 
         self.spread_level_controller: EwmaController | None = None
 
+        # Peers which require a force with the next policy update. Can be peers
+        # with new channels or peers with a change of the reference fee rate.
+        self.peers_update_force: set[str] = set()
+
     def __call__(
         self, config: PidConfig, ln: LightningCache, timestamp_start: datetime
     ) -> None:
@@ -336,6 +343,9 @@ class PidController:
 
         last_run_id, _ = self.pid_store.pid_run_last()
         self.config = config
+
+        # reset the set
+        self.peers_update_force = set()
 
         # We need the last margin later we have to recalculate the spread for
         # one peer
@@ -404,6 +414,10 @@ class PidController:
                     f"{channel_collection.ref_fee_rate=}; {margin_peer=}"
                 )
 
+                # Make sure that the other channels have the same fee rate after
+                # the run. If it not intended the user has to exclude these channels.
+                self.peers_update_force.add(pub_key)
+
             # If there is no existing controller we have to create one
             if not spread_controller:
                 # We check if there was a controller with this peer in the past,
@@ -458,6 +472,11 @@ class PidController:
                 f"target {target}; margin peer {margin_peer}; result spread: "
                 f"{spread_controller.spread}"
             )
+
+            # Force update to make sure that the new fee rate is broadcasted or
+            # to align the fee rates of new channels with the existing ones.
+            if channel_collection.has_new_channels:
+                self.peers_update_force.add(pub_key)
 
         # If the channels with a peer has been closed, we can remove the controller
         # from the map. Therefore wie create a new map with the current pub keys.
@@ -674,6 +693,7 @@ class PidController:
             for r in yield_pid_results(
                 self.margin_controller, spread_controller, margin_idio
             ):
-                res.append(new_policy_proposal(r, set_inbound))
+                force_update = pub_key in self.peers_update_force
+                res.append(new_policy_proposal(r, set_inbound, force_update))
 
         return res
