@@ -101,6 +101,13 @@ class ChannelCollection:
             self._ref_fee_rate = channel.policy_local.fee_rate_ppm
 
     @property
+    def has_new_channels(self) -> bool:
+        """
+        Returns True if there are new channels in this collection.
+        """
+        return len(self._new_channels) > 0
+
+    @property
     def liquidity_out(self) -> float:
         """
         Returns the sum of local liquidity which is the local balance with the

@@ -93,6 +93,8 @@ class ERPidChannelCollection:
     # Expected chan_ids of the pid_channels method.
     chan_ids: list[int]
 
+    has_new_channels: bool
+
 
 @dataclass
 class ERPidAggregator:
@@ -424,6 +426,7 @@ class TestPid(unittest.TestCase):
                             ref_fee_rate_last=100,
                             ref_fee_rate_changed=False,
                             chan_ids=[1],
+                            has_new_channels=False,
                         )
                     },
                 ),
@@ -452,6 +455,7 @@ class TestPid(unittest.TestCase):
                             ref_fee_rate_last=None,
                             ref_fee_rate_changed=True,
                             chan_ids=[2],
+                            has_new_channels=True,
                         )
                     },
                 ),
@@ -480,6 +484,7 @@ class TestPid(unittest.TestCase):
                             ref_fee_rate_last=None,
                             ref_fee_rate_changed=True,
                             chan_ids=[3],
+                            has_new_channels=True,
                         )
                     },
                 ),
@@ -508,6 +513,7 @@ class TestPid(unittest.TestCase):
                             ref_fee_rate_last=None,
                             ref_fee_rate_changed=True,
                             chan_ids=[4],
+                            has_new_channels=False,
                         )
                     },
                 ),
@@ -535,6 +541,7 @@ class TestPid(unittest.TestCase):
                             ref_fee_rate_last=400,
                             ref_fee_rate_changed=False,
                             chan_ids=[],  # empty because of private only
+                            has_new_channels=False,
                         )
                     },
                 ),
@@ -562,6 +569,7 @@ class TestPid(unittest.TestCase):
                             ref_fee_rate_last=100,
                             ref_fee_rate_changed=True,
                             chan_ids=[1],
+                            has_new_channels=False,
                         )
                     },
                 ),
@@ -589,6 +597,7 @@ class TestPid(unittest.TestCase):
                             ref_fee_rate_last=0,
                             ref_fee_rate_changed=True,
                             chan_ids=[1],
+                            has_new_channels=False,
                         )
                     },
                 ),
@@ -616,6 +625,7 @@ class TestPid(unittest.TestCase):
                             ref_fee_rate_last=100,
                             ref_fee_rate_changed=True,
                             chan_ids=[1],
+                            has_new_channels=False,
                         )
                     },
                 ),
@@ -649,6 +659,7 @@ class TestPid(unittest.TestCase):
                             ref_fee_rate_last=400,
                             ref_fee_rate_changed=False,
                             chan_ids=[],  # empty because of private only
+                            has_new_channels=False,
                         )
                     },
                 ),
@@ -684,6 +695,7 @@ class TestPid(unittest.TestCase):
                                 12,
                                 13,
                             ],  # not empty because of one public channel
+                            has_new_channels=False,
                         )
                     },
                 ),
@@ -725,6 +737,7 @@ class TestPid(unittest.TestCase):
                             ref_fee_rate_last=100,
                             ref_fee_rate_changed=False,
                             chan_ids=[1, 2, 3],
+                            has_new_channels=False,
                         ),
                         "carol": ERPidChannelCollection(
                             liquidity_out=0,  # 0 because it is private only
@@ -734,6 +747,7 @@ class TestPid(unittest.TestCase):
                             ref_fee_rate_last=400,
                             ref_fee_rate_changed=False,
                             chan_ids=[],  # empty because of private only
+                            has_new_channels=False,
                         ),
                     },
                 ),
@@ -775,6 +789,7 @@ class TestPid(unittest.TestCase):
                             ref_fee_rate_last=100,
                             ref_fee_rate_changed=False,
                             chan_ids=[1, 2, 3],
+                            has_new_channels=False,
                         ),
                         "carol": ERPidChannelCollection(
                             liquidity_out=5_500_000,  # 2M + 1M + 2.5M = 5.5M
@@ -783,11 +798,8 @@ class TestPid(unittest.TestCase):
                             ref_fee_rate=400,
                             ref_fee_rate_last=400,
                             ref_fee_rate_changed=False,
-                            chan_ids=[
-                                11,
-                                12,
-                                13,
-                            ],
+                            chan_ids=[11, 12, 13],
+                            has_new_channels=False,
                         ),
                     },
                 ),
@@ -830,6 +842,7 @@ class TestPid(unittest.TestCase):
                             ref_fee_rate_last=100,
                             ref_fee_rate_changed=False,
                             chan_ids=[1, 2, 3],
+                            has_new_channels=False,
                         ),
                         "carol": ERPidChannelCollection(
                             liquidity_out=5_500_000,  # 2M + 1M + 2.5M = 5.5M
@@ -838,11 +851,8 @@ class TestPid(unittest.TestCase):
                             ref_fee_rate=400,
                             ref_fee_rate_last=400,
                             ref_fee_rate_changed=False,
-                            chan_ids=[
-                                11,
-                                12,
-                                13,
-                            ],
+                            chan_ids=[11, 12, 13],
+                            has_new_channels=False,
                         ),
                     },
                 ),
@@ -883,6 +893,7 @@ class TestPid(unittest.TestCase):
                             ref_fee_rate_last=100,
                             ref_fee_rate_changed=False,
                             chan_ids=[1, 2, 3],
+                            has_new_channels=True,
                         ),
                         "carol": ERPidChannelCollection(
                             liquidity_out=5_500_000,  # 2M + 1M + 2.5M = 5.5M
@@ -891,11 +902,8 @@ class TestPid(unittest.TestCase):
                             ref_fee_rate=400,
                             ref_fee_rate_last=400,
                             ref_fee_rate_changed=False,
-                            chan_ids=[
-                                11,
-                                12,
-                                13,
-                            ],
+                            chan_ids=[11, 12, 13],
+                            has_new_channels=False,
                         ),
                     },
                 ),
@@ -938,6 +946,7 @@ class TestPid(unittest.TestCase):
                             ref_fee_rate_last=100,
                             ref_fee_rate_changed=True,
                             chan_ids=[1, 2, 3],
+                            has_new_channels=False,
                         ),
                         "carol": ERPidChannelCollection(
                             liquidity_out=5_500_000,  # 2M + 1M + 2.5M = 5.5M
@@ -946,11 +955,8 @@ class TestPid(unittest.TestCase):
                             ref_fee_rate=400,
                             ref_fee_rate_last=400,
                             ref_fee_rate_changed=False,
-                            chan_ids=[
-                                11,
-                                12,
-                                13,
-                            ],
+                            chan_ids=[11, 12, 13],
+                            has_new_channels=False,
                         ),
                     },
                 ),
@@ -993,6 +999,7 @@ class TestPid(unittest.TestCase):
                             ref_fee_rate_last=100,
                             ref_fee_rate_changed=True,
                             chan_ids=[1, 2, 3],
+                            has_new_channels=False,
                         ),
                         "carol": ERPidChannelCollection(
                             liquidity_out=5_500_000,  # 2M + 1M + 2.5M = 5.5M
@@ -1001,11 +1008,8 @@ class TestPid(unittest.TestCase):
                             ref_fee_rate=400,
                             ref_fee_rate_last=400,
                             ref_fee_rate_changed=False,
-                            chan_ids=[
-                                11,
-                                12,
-                                13,
-                            ],
+                            chan_ids=[11, 12, 13],
+                            has_new_channels=False,
                         ),
                     },
                 ),
@@ -1047,6 +1051,7 @@ class TestPid(unittest.TestCase):
                             ref_fee_rate_last=100,
                             ref_fee_rate_changed=False,
                             chan_ids=[1, 3],
+                            has_new_channels=False,
                         )
                     },
                 ),
@@ -1088,6 +1093,7 @@ class TestPid(unittest.TestCase):
                             ref_fee_rate_last=100,
                             ref_fee_rate_changed=False,
                             chan_ids=[1, 2],
+                            has_new_channels=False,
                         ),
                         "carol": ERPidChannelCollection(
                             liquidity_out=5_500_000,  # 2M + 1M + 2.5M = 5.5M
@@ -1096,11 +1102,8 @@ class TestPid(unittest.TestCase):
                             ref_fee_rate=400,
                             ref_fee_rate_last=400,
                             ref_fee_rate_changed=False,
-                            chan_ids=[
-                                11,
-                                12,
-                                13,
-                            ],
+                            chan_ids=[11, 12, 13],
+                            has_new_channels=False,
                         ),
                     },
                 ),
@@ -1142,6 +1145,7 @@ class TestPid(unittest.TestCase):
                             ref_fee_rate_last=100,
                             ref_fee_rate_changed=False,
                             chan_ids=[1, 2],
+                            has_new_channels=False,
                         ),
                         "carol": ERPidChannelCollection(
                             liquidity_out=5_500_000,  # 2M + 1M + 2.5M = 5.5M
@@ -1150,11 +1154,8 @@ class TestPid(unittest.TestCase):
                             ref_fee_rate=400,
                             ref_fee_rate_last=400,
                             ref_fee_rate_changed=False,
-                            chan_ids=[
-                                11,
-                                12,
-                                13,
-                            ],
+                            chan_ids=[11, 12, 13],
+                            has_new_channels=False,
                         ),
                     },
                 ),
@@ -1220,6 +1221,7 @@ class TestPid(unittest.TestCase):
         self.assertEqual(col.ref_fee_rate, e_col.ref_fee_rate, msg)
         self.assertEqual(col.ref_fee_rate_last, e_col.ref_fee_rate_last, msg)
         self.assertEqual(col.ref_fee_rate_changed, e_col.ref_fee_rate_changed, msg)
+        self.assertEqual(col.has_new_channels, e_col.has_new_channels, msg)
 
         # Testing the ids of the channels in the collection
         col_chan_ids = sorted([c.chan_id for c in col.pid_channels()])
