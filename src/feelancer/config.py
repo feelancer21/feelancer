@@ -34,7 +34,7 @@ class FeelancerConfig:
 
         self.tasks_config: dict[str, dict] = {}
 
-        tasks = ["pid", "reconnect"]
+        tasks = ["pid", "reconnect", "paytrack"]
         tasks_required = ["pid"]
 
         for task in tasks:

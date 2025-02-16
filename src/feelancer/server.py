@@ -3,12 +3,14 @@ from __future__ import annotations
 import logging
 import threading
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 from .config import FeelancerConfig
 from .data.db import FeelancerDB
 from .lightning.lnd import LNDClient
 from .lnd.client import LndGrpc
+from .paytrack.service import PaytrackConfig, PaytrackService
+from .paytrack.tracker import LNDPaymentTracker
 from .pid.data import PidConfig
 from .pid.service import PidService
 from .reconnect.reconnector import LNDReconnector
@@ -18,7 +20,17 @@ from .utils import read_config_file
 
 if TYPE_CHECKING:
     from feelancer.lightning.client import LightningClient
+    from feelancer.paytrack.tracker import PaymentTracker
     from feelancer.reconnect.reconnector import Reconnector
+
+
+class SubServer(Protocol):
+    """
+    A subserver is a service running as a daemon and have to be started and stopped.
+    """
+
+    def start(self) -> None: ...
+    def stop(self) -> None: ...
 
 
 @dataclass
@@ -30,6 +42,7 @@ class AppConfig:
     log_level: str | None
     feelancer_cfg: FeelancerConfig
     reconnector: Reconnector
+    payment_tracker: PaymentTracker
 
     @classmethod
     def from_config_dict(cls, config_dict: dict, config_file: str) -> AppConfig:
@@ -46,6 +59,7 @@ class AppConfig:
             lndgrpc = LndGrpc.from_file(**config_dict["lnd"])
             lnclient: LightningClient = LNDClient(lndgrpc)
             reconnector: Reconnector = LNDReconnector(lndgrpc)
+            payment_tracker: PaymentTracker = LNDPaymentTracker(lndgrpc)
         else:
             raise ValueError("'lnd' section is not included in config-file")
 
@@ -72,6 +86,7 @@ class AppConfig:
             loglevel,
             feelancer_config,
             reconnector,
+            payment_tracker,
         )
 
     @classmethod
@@ -83,7 +98,11 @@ class Server:
     def __init__(self, cfg: AppConfig):
         self.cfg = cfg
 
-        self.lock = threading.Lock()
+        # Threads to be started during start
+        self.threads_start: list[threading.Thread] = []
+
+        # Threads to be started during stop
+        self.threads_stop: list[threading.Thread] = []
 
         # We init a task runner which controls the scheduler for the job
         # execution.
@@ -101,11 +120,31 @@ class Server:
         )
         self.runner.register_task(pid.run)
         self.runner.register_reset(pid.reset)
+        self._register_sub_server(self.runner)
 
         # reconnect service is responsible for reconnecting inactive channels
         # or channels with stuck htlcs.
         reconnect = ReconnectService(cfg.reconnector, self.get_reconnect_config)
         self.runner.register_task(reconnect.run)
+
+        paytrack_conf = self.get_paytrack_config()
+        self.paytrack_service: PaytrackService | None = None
+        if paytrack_conf is not None:
+            self.paytrack_service = PaytrackService(
+                db=self.cfg.db,
+                payment_tracker=self.cfg.payment_tracker,
+                paytrack_config=paytrack_conf,
+            )
+            self._register_sub_server(self.paytrack_service)
+
+        # Lock will be released after start of the subservers has finished.
+        self.lock = threading.Lock()
+        self.lock.acquire()
+
+    def _register_sub_server(self, subserver: SubServer) -> None:
+
+        self.threads_start.append(threading.Thread(target=subserver.start))
+        self.threads_stop.append(threading.Thread(target=subserver.stop))
 
     def read_feelancer_cfg(self) -> FeelancerConfig:
         """
@@ -134,12 +173,29 @@ class Server:
 
         return ReconnectConfig(config_dict)
 
+    def get_paytrack_config(self) -> PaytrackConfig | None:
+        config_dict = self.cfg.feelancer_cfg.tasks_config.get("paytrack")
+        if config_dict is None:
+            return None
+
+        return PaytrackConfig(config_dict)
+
     def start(self) -> None:
         """
         Starts the server.
         """
 
-        self.runner.start()
+        for t in self.threads_start:
+            t.start()
+
+        self.lock.release()
+
+        logging.debug("All start threads started")
+
+        for t in self.threads_start:
+            t.join()
+
+        logging.debug("All start threads joined")
 
     def stop(self) -> None:
         """
@@ -147,4 +203,12 @@ class Server:
         """
 
         with self.lock:
-            self.runner.stop()
+            for t in self.threads_stop:
+                t.start()
+
+        logging.debug("All stop threads started")
+
+        for t in self.threads_start:
+            t.join()
+
+        logging.debug("All stop threads joined")
