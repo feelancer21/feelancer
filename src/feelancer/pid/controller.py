@@ -11,12 +11,10 @@ from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
 from feelancer.lightning.chan_updates import PolicyProposal
-from feelancer.lightning.data import LightningStore
 
 from .aggregator import ChannelAggregator
 from .analytics import EwmaController, MrController
 from .data import (
-    PidStore,
     new_margin_controller,
     new_pid_result,
     new_pid_run,
@@ -25,13 +23,16 @@ from .data import (
 
 if TYPE_CHECKING:
 
-    from feelancer.data.db import FeelancerDB
     from feelancer.lightning.chan_updates import PolicyProposal
     from feelancer.lightning.client import Channel
-    from feelancer.lightning.data import LightningCache, LightningSessionCache
+    from feelancer.lightning.data import (
+        LightningCache,
+        LightningSessionCache,
+        LightningStore,
+    )
 
     from .aggregator import ChannelCollection
-    from .data import EwmaControllerParams, MrControllerParams, PidConfig
+    from .data import EwmaControllerParams, MrControllerParams, PidConfig, PidStore
     from .models import DBPidMarginController, DBPidResult, DBPidSpreadController
 
 
@@ -292,10 +293,12 @@ class PidController:
     The main controller which holds the MarginController and all SpreadControllers.
     """
 
-    def __init__(self, db: FeelancerDB, config: PidConfig, pubkey_local: str) -> None:
+    def __init__(
+        self, pid_store: PidStore, ln_store: LightningStore, config: PidConfig
+    ) -> None:
         self.config = config
-        self.pid_store = PidStore(db, pubkey_local)
-        self.ln_store = LightningStore(db, pubkey_local)
+        self.pid_store = pid_store
+        self.ln_store = ln_store
 
         # Fetching the last timestamp from the database
         last_run_id, self.last_timestamp = self.pid_store.pid_run_last()

@@ -2285,14 +2285,14 @@ class TestPid(unittest.TestCase):
             # Creating a new pid controller using the first config to init the
             # margin controller.
 
+            pid_store = MagicMock()
             # patch to mock pid_run_last which is executed in PidController.__init__
-            with patch(
-                "feelancer.pid.data.PidStore.pid_run_last",
-                return_value=t.calls[0].pid_run_last,
-            ):
-                controller = PidController(
-                    db=MagicMock(), config=t.calls[0].config, pubkey_local="alice"
-                )
+            pid_store.pid_run_last = lambda: t.calls[0].pid_run_last
+            controller = PidController(
+                pid_store=pid_store,
+                ln_store=MagicMock(),
+                config=t.calls[0].config,
+            )
 
             # message body
             msg = f"{t.name=}; {t.description}"
