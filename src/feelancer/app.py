@@ -23,6 +23,11 @@ def _get_args():
         default="~/.feelancer/feelancer.toml",
     )
     parser.add_argument(
+        "--no-server",
+        action="store_true",
+        help="Do not start the server. Creates database only. (default: False)",
+    )
+    parser.add_argument(
         "--version",
         action="store_true",
         help="Show the version",
@@ -51,7 +56,10 @@ def app():
         # Stopping the runner when signal is received.
         sig_handler.add_handler(server.stop)
 
-        server.start()
+        if not args.no_server:
+            server.start()
+        else:
+            logging.info(f"Not starting server: {args.no_server=}")
 
     except Exception:
         # Hard exit with killing of all threads if there is an unknown error.
