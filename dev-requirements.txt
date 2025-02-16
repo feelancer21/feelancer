@@ -37,8 +37,6 @@ gitdb==4.0.11
     # via gitpython
 gitpython==3.1.43
     # via streamlit
-googleapis-common-protos==1.63.2
-    # via -r dev.in
 greenlet==3.1.1
     # via sqlalchemy
 grpcio==1.65.5
@@ -108,7 +106,6 @@ polars==1.5.0
     # via -r addon.in
 protobuf==5.27.3
     # via
-    #   googleapis-common-protos
     #   grpcio-tools
     #   mypy-protobuf
     #   streamlit
@@ -184,7 +181,7 @@ tomli==2.0.1
     # via -r base.in
 tornado==6.4.1
     # via streamlit
-types-protobuf==5.27.0.20240626
+types-protobuf==5.29.1.20250208
     # via mypy-protobuf
 typing-extensions==4.12.2
     # via
