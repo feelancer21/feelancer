@@ -74,3 +74,7 @@ pdf:
 
 cloc:
 	cloc --exclude-dir grpc_generated,.vscode  .
+
+proto-compile:
+	@echo "Downloading and compiling lnd protos"
+	cd src/feelancer/lnd/protos && ./protoc.sh
