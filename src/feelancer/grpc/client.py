@@ -3,15 +3,21 @@ from __future__ import annotations
 import codecs
 import logging
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Generator, Iterable
 from functools import wraps
+from typing import TypeVar
 
 import grpc
 
 DEFAULT_MESSAGE_SIZE_MB = 50 * 1024 * 1024
 DEFAULT_MAX_CONNECTION_IDLE_MS = 30000
 
+T = TypeVar("T")
+
 os.environ["GRPC_SSL_CIPHER_SUITES"] = "HIGH+ECDSA"
+
+
+class LocallyCancelled(Exception): ...
 
 
 def _create_rpc_error_handler(
@@ -34,6 +40,11 @@ def _create_rpc_error_handler(
                 logging.error(msg)
                 raise e
 
+        # Can occur during rpc streams, when the user cancels the stream.
+        if code == grpc.StatusCode.CANCELLED:
+            if details == "Locally cancelled by application!":
+                raise LocallyCancelled(details)
+
         # We raise the exception if the server is not available.
         logging.error(msg)
         if code == grpc.StatusCode.UNAVAILABLE:
@@ -55,6 +66,17 @@ def default_error_handler(e: Exception) -> None:
     msg = f"unexpected error during rpc call: {e}"
     logging.error(msg)
     raise e
+
+
+def handle_rpc_stream(stream: Iterable[T]) -> Generator[T]:
+    """
+    Decorator for handling errors during a rpc stream.
+    """
+    rpc_handler = _create_rpc_error_handler()
+    try:
+        yield from stream
+    except grpc.RpcError as e:
+        rpc_handler(e)
 
 
 class RpcResponseHandler:
