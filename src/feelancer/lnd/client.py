@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 
 import grpc
 
@@ -8,6 +9,8 @@ from feelancer.grpc.client import RpcResponseHandler, SecureGrpcClient
 
 from .grpc_generated import lightning_pb2 as ln
 from .grpc_generated import lightning_pb2_grpc as lnrpc
+from .grpc_generated import router_pb2 as rt
+from .grpc_generated import router_pb2_grpc as rtrpc
 
 
 class EdgeNotFound(Exception): ...
@@ -79,7 +82,7 @@ class LndGrpc(SecureGrpcClient):
     @property
     def _ln_stub(self) -> lnrpc.LightningStub:
         """
-        Create a ln_stub dynamically to ensure channel freshness
+        Creates a LightningStub
 
         If we make a call to the Lightning RPC service when the wallet
         is locked or the server is down we will get back an RpcError with
@@ -88,6 +91,14 @@ class LndGrpc(SecureGrpcClient):
         """
 
         return lnrpc.LightningStub(self._channel)
+
+    @property
+    def _router_stub(self) -> rtrpc.RouterStub:
+        """
+        Creates a RouterStub
+        """
+
+        return rtrpc.RouterStub(self._channel)
 
     @lnd_handle_rpc_errors
     def connect_peer(
@@ -230,6 +241,14 @@ class LndGrpc(SecureGrpcClient):
                 infee.fee_rate_ppm = inbound_fee_rate_ppm
 
         return self._ln_stub.UpdateChannelPolicy(req)
+
+    @lnd_handle_rpc_errors
+    def track_payments(self, no_inflight_updates: bool = False) -> Iterable[ln.Payment]:
+
+        req = rt.TrackPaymentsRequest()
+        req.no_inflight_updates = no_inflight_updates
+
+        return self._router_stub.TrackPayments(req)
 
 
 def update_failure_name(num) -> str:
