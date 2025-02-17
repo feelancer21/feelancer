@@ -192,6 +192,7 @@ class GrpcStreamClient(Generic[T]):
 
         while True:
             m = self._message_queue.get()
+            logging.debug(f"Got element from queue; len: {self._message_queue.qsize()}")
 
             # None is signals the end of the queue. We can break the loop.
             if m is None:
@@ -257,3 +258,4 @@ class GrpcStreamClient(Generic[T]):
         # Iterating over each payment attempt p
         for m in handle_rpc_stream(self._stream):
             self._message_queue.put(m)
+            logging.debug(f"Put element to queue; len: {self._message_queue.qsize()}")
