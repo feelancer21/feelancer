@@ -4,6 +4,7 @@ import threading
 
 from feelancer.data.db import FeelancerDB
 
+from .data import PaymentTrackerStore
 from .tracker import PaymentTracker
 
 
@@ -21,7 +22,7 @@ class PaytrackService:
         paytrack_config: PaytrackConfig,
     ) -> None:
 
-        self.db = db
+        self.store = PaymentTrackerStore(db)
         self.payment_tracker = payment_tracker
         self.paytrack_config = paytrack_config
         self.is_stopped: bool = False
