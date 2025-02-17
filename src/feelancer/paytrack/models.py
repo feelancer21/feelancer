@@ -13,7 +13,6 @@ from sqlalchemy import (
     Enum,
     ForeignKey,
     Integer,
-    LargeBinary,
     String,
     UniqueConstraint,
 )
@@ -99,9 +98,7 @@ class HTLCAttempt(Base):
     hops: Mapped[list[Hop]] = relationship("Hop", back_populates="attempt")
 
     # The sha256sum of the concatenation of all public keys of the route.
-    hops_sha256_sum: Mapped[LargeBinary] = mapped_column(
-        LargeBinary(32), nullable=False
-    )
+    hops_sha256_sum: Mapped[String] = mapped_column(String(64), nullable=False)
 
 
 class Failure(Base):
@@ -117,10 +114,12 @@ class Failure(Base):
     # the failure message. Position zero is the sender node.
     source_index: Mapped[int] = mapped_column(BigInteger)
 
+    # source hops is added in an sql update after initial insert.
+    # That's why nullable is True.
     source_hop_id: Mapped[BigInteger] = mapped_column(
-        ForeignKey("payment_hop.id"), nullable=False
+        ForeignKey("payment_hop.id"), nullable=True
     )
-    source_hop: Mapped[Hop] = relationship("Hop")
+    source_hop: Mapped[Hop] = relationship("Hop", post_update=True)
 
 
 class Hop(Base):
