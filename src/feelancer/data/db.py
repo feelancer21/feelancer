@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Callable, Generator, Sequence
+from collections.abc import Callable, Generator, Iterable, Sequence
 from typing import TYPE_CHECKING, TypeVar
 
 from sqlalchemy import URL, create_engine
@@ -221,6 +221,13 @@ class FeelancerDB:
             return convert(result)
 
         return self._execute(get_data, convert_default)
+
+    def add_all_from_iterable(self, iter: Iterable[T]) -> None:
+        """
+        Adds each element of the iterable to the database.
+        """
+        for i in iter:
+            self.execute(lambda session: session.add(i))
 
 
 class SessionExecutor:

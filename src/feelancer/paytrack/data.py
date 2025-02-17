@@ -11,6 +11,5 @@ class PaymentTrackerStore:
         self.db = db
         self.db.create_base(Base)
 
-    def store_htlcs(self, htlcs: Iterable[HTLCAttempt]) -> None:
-
-        pass
+    def store_attempts(self, attempts: Iterable[HTLCAttempt]) -> None:
+        self.db.add_all_from_iterable(attempts)
