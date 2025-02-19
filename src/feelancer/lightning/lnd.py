@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 import feelancer.lnd.client as lnd
@@ -189,3 +190,9 @@ class LNDClient:
             )
         if len(response.failed_updates) > 0:
             raise Exception("update failure during policy update")
+
+    def get_starter(self) -> list[Callable[...]]:
+        return self.lnd.starter
+
+    def get_stopper(self) -> list[Callable[...]]:
+        return self.lnd.stopper

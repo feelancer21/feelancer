@@ -1,5 +1,3 @@
-import threading
-
 from feelancer.data.db import FeelancerDB
 from feelancer.lightning.data import LightningStore
 
@@ -13,6 +11,9 @@ class PaytrackConfig:
 
 
 class PaytrackService:
+    """
+    Receiving of payment data from a stream and storing in the database.
+    """
 
     def __init__(
         self,
@@ -21,23 +22,20 @@ class PaytrackService:
         paytrack_config: PaytrackConfig,
     ) -> None:
 
-        self.store = PaymentTrackerStore(db)
-        self.ln_store = LightningStore(db, payment_tracker.pubkey_local)
-        self.payment_tracker = payment_tracker
-        self.paytrack_config = paytrack_config
-        self.is_stopped: bool = False
+        self._store = PaymentTrackerStore(db)
+        self._ln_store = LightningStore(db, payment_tracker.pubkey_local)
+        self._payment_tracker = payment_tracker
+        self._paytrack_config = paytrack_config
 
     def start(self) -> None:
+        """Start of storing of payments in the store."""
 
-        thread = threading.Thread(target=self.payment_tracker.start)
-        thread.start()
-
-        gen_attempts = self.payment_tracker.generate_attempts(self.ln_store.ln_node_id)
-        self.store.store_attempts(gen_attempts)
-
-        thread.join()
+        gen_attempts = self._payment_tracker.generate_attempts(
+            self._ln_store.ln_node_id
+        )
+        self._store.store_attempts(gen_attempts)
 
     def stop(self) -> None:
-
-        self.payment_tracker.stop()
-        self.is_stopped = True
+        # Not implemented. Service ends when the incoming payment stream has
+        # exhausted.
+        return None

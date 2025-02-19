@@ -17,6 +17,7 @@ DEFAULT_MAX_CONNECTION_IDLE_MS = 30000
 DEFAULT_SLEEP_ON_RPC_ERROR = 60
 
 T = TypeVar("T")
+V = TypeVar("V")
 
 os.environ["GRPC_SSL_CIPHER_SUITES"] = "HIGH+ECDSA"
 
@@ -166,10 +167,10 @@ class SecureGrpcClient:
         )
 
 
-class GrpcStreamClient(Generic[T]):
+class StreamDispatcher(Generic[T]):
     """
-    Receives grpc messages of Type T from a stream, handles the errors, buffers
-    the results in a queue and provides a generator for the consumer of the messages.
+    Receives grpc messages of Type T from an stream and handles the errors.
+    The message are distributors to all subscribers of the dispatchers.
     """
 
     def __init__(self, name: str, producer: Callable[..., Iterable[T]]):
@@ -177,49 +178,63 @@ class GrpcStreamClient(Generic[T]):
         self._name: str = name
         self._producer: Callable[..., Iterable[T]] = producer
 
-        self._message_queue: queue.Queue[T | None] = queue.Queue()
+        self._message_queues: list[queue.Queue[T | None]] = []
         self._stream: Iterable[T] | None = None
         self._is_stopped: bool = False
+        self._is_subscribed: bool = False
         self._lock: threading.Lock = threading.Lock()
 
-    def generate_messages(self) -> Generator[T]:
-        """
-        Fetches the messages from the internal queue.
-        """
+    def subscribe(self, convert: Callable[[T], V]) -> Generator[V]:
+        """Returns a generator for all new incoming messages."""
 
-        if self._is_stopped is True:
+        while self._is_stopped is True:
             return None
 
+        self._is_subscribed = True
+
+        # Creates a mew queue and makes it available for the receiver of the grpc
+        # messages.
+        q = queue.Queue()
+        self._message_queues.append(q)
+
         while True:
-            m = self._message_queue.get()
-            logging.debug(f"Got element from queue; len: {self._message_queue.qsize()}")
+            m = q.get()
+            logging.debug(f"Got element from queue; len: {q.qsize()}")
 
             # None is signals the end of the queue. We can break the loop.
             if m is None:
                 break
-            yield m
+            yield convert(m)
 
     def start(self) -> None:
         """
-        Starts receiving of the messages.
+        Starts receiving messages from the upstream. It is blocked until first
+        subscriber has registered.
         """
 
         with self._lock:
             if self._is_stopped:
                 return None
 
-        while True:
+        # blocking until there is a first subscription
+        while not self._is_subscribed:
+            pass
 
+        while True:
             try:
                 logging.info(f"Starting {self._name}...")
-                self._put_to_queue()
+                self._stream = self._producer()
+
+                # Receiving of the grp messages
+                for m in handle_rpc_stream(self._stream):
+                    self._put_to_queues(m)
 
             except LocallyCancelled as e:
                 # User ended the stream.
                 logging.debug(f"{self._name} cancelled: {e}")
 
-                # Signaling the end of the queue to consumer
-                self._message_queue.put(None)
+                # Signaling the end of the queue to the consumer
+                self._put_to_queues(None)
 
                 break
 
@@ -240,22 +255,21 @@ class GrpcStreamClient(Generic[T]):
         logging.info(f"Finished {self._name}")
 
     def stop(self) -> None:
-        """
-        Stops receiving of the messages.
-        """
+        """Stops receiving of the messages from the upstream."""
 
         logging.info(f"Shutting down {self._name}...")
 
         with self._lock:
+            if self._is_stopped is True:
+                return None
+
             if self._stream is not None:
                 self._stream.cancel()  # type: ignore
 
             self._is_stopped = True
 
-    def _put_to_queue(self) -> None:
-
-        self._stream = self._producer()
-        # Iterating over each payment attempt p
-        for m in handle_rpc_stream(self._stream):
-            self._message_queue.put(m)
-            logging.debug(f"Put element to queue; len: {self._message_queue.qsize()}")
+    def _put_to_queues(self, data: T | None) -> None:
+        """Puts a message to each queue."""
+        for q in self._message_queues:
+            q.put(data)
+            logging.debug(f"Put element to queue; len: {q.qsize()}")

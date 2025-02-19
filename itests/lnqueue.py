@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from queue import Queue
 
 from feelancer.lightning.client import Channel
@@ -61,3 +62,7 @@ class LnQueueClient:
                 p.time_lock_delta = time_lock_delta
                 p.inbound_fee_rate_ppm = inbound_fee_rate_ppm
                 p.inbound_base_fee_msat = inbound_base_fee_msat
+
+    def get_starter(self) -> list[Callable[...]]: ...
+
+    def get_stopper(self) -> list[Callable[...]]: ...

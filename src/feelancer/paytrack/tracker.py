@@ -5,7 +5,6 @@ from typing import Protocol
 
 import pytz
 
-from feelancer.grpc.client import GrpcStreamClient
 from feelancer.lightning.lnd import LNDClient
 from feelancer.lnd.client import LndGrpc
 from feelancer.lnd.grpc_generated import lightning_pb2 as ln
@@ -72,15 +71,15 @@ def _convert_htlc_attempt(attempt: ln.HTLCAttempt, node_id: int) -> HTLCAttempt:
     )
 
 
-def _yield_attempts_from_payments(
-    payments: Generator[ln.Payment],
+def _yield_attempts_from_payment(
+    payment: ln.Payment,
 ) -> Generator[ln.HTLCAttempt]:
-    for p in payments:
-        # we only process status SUCCEEDED or FAILED
-        if p.status not in [2, 3]:
-            continue
 
-        yield from p.htlcs
+    # we only process status SUCCEEDED or FAILED
+    if payment.status not in [2, 3]:
+        return None
+
+    yield from payment.htlcs
 
 
 class PaymentTracker(Protocol):
@@ -94,24 +93,11 @@ class PaymentTracker(Protocol):
         """
         ...
 
-    def start(self) -> None:
-        """
-        Starts the payment tracker.
-        """
-        ...
 
-    def stop(self) -> None:
-        """
-        Stops the payment tracker.
-        """
-        ...
-
-
-class LNDPaymentTracker(GrpcStreamClient[ln.Payment]):
+class LNDPaymentTracker:
 
     def __init__(self, lnd: LndGrpc):
 
-        super().__init__(name="LndPaymentTracker", producer=lnd.track_payments)
         self.lnd = LNDClient(lnd)
 
     @property
@@ -119,5 +105,13 @@ class LNDPaymentTracker(GrpcStreamClient[ln.Payment]):
         return self.lnd.pubkey_local
 
     def generate_attempts(self, ln_node_id: int) -> Generator[HTLCAttempt]:
-        for attempt in _yield_attempts_from_payments(self.generate_messages()):
-            yield _convert_htlc_attempt(attempt, ln_node_id)
+
+        def convert(p: ln.Payment) -> Generator[HTLCAttempt]:
+            for h in _yield_attempts_from_payment(p):
+                yield _convert_htlc_attempt(h, ln_node_id)
+
+        subscription: Generator[Generator[HTLCAttempt]]
+        subscription = self.lnd.lnd.track_payments_dispatcher.subscribe(convert)
+
+        for s in subscription:
+            yield from s
