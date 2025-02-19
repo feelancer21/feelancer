@@ -188,7 +188,7 @@ class StreamDispatcher(Generic[T]):
         """Returns a generator for all new incoming messages."""
 
         while self._is_stopped is True:
-            return None
+            return
 
         self._is_subscribed = True
 
