@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
@@ -99,14 +100,22 @@ class Server:
         self.cfg = cfg
 
         # Threads to be started during start
-        self.threads_start: list[threading.Thread] = []
+        self._threads_start: list[threading.Thread] = []
 
         # Threads to be started during stop
-        self.threads_stop: list[threading.Thread] = []
+        self._threads_stop: list[threading.Thread] = []
+
+        # Adding callables for starting and stopping internal services of the
+        # lnclient, e.g. dispatcher of streams.
+        for starter in self.cfg.lnclient.get_starter():
+            self._register_starter(starter)
+
+        for stopper in self.cfg.lnclient.get_stopper():
+            self._register_stopper(stopper)
 
         # We init a task runner which controls the scheduler for the job
         # execution.
-        self.runner = TaskRunner(
+        runner = TaskRunner(
             self.cfg.lnclient,
             self.cfg.db,
             self.cfg.feelancer_cfg.seconds,
@@ -118,33 +127,38 @@ class Server:
         pid = PidService(
             self.cfg.db, self.cfg.lnclient.pubkey_local, self.get_pid_config
         )
-        self.runner.register_task(pid.run)
-        self.runner.register_reset(pid.reset)
-        self._register_sub_server(self.runner)
+        runner.register_task(pid.run)
+        runner.register_reset(pid.reset)
+        self._register_sub_server(runner)
 
         # reconnect service is responsible for reconnecting inactive channels
         # or channels with stuck htlcs.
         reconnect = ReconnectService(cfg.reconnector, self.get_reconnect_config)
-        self.runner.register_task(reconnect.run)
+        runner.register_task(reconnect.run)
 
         paytrack_conf = self.get_paytrack_config()
-        self.paytrack_service: PaytrackService | None = None
+        paytrack_service: PaytrackService | None = None
         if paytrack_conf is not None:
-            self.paytrack_service = PaytrackService(
+            paytrack_service = PaytrackService(
                 db=self.cfg.db,
                 payment_tracker=self.cfg.payment_tracker,
                 paytrack_config=paytrack_conf,
             )
-            self._register_sub_server(self.paytrack_service)
+            self._register_sub_server(paytrack_service)
 
         # Lock will be released after start of the subservers has finished.
         self.lock = threading.Lock()
         self.lock.acquire()
 
     def _register_sub_server(self, subserver: SubServer) -> None:
+        self._register_starter(subserver.start)
+        self._register_stopper(subserver.stop)
 
-        self.threads_start.append(threading.Thread(target=subserver.start))
-        self.threads_stop.append(threading.Thread(target=subserver.stop))
+    def _register_starter(self, start: Callable[...]) -> None:
+        self._threads_start.append(threading.Thread(target=start))
+
+    def _register_stopper(self, stop: Callable[...]) -> None:
+        self._threads_stop.append(threading.Thread(target=stop))
 
     def read_feelancer_cfg(self) -> FeelancerConfig:
         """
@@ -185,14 +199,14 @@ class Server:
         Starts the server.
         """
 
-        for t in self.threads_start:
+        for t in self._threads_start:
             t.start()
 
         self.lock.release()
 
         logging.debug("All start threads started")
 
-        for t in self.threads_start:
+        for t in self._threads_start:
             t.join()
 
         logging.debug("All start threads joined")
@@ -203,12 +217,12 @@ class Server:
         """
 
         with self.lock:
-            for t in self.threads_stop:
+            for t in self._threads_stop:
                 t.start()
 
         logging.debug("All stop threads started")
 
-        for t in self.threads_start:
+        for t in self._threads_stop:
             t.join()
 
         logging.debug("All stop threads joined")

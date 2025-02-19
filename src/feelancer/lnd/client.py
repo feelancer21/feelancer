@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 
 import grpc
 
-from feelancer.grpc.client import RpcResponseHandler, SecureGrpcClient
+from feelancer.grpc.client import RpcResponseHandler, SecureGrpcClient, StreamDispatcher
 
 from .grpc_generated import lightning_pb2 as ln
 from .grpc_generated import lightning_pb2_grpc as lnrpc
@@ -79,6 +79,19 @@ def set_chan_point(chan_point_str: str, chan_point: ln.ChannelPoint) -> None:
 
 
 class LndGrpc(SecureGrpcClient):
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+
+        self.starter: list[Callable[...]] = []
+        self.stopper: list[Callable[...]] = []
+
+        self.track_payments_dispatcher = StreamDispatcher[ln.Payment](
+            name="LndPaymentTracker", producer=self.track_payments
+        )
+        self.starter.append(self.track_payments_dispatcher.start)
+        self.stopper.append(self.track_payments_dispatcher.stop)
+
     @property
     def _ln_stub(self) -> lnrpc.LightningStub:
         """
