@@ -79,6 +79,7 @@ def _convert_htlc_attempt(attempt: ln.HTLCAttempt, node_id: int) -> HTLCAttempt:
         resolve_time=resolve_time,
         hops=hops,
         failure=failure,
+        hops_num=len(attempt.route.hops),
         hops_sha256_sum=_sha256_of_hops(attempt.route.hops),
     )
 

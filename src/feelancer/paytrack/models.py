@@ -97,6 +97,9 @@ class HTLCAttempt(Base):
 
     hops: Mapped[list[Hop]] = relationship("Hop", back_populates="attempt")
 
+    # Number of hops in the route.
+    hops_num: Mapped[int] = mapped_column(Integer, nullable=False)
+
     # The sha256sum of the concatenation of all public keys of the route.
     hops_sha256_sum: Mapped[String] = mapped_column(String(64), nullable=False)
 
