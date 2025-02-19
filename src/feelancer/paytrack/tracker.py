@@ -1,5 +1,6 @@
 import datetime
 import hashlib
+import logging
 from collections.abc import Generator, Iterable
 from typing import Protocol
 
@@ -26,7 +27,7 @@ def _sha256_of_hops(hops: Iterable[ln.Hop]) -> str:
     return hashlib.sha256(pubkeys.encode("utf-8")).hexdigest()
 
 
-def _convert_failure(failure: ln.Failure, source_hop: Hop) -> Failure:
+def _convert_failure(failure: ln.Failure, source_hop: Hop | None) -> Failure:
     return Failure(
         code=FailureCode(failure.code),
         source_index=failure.failure_source_index,
@@ -54,7 +55,18 @@ def _convert_htlc_attempt(attempt: ln.HTLCAttempt, node_id: int) -> HTLCAttempt:
     hops: list[Hop] = [_convert_hop(hop, i) for i, hop in enumerate(attempt.route.hops)]
 
     if attempt.failure is not None:
-        source_hop = hops[attempt.failure.failure_source_index]
+        if attempt.failure.failure_source_index > 0:
+            try:
+                source_hop = hops[attempt.failure.failure_source_index - 1]
+            except IndexError:
+                source_hop = None
+                logging.warning(
+                    f"Failure source index out of bounds: {attempt.failure.failure_source_index=}, ",
+                    f"{attempt.attempt_id=}",
+                )
+
+        else:
+            source_hop = None
         failure = _convert_failure(attempt.failure, source_hop)
     else:
         failure = None
@@ -77,7 +89,7 @@ def _yield_attempts_from_payment(
 
     # we only process status SUCCEEDED or FAILED
     if payment.status not in [2, 3]:
-        return None
+        return
 
     yield from payment.htlcs
 
