@@ -222,12 +222,19 @@ class FeelancerDB:
 
         return self._execute(get_data, convert_default)
 
-    def add_all_from_iterable(self, iter: Iterable[T]) -> None:
+    def add(self, data: DeclarativeBase) -> None:
         """
-        Adds each element of the iterable to the database.
+        Adds the data to the database.
+        """
+        self.execute(lambda session: session.add(data))
+
+    def add_all_from_iterable(self, iter: Iterable[DeclarativeBase]) -> None:
+        """
+        Adds all data from the iterable to the database.
         """
         for i in iter:
-            self.execute(lambda session: session.add(i))
+            self.add(i)
+            continue
 
 
 class SessionExecutor:
