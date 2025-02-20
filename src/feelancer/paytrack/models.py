@@ -134,18 +134,15 @@ class HTLCAttempt(Base):
         DateTime(timezone=True), nullable=True
     )
 
+    route_id: Mapped[BigInteger] = mapped_column(
+        ForeignKey("ln_payment_route.id"), nullable=False
+    )
+    route: Mapped[Route] = relationship("Route", back_populates="attempt")
+
     failure_id: Mapped[BigInteger] = mapped_column(
         ForeignKey("ln_payment_failure.id"), nullable=True
     )
     failure: Mapped[Failure] = relationship("Failure")
-
-    hops: Mapped[list[Hop]] = relationship("Hop", back_populates="attempt")
-
-    # Number of hops in the route.
-    hops_num: Mapped[int] = mapped_column(Integer, nullable=False)
-
-    # The sha256sum of the concatenation of all public keys of the route.
-    hops_sha256_sum: Mapped[String] = mapped_column(String(64), nullable=False)
 
 
 class Failure(Base):
@@ -169,18 +166,49 @@ class Failure(Base):
     source_hop: Mapped[Hop] = relationship("Hop", post_update=True)
 
 
+class Route(Base):
+    __tablename__ = "ln_payment_route"
+
+    # unique identifier of the route
+    id: Mapped[int] = mapped_column(autoincrement=True, primary_key=True)
+
+    # The cumulative (final) time lock across the entire route.
+    total_time_lock: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    # The total fees in millisatoshis.
+    total_fees_msat: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+    # The total amount in millisatoshis.
+    total_amt_msat: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+    # The actual on-chain amount that was sent out to the first hop.
+    first_hop_amount_msat: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+    # The payment attempt
+    attempt: Mapped[HTLCAttempt] = relationship("HTLCAttempt", back_populates="route")
+
+    # Relationship to hops
+    hops: Mapped[list[Hop]] = relationship("Hop", back_populates="route")
+
+    # Number of hops in the route.
+    hops_num: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    # The sha256sum of the concatenation of all public keys of the route.
+    hops_sha256_sum: Mapped[String] = mapped_column(String(64), nullable=False)
+
+
 class Hop(Base):
     __tablename__ = "ln_payment_hop"
-    __table_args__ = (UniqueConstraint("attempt_id", "position_id"),)
+    __table_args__ = (UniqueConstraint("route_id", "position_id"),)
 
     # unique identifier of the hop
     id: Mapped[int] = mapped_column(autoincrement=True, primary_key=True)
 
-    # the id of the payment attempt
-    attempt_id: Mapped[BigInteger] = mapped_column(
-        ForeignKey("ln_payment_htlc_attempt.id"), nullable=False
+    # the id of the route
+    route_id: Mapped[BigInteger] = mapped_column(
+        ForeignKey("ln_payment_route.id"), nullable=False
     )
-    attempt: Mapped[HTLCAttempt] = relationship(HTLCAttempt, back_populates="hops")
+    route: Mapped[Route] = relationship(Route, back_populates="hops")
 
     # The position of the hop in the route. Position zero is the sender node.
     position_id: Mapped[int] = mapped_column(Integer, nullable=False)
