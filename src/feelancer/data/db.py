@@ -228,6 +228,17 @@ class FeelancerDB:
         """
         self.execute(lambda session: session.add(data))
 
+    def add_post(self, data: T, post: Callable[[T], V]) -> V:
+        """
+        Adds the data to the database and executes the post function on the result.
+        """
+
+        def add_data(session: Session) -> T:
+            session.add(data)
+            return data
+
+        return self.execute_post(add_data, post)
+
     def add_all_from_iterable(self, iter: Iterable[DeclarativeBase]) -> None:
         """
         Adds all data from the iterable to the database.
