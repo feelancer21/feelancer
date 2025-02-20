@@ -121,7 +121,7 @@ class HTLCAttempt(Base):
     attempt_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
     # The status of the HTLC.
-    status: Mapped["HTLCStatus"] = mapped_column(Enum(HTLCStatus), nullable=False)
+    status: Mapped[HTLCStatus] = mapped_column(Enum(HTLCStatus), nullable=False)
 
     # The time in UNIX nanoseconds at which this HTLC was sent.
     attempt_time: Mapped[datetime.datetime] = mapped_column(
@@ -152,7 +152,7 @@ class Failure(Base):
     id: Mapped[int] = mapped_column(autoincrement=True, primary_key=True)
 
     # Failure code as defined in the Lightning spec.
-    code: Mapped["FailureCode"] = mapped_column(Enum(FailureCode), nullable=False)
+    code: Mapped[FailureCode] = mapped_column(Enum(FailureCode), nullable=False)
 
     # The position in the path of the intermediate or final node that generated
     # the failure message. Position zero is the sender node.
