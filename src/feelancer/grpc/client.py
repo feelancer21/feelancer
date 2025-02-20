@@ -184,7 +184,9 @@ class StreamDispatcher(Generic[T]):
         self._is_subscribed: bool = False
         self._lock: threading.Lock = threading.Lock()
 
-    def subscribe(self, convert: Callable[[T], V]) -> Generator[V]:
+    def subscribe(
+        self, convert: Callable[[T], V], filter: Callable[[T], bool] | None = None
+    ) -> Generator[V]:
         """Returns a generator for all new incoming messages."""
 
         while self._is_stopped is True:
@@ -204,6 +206,11 @@ class StreamDispatcher(Generic[T]):
             # None is signals the end of the queue. We can break the loop.
             if m is None:
                 break
+
+            # If a filter is given, we check if the message is valid.
+            if filter is not None and filter(m) is False:
+                continue
+
             yield convert(m)
 
     def start(self) -> None:

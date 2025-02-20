@@ -60,8 +60,46 @@ class FailureCode(PyEnum):
     UNREADABLE_FAILURE = 999
 
 
+class PaymentStatus(PyEnum):
+    IN_FLIGHT = 1
+    SUCCEEDED = 2
+    FAILED = 3
+    INITIATED = 4
+
+
+class Payment(Base):
+    __tablename__ = "ln_payment"
+
+    # unique identifier of the payment
+    id: Mapped[int] = mapped_column(autoincrement=True, primary_key=True)
+
+    # The payment hash
+    payment_hash: Mapped[str] = mapped_column(String, nullable=False, index=True)
+
+    # The payment preimage
+    payment_preimage: Mapped[str] = mapped_column(String, nullable=True)
+
+    # The value of the payment in milli-satoshis
+    value_msat: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+    # The optional payment request being fulfilled
+    payment_request: Mapped[str] = mapped_column(String, nullable=True)
+
+    # The fee paid for this payment in milli-satoshis
+    fee_msat: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+    # The time in UNIX nanoseconds at which the payment was created
+    creation_time: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+
+    attempts: Mapped[list[HTLCAttempt]] = relationship(
+        "HTLCAttempt", back_populates="payment"
+    )
+
+
 class HTLCAttempt(Base):
-    __tablename__ = "payment_htlc_attempt"
+    __tablename__ = "ln_payment_htlc_attempt"
     __table_args__ = (UniqueConstraint("ln_node_id", "attempt_id", "status"),)
 
     # unique identifier of the attempt
@@ -72,6 +110,12 @@ class HTLCAttempt(Base):
 
     # the local lightning node
     ln_node: Mapped[DBLnNode] = relationship(DBLnNode)
+
+    payment_id: Mapped[BigInteger] = mapped_column(
+        ForeignKey("ln_payment.id"), nullable=True
+    )
+
+    payment: Mapped[Payment] = relationship("Payment", back_populates="attempts")
 
     # The unique ID that is used for this attempt.
     attempt_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
@@ -91,7 +135,7 @@ class HTLCAttempt(Base):
     )
 
     failure_id: Mapped[BigInteger] = mapped_column(
-        ForeignKey("payment_failure.id"), nullable=True
+        ForeignKey("ln_payment_failure.id"), nullable=True
     )
     failure: Mapped[Failure] = relationship("Failure")
 
@@ -105,7 +149,7 @@ class HTLCAttempt(Base):
 
 
 class Failure(Base):
-    __tablename__ = "payment_failure"
+    __tablename__ = "ln_payment_failure"
 
     # unique identifier of the failure
     id: Mapped[int] = mapped_column(autoincrement=True, primary_key=True)
@@ -120,13 +164,13 @@ class Failure(Base):
     # source hops is added in an sql update after initial insert.
     # That's why nullable is True.
     source_hop_id: Mapped[BigInteger] = mapped_column(
-        ForeignKey("payment_hop.id"), nullable=True
+        ForeignKey("ln_payment_hop.id"), nullable=True
     )
     source_hop: Mapped[Hop] = relationship("Hop", post_update=True)
 
 
 class Hop(Base):
-    __tablename__ = "payment_hop"
+    __tablename__ = "ln_payment_hop"
     __table_args__ = (UniqueConstraint("attempt_id", "position_id"),)
 
     # unique identifier of the hop
@@ -134,7 +178,7 @@ class Hop(Base):
 
     # the id of the payment attempt
     attempt_id: Mapped[BigInteger] = mapped_column(
-        ForeignKey("payment_htlc_attempt.id"), nullable=False
+        ForeignKey("ln_payment_htlc_attempt.id"), nullable=False
     )
     attempt: Mapped[HTLCAttempt] = relationship(HTLCAttempt, back_populates="hops")
 

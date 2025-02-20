@@ -31,9 +31,11 @@ class PaytrackService:
         """Start of storing of payments in the store."""
 
         gen_attempts = self._payment_tracker.generate_attempts(
-            self._ln_store.ln_node_id
+            self._ln_store.ln_node_id,
+            self._store.get_payment_id,
+            self._store.add_payment,
         )
-        self._store.store_attempts(gen_attempts)
+        self._store.db.add_all_from_iterable(gen_attempts)
 
     def stop(self) -> None:
         # Not implemented. Service ends when the incoming payment stream has
