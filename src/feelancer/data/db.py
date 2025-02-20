@@ -6,6 +6,7 @@ from collections.abc import Callable, Generator, Iterable, Sequence
 from typing import TYPE_CHECKING, TypeVar
 
 from sqlalchemy import URL, create_engine
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 T = TypeVar("T")
@@ -239,13 +240,21 @@ class FeelancerDB:
 
         return self.execute_post(add_data, post)
 
-    def add_all_from_iterable(self, iter: Iterable[DeclarativeBase]) -> None:
+    def add_all_from_iterable(
+        self, iter: Iterable[DeclarativeBase], raise_integrity_err: bool = False
+    ) -> None:
         """
         Adds all data from the iterable to the database.
         """
         for i in iter:
-            self.add(i)
-            continue
+            try:
+                self.add(i)
+            except IntegrityError as e:
+                if raise_integrity_err:
+                    raise e
+                logging.warning(e)
+                logging.exception(e)
+                print(f"{e}")
 
 
 class SessionExecutor:

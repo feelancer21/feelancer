@@ -1,8 +1,15 @@
+import functools
+
 from sqlalchemy import Select, select
 
 from feelancer.data.db import FeelancerDB
 
 from .models import Base, Payment
+
+CACHE_SIZE_PAYMENT_ID = 1024
+
+
+class PaymentNotFound(Exception): ...
 
 
 def query_payment(payment_hash: str) -> Select[tuple[Payment]]:
@@ -17,12 +24,16 @@ class PaymentTrackerStore:
         self.db = db
         self.db.create_base(Base)
 
-    def get_payment_id(self, payment_hash: str) -> int | None:
+    @functools.lru_cache(maxsize=CACHE_SIZE_PAYMENT_ID)
+    def get_payment_id(self, payment_hash: str) -> int:
         """
         Returns the payment id for a given payment hash.
         """
 
-        return self.db.query_first(query_payment(payment_hash), lambda p: p.id)
+        id = self.db.query_first(query_payment(payment_hash), lambda p: p.id)
+        if id is None:
+            raise PaymentNotFound(f"Payment with hash {payment_hash} not found.")
+        return id
 
     def add_payment(self, payment: Payment) -> int:
         """
