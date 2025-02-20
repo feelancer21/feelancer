@@ -12,7 +12,7 @@ from feelancer.lnd.client import LndGrpc
 from feelancer.lnd.grpc_generated import lightning_pb2 as ln
 
 from .data import PaymentNotFound
-from .models import Failure, FailureCode, Hop, HTLCAttempt, HTLCStatus, Payment
+from .models import Failure, FailureCode, Hop, HTLCAttempt, HTLCStatus, Payment, Route
 
 
 # Helper function for converting nanoseconds to a datetime object.
@@ -52,6 +52,18 @@ def _convert_hop(hop: ln.Hop, pos_id) -> Hop:
     )
 
 
+def _convert_route(route: ln.Route) -> Route:
+    return Route(
+        total_time_lock=route.total_time_lock,
+        total_amt_msat=route.total_amt_msat,
+        total_fees_msat=route.total_fees_msat,
+        first_hop_amount_msat=route.first_hop_amount_msat,
+        hops=[_convert_hop(hop, i) for i, hop in enumerate(route.hops)],
+        hops_num=len(route.hops),
+        hops_sha256_sum=_sha256_of_hops(route.hops),
+    )
+
+
 def _convert_htlc_attempt(
     attempt: ln.HTLCAttempt, node_id: int, payment_id
 ) -> HTLCAttempt:
@@ -61,12 +73,12 @@ def _convert_htlc_attempt(
     else:
         resolve_time = None
 
-    hops: list[Hop] = [_convert_hop(hop, i) for i, hop in enumerate(attempt.route.hops)]
+    route = _convert_route(attempt.route)
 
     if attempt.failure is not None:
         if attempt.failure.failure_source_index > 0:
             try:
-                source_hop = hops[attempt.failure.failure_source_index - 1]
+                source_hop = route.hops[attempt.failure.failure_source_index - 1]
             except IndexError:
                 source_hop = None
                 logging.warning(
@@ -87,10 +99,8 @@ def _convert_htlc_attempt(
         status=HTLCStatus(attempt.status),
         attempt_time=_ns_to_datetime(attempt.attempt_time_ns),
         resolve_time=resolve_time,
-        hops=hops,
+        route=route,
         failure=failure,
-        hops_num=len(attempt.route.hops),
-        hops_sha256_sum=_sha256_of_hops(attempt.route.hops),
     )
 
 
