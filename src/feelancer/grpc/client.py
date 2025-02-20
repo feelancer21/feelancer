@@ -201,7 +201,6 @@ class StreamDispatcher(Generic[T]):
 
         while True:
             m = q.get()
-            logging.debug(f"Got element from queue; len: {q.qsize()}")
 
             # None is signals the end of the queue. We can break the loop.
             if m is None:
@@ -279,4 +278,3 @@ class StreamDispatcher(Generic[T]):
         """Puts a message to each queue."""
         for q in self._message_queues:
             q.put(data)
-            logging.debug(f"Put element to queue; len: {q.qsize()}")
