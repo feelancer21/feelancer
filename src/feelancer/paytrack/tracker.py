@@ -5,14 +5,14 @@ from collections.abc import Callable, Generator, Iterable
 from typing import Protocol
 
 import pytz
+from google.protobuf.json_format import MessageToDict
 
 from feelancer.lightning.lnd import LNDClient
 from feelancer.lnd.client import LndGrpc
 from feelancer.lnd.grpc_generated import lightning_pb2 as ln
 
+from .data import PaymentNotFound
 from .models import Failure, FailureCode, Hop, HTLCAttempt, HTLCStatus, Payment
-
-CACHE_SIZE_PAYMENT_ID = 1024
 
 
 # Helper function for converting nanoseconds to a datetime object.
@@ -113,7 +113,7 @@ class PaymentTracker(Protocol):
     def generate_attempts(
         self,
         ln_node_id: int,
-        get_payment_id: Callable[[str], int | None],
+        get_payment_id: Callable[[str], int],
         add_payment: Callable[[Payment], int],
     ) -> Generator[HTLCAttempt]: ...
 
@@ -138,13 +138,9 @@ class LNDPaymentTracker:
     def generate_attempts(
         self,
         ln_node_id: int,
-        get_payment_id: Callable[[str], int | None],
+        get_payment_id: Callable[[str], int],
         add_payment: Callable[[Payment], int],
     ) -> Generator[HTLCAttempt]:
-
-        # The cache is used to store the payment id for a payment hash.
-        # lrucache would be a better choice, but we can not ignore the None returns
-        cache: dict[str, int] = {}
 
         # Callback function for the subscription. Converts the payment object
         # to an Iterable of HTLCAttempt objects.
@@ -154,22 +150,18 @@ class LNDPaymentTracker:
             if p.status not in [2, 3]:
                 return
 
-            payment_id: int | None = cache.get(p.payment_hash)
+            payment_id: int
 
             # Check if we have already stored the payment in the database.
             # Maybe from the last run.
-            if payment_id is None:
+            try:
                 payment_id = get_payment_id(p.payment_hash)
-
-            # If not we store it and get the id of the payment.
-            if payment_id is None:
+            except PaymentNotFound as e:
+                logging.warning(e)
+                # If found not we store it and get the id of the payment.
                 payment_id = add_payment(_convert_payment(p))
 
-            if len(cache) > CACHE_SIZE_PAYMENT_ID:
-                cache.clear()
-            cache[p.payment_hash] = payment_id
-            logging.debug(f"cache size {len(cache)}")
-
+            logging.debug(f"payment {p.payment_hash=}:\n {MessageToDict(p)}")
             for h in p.htlcs:
                 logging.debug(
                     f"payment {p.payment_hash=} {p.status=} {h.attempt_id=} {h.status=} {_sha256_payment(p)=} {_sha256_payment(h)=}"
