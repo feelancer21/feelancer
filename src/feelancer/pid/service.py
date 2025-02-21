@@ -4,9 +4,11 @@ import logging
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
+from feelancer.lightning.data import LightningStore
 from feelancer.tasks.runner import RunnerRequest, RunnerResult
 
 from .controller import PidController
+from .data import PidStore
 
 if TYPE_CHECKING:
     from feelancer.data.db import FeelancerDB
@@ -16,10 +18,15 @@ if TYPE_CHECKING:
 
 class PidService:
 
-    def __init__(self, db: FeelancerDB, get_pid_config: Callable[..., PidConfig]):
+    def __init__(
+        self,
+        db: FeelancerDB,
+        pubkey_local: str,
+        get_pid_config: Callable[..., PidConfig],
+    ):
 
-        # TODO: Init store here and init the controller with callables
-        self.db = db
+        self.pid_store = PidStore(db, pubkey_local)
+        self.ln_store = LightningStore(db, pubkey_local)
         self.get_pid_config: Callable[..., PidConfig] = get_pid_config
         self.pid_controller: PidController | None = None
 
@@ -34,7 +41,7 @@ class PidService:
 
         if not self.pid_controller:
             self.pid_controller = PidController(
-                self.db, pid_config, request.ln.pubkey_local
+                self.pid_store, self.ln_store, pid_config
             )
 
         self.pid_controller(pid_config, request.ln, request.timestamp)

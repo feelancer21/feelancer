@@ -5,9 +5,10 @@ Database interactions for the pid controller.
 from __future__ import annotations
 
 import logging
+from collections.abc import Generator
 from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Generator, TypeVar
+from typing import TYPE_CHECKING, TypeVar
 
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
@@ -199,10 +200,10 @@ def query_margin_controller(
         .join(DBPidRun.ln_node)
     )
 
-    if local_pub_key:
+    if local_pub_key is not None:
         qry = qry.where(DBLnNode.pub_key == local_pub_key)
 
-    if run_id:
+    if run_id is not None:
         qry = qry.where(DBPidMarginController.run_id == run_id)
 
     qry = qry.options(
@@ -223,7 +224,7 @@ def query_pid_run(
 
     qry = qry.join(DBPidRun.ln_node)
 
-    if pub_key:
+    if pub_key is not None:
         qry = qry.where(DBLnNode.pub_key == pub_key)
 
     qry = qry.options(joinedload(DBPidRun.run))
@@ -251,13 +252,13 @@ def query_spread_controller(
         .join(DBPidSpreadController.pid_run)
         .join(DBPidRun.ln_node)
     )
-    if local_pub_key:
+    if local_pub_key is not None:
         qry = qry.where(DBLnNode.pub_key == local_pub_key)
 
-    if peer_pub_key:
+    if peer_pub_key is not None:
         qry = qry.where(DBLnChannelPeer.pub_key == peer_pub_key)
 
-    if run_id:
+    if run_id is not None:
         qry = qry.where(DBPidSpreadController.run_id == run_id)
 
     qry = qry.options(
@@ -356,17 +357,17 @@ class PidConfig:
         # For clear config handling, the ewma controller parameters can be given
         # names. This assumes that named_ewma is a dictionary.
         named_ewma: dict | None = conf_copy.get("named_ewma")
-        if named_ewma and not isinstance(named_ewma, dict):
+        if named_ewma is not None and not isinstance(named_ewma, dict):
             raise ValueError("'named_ewma' is not a valid dictionary!")
 
         # get_ewma_controller performs a lookup into named_ewma if a str is
         # provided as parameter.
         def get_ewma_controller(params: str | dict) -> EwmaControllerParams:
             ewma_params = None
-            if isinstance(params, str) and named_ewma:
+            if isinstance(params, str) and named_ewma is not None:
                 ewma_params = named_ewma.get(params)
 
-            if not ewma_params:
+            if ewma_params is None:
                 if not isinstance(params, dict):
                     raise ValueError(
                         f"ewma_controller '{params}' is not valid. "
@@ -405,7 +406,7 @@ class PidConfig:
             raise ValueError(f"Cannot parse section 'pid.pin': {e}")
 
         self.spread_level_max_deviation_ppm: float = 0
-        self.target_ppm: float = 0
+        self.spread_level_target_ppm: float = 0
         try:
             if spread_level_conf := conf_copy.get("spread_level"):
                 self.spread_level_params = EwmaControllerParams(
@@ -429,9 +430,7 @@ class PidConfig:
             raise ValueError(f"Cannot parse section 'pid.spread_level': {e}")
 
     def peer_config(self, pub_key: str) -> PidSpreadControllerConfig:
-        if not (peer_config := self.peers.get(pub_key)):
-            peer_config = self.peers["default"]
-        return peer_config
+        return self.peers.get(pub_key, self.peers["default"])
 
 
 class PidStore:
@@ -552,7 +551,7 @@ class PidDictGen:
     def __init__(self, db: FeelancerDB) -> None:
         self.db = db
 
-    def spread_controller(self) -> Generator[dict, None, None]:
+    def spread_controller(self) -> Generator[dict]:
         """
         Returns a Generator of for DBSpreadController and its joined data.
         """
@@ -561,7 +560,7 @@ class PidDictGen:
 
         return self.db.qry_all_to_field_dict_gen(qry)
 
-    def margin_controller(self) -> Generator[dict, None, None]:
+    def margin_controller(self) -> Generator[dict]:
         """
         Returns a Generator of for DBMarginController and its joined data.
         """

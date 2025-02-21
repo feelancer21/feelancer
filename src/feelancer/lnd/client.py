@@ -209,24 +209,24 @@ class LndGrpc(SecureGrpcClient):
         req.time_lock_delta = time_lock_delta
         setattr(req, "global", _global)
 
-        if max_htlc_msat:
+        if max_htlc_msat is not None:
             req.max_htlc_msat = max_htlc_msat
 
-        if min_htlc_msat:
+        if min_htlc_msat is not None:
             req.min_htlc_msat = min_htlc_msat
             req.min_htlc_msat_specified = True
 
-        if chan_point:
+        if chan_point is not None:
             c = req.chan_point
             set_chan_point(chan_point, c)
 
-        if any([inbound_base_fee_msat, inbound_fee_rate_ppm]):
+        if any([inbound_base_fee_msat is not None, inbound_fee_rate_ppm is not None]):
             infee = req.inbound_fee
 
-            if inbound_base_fee_msat:
+            if inbound_base_fee_msat is not None:
                 infee.base_fee_msat = inbound_base_fee_msat
 
-            if inbound_fee_rate_ppm:
+            if inbound_fee_rate_ppm is not None:
                 infee.fee_rate_ppm = inbound_fee_rate_ppm
 
         return self._ln_stub.UpdateChannelPolicy(req)

@@ -1,14 +1,15 @@
 """
 aggregation module serves the aggregation of channels per peer in context of the
 pid controller.
-Relevant channels are identified, which are all channels with peer where one
+Relevant channels are identified, which are all channels with a peer where one
 announced channel exist. Moreover the default is target is calculated which is
 used if no target is specified in the config.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Generator, Iterable
+from collections.abc import Generator, Iterable
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from feelancer.lightning.client import Channel, ChannelPolicy
@@ -80,7 +81,7 @@ class ChannelCollection:
         # the lowest fee_rate.
         if policy_last:
             if (
-                not self.ref_fee_rate_last
+                self.ref_fee_rate_last is None
                 or policy_last.fee_rate_ppm < self.ref_fee_rate_last
             ):
                 self.ref_fee_rate_last = policy_last.fee_rate_ppm
@@ -94,10 +95,17 @@ class ChannelCollection:
         # We are updating the ref fee rate now and are looking for the lowest
         # fee rate over all channels in this collection
         if (
-            not self._ref_fee_rate
+            self._ref_fee_rate is None
             or channel.policy_local.fee_rate_ppm < self._ref_fee_rate
         ):
             self._ref_fee_rate = channel.policy_local.fee_rate_ppm
+
+    @property
+    def has_new_channels(self) -> bool:
+        """
+        Returns True if there are new channels in this collection.
+        """
+        return len(self._new_channels) > 0
 
     @property
     def liquidity_out(self) -> float:
@@ -149,11 +157,11 @@ class ChannelCollection:
         """
 
         ref = self.ref_fee_rate_last
-        if not ref:
+        if ref is None:
             return True
         return ref != self.ref_fee_rate
 
-    def pid_channels(self) -> Generator[Channel, None, None]:
+    def pid_channels(self) -> Generator[Channel]:
         """
         Generates all channels which are relevant for the pid model.
         """
@@ -164,17 +172,13 @@ class ChannelCollection:
         if not self._pid_channels:
             self._pid_channels = self._get_pid_channels()
 
-        for channel in self._pid_channels:
-            yield channel
+        yield from self._pid_channels
 
     def _get_pid_channels(self) -> list[Channel]:
         """
-        Determine all channels which have to be modelled. We are returning None
-        if there are only private channel in this collection.
-        Public channels without any policy at the moment are not returned too,
-        which can be the case if a channel was opened lately. Otherwise the
-        fee rate of the channel has to be equal to the reference fee rate,
-        which is the minimum fee_rate of all fee_rates.
+        Determine all channels which have to be modelled. We are returning an
+        empty list if there are only private channels in this collection.
+        Channels without a local policy are also not included in the list.
         """
 
         pid_channels: list[Channel] = []
@@ -182,22 +186,11 @@ class ChannelCollection:
             return pid_channels
 
         for channel in self.channels.values():
-            # Skipping public channels without policy
-            if not channel.private and not channel.policy_local:
-                continue
-
-            # Remaining channels without policy are private, shadow channels.
+            # Skipping channels without policy
             if not channel.policy_local:
-                pid_channels.append(channel)
                 continue
 
-            if channel.chan_id in self._new_channels:
-                pid_channels.append(channel)
-                continue
-
-            if channel.policy_local.fee_rate_ppm == self._ref_fee_rate:
-                pid_channels.append(channel)
-                continue
+            pid_channels.append(channel)
 
         return pid_channels
 
@@ -279,16 +272,15 @@ class ChannelAggregator:
 
         col.add_channel(channel, policy_last)
 
-    def pid_channels(self) -> Generator[Channel, None, None]:
+    def pid_channels(self) -> Generator[Channel]:
         """
         Generates all channels which are relevant for the pid model.
         """
 
         for col in self.channel_collections.values():
-            for channel in col.pid_channels():
-                yield channel
+            yield from col.pid_channels()
 
-    def pid_collections(self) -> Generator[tuple[str, ChannelCollection], None, None]:
+    def pid_collections(self) -> Generator[tuple[str, ChannelCollection]]:
         """
         Generates all channel collections which are relevant for the pid model.
         """
@@ -312,7 +304,7 @@ class ChannelAggregator:
         the equation.
         """
 
-        if self._target_default:
+        if self._target_default is not None:
             return self._target_default
 
         sum_local: int = 0
@@ -330,9 +322,8 @@ class ChannelAggregator:
 
             sum_liquidity += local + remote
 
-            if (peer_config := self.config.peers.get(channel.pub_key)) and (
-                peer_config.target
-            ):
+            peer_config = self.config.peer_config(channel.pub_key)
+            if peer_config.target is not None:
                 sum_liquidity_known_target += local + remote
                 sum_liquidity_target += (local + remote) * peer_config.target
 

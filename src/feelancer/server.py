@@ -96,7 +96,9 @@ class Server:
         )
 
         # pid service is responsible for updating the fees with the pid model.
-        pid = PidService(self.cfg.db, self.get_pid_config)
+        pid = PidService(
+            self.cfg.db, self.cfg.lnclient.pubkey_local, self.get_pid_config
+        )
         self.runner.register_task(pid.run)
         self.runner.register_reset(pid.reset)
 

@@ -4,9 +4,10 @@ import logging
 import os
 import signal
 import threading
+from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass, fields
-from typing import Callable, Type, TypeVar
+from typing import TypeVar
 
 import tomli
 
@@ -18,16 +19,17 @@ class GenericConf:
 
 
 T = TypeVar("T", bound=GenericConf)
+U = TypeVar("U")
 
 
 def defaults_from_type(
-    defaults: Type[T], conf: dict | None, exclude: list[str] | None = None
+    defaults: type[T], conf: dict | None, exclude: list[str] | None = None
 ) -> T:
-    if not conf:
+    if conf is None:
         return defaults()
 
     conf_copy = deepcopy(conf)
-    if exclude:
+    if exclude is not None:
         for key in exclude:
             del conf_copy[key]
 
@@ -37,12 +39,12 @@ def defaults_from_type(
 def defaults_from_instance(
     defaults: T, conf: dict | None, exclude: list[str] | None = None
 ) -> T:
-    if not conf:
+    if conf is None:
         return defaults
 
     conf_copy = deepcopy(conf)
     res = deepcopy(defaults)
-    if exclude:
+    if exclude is not None:
         for key in exclude:
             del conf_copy[key]
 
@@ -56,7 +58,7 @@ def defaults_from_instance(
     return res
 
 
-def get_peers_config(cls: Type[T], conf: dict) -> dict[str, T]:
+def get_peers_config(cls: type[T], conf: dict) -> dict[str, T]:
     res: dict[str, T] = {}
 
     res["default"] = default = defaults_from_type(cls, conf.get("default"))
@@ -123,3 +125,9 @@ class SignalHandler:
         # Reset handlers to avoid calling them again
         self.handlers = []
         self.lock.release()
+
+
+def first_some(value1: U | None, value2: U) -> U:
+    """Returns the first value which is not None"""
+
+    return value1 if value1 is not None else value2

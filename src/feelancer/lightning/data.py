@@ -133,10 +133,10 @@ def query_local_policies(
         .where(DBLnChannelPolicy.local)
     )
 
-    if run_id:
+    if run_id is not None:
         qry = qry.where(DBLnChannelPolicy.run_id == run_id)
 
-    if sequence_id:
+    if sequence_id is not None:
         qry = qry.where(DBLnChannelPolicy.sequence_id == sequence_id)
 
     return qry

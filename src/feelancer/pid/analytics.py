@@ -162,6 +162,7 @@ class EwmaController:
         variable by calling the controller.
         """
 
+        # dt is the time delta to the last call in seconds.
         if not self._last_time:
             dt = DEFAULT_TIME_DELTA
         elif (dt := (timestamp.timestamp() - self._last_time)) <= 0:
@@ -170,29 +171,64 @@ class EwmaController:
                 f"timestamp {timestamp.timestamp()}, last time {self._last_time}"
             )
 
-        lambda_d = _lambda(self.alpha_d, dt)
-        lambda_i = _lambda(self.alpha_i, dt)
+        # We assume that the error function from the last call to now follows
+        # a linear function.
 
-        ewma = self.error_ewma * lambda_i + error * (1 - lambda_i)
-
-        if self.alpha_i.to_seconds != 0:
-            ewma_integral = error * dt + (
-                self.error_ewma - error
-            ) / self.alpha_i.to_seconds * (1 - lambda_i)
-        else:
-            ewma_integral = 0
-
+        # error_delta is the delta of the error function to the last call.
         error_delta = error - self.error
-        delta = (self.error_delta_residual + error_delta) * (1 - lambda_d)
-        delta_residual = self.error_delta_residual + error_delta - delta
 
+        # error_mean is the mean error between the last call and now. This is
+        # used for the calculation of integrals later.
+        error_mean = (error + self.error) / 2
+
+        # slope is identical to \beta_1 in the concept.
+        slope = error_delta / dt
+
+        # ewma is identical E_\alpha in the concept. We set a default of 0,
+        # for the case alpha==0.
+        ewma = 0
+
+        # ewma_integral is the integral of the ewma from the last call to now.
+        ewma_integral = 0
+        if (alpha_i := self.alpha_i.to_seconds) != 0:
+            lambda_i = _lambda(self.alpha_i, dt)
+            slope_alpha_i = slope / alpha_i
+
+            ewma = (
+                error
+                - slope_alpha_i
+                + lambda_i * (self.error_ewma + slope_alpha_i - self.error)
+            )
+
+            ewma_integral = dt * (error_mean - slope_alpha_i) + (
+                +(1 - lambda_i)
+                * (self.error_ewma + slope_alpha_i - self.error)
+                / alpha_i
+            )
+
+        # delta_residual is identical D_\alpha in the concept. We set a default of 0,
+        # for the case alpha==0.
+        delta_residual = 0
+
+        # delta_integral is the integral of the delta_residual from the last call to now.
+        delta_integral = 0
+        if (alpha_d := self.alpha_d.to_seconds) != 0:
+            lambda_d = _lambda(self.alpha_d, dt)
+
+            delta_residual = slope + lambda_d * (self.error_delta_residual - slope)
+            delta_integral = (
+                error_delta
+                + (1 - lambda_d) * (self.error_delta_residual - slope) / alpha_d
+            )
+
+        # Resetting the shift from the previous call.
         self.shift = 0
         self._last_time = timestamp.timestamp()
 
         self.gain_t = self.k_t.to_seconds * dt
-        self.gain_p = self.k_p.to_seconds * error * dt
+        self.gain_p = self.k_p.to_seconds * error_mean * dt
         self.gain_i = self.k_i.to_seconds * ewma_integral
-        self.gain_d = self.k_d * delta
+        self.gain_d = self.k_d * delta_integral
         self.delta_time = dt
         self.error = error
         self.error_ewma = ewma
@@ -295,7 +331,7 @@ class MrController:
         if not self._last_time:
             dt = DEFAULT_TIME_DELTA
         elif (dt := (timestamp.timestamp() - self._last_time)) <= 0:
-            raise ValueError("dt has negative value {}, must be positive".format(dt))
+            raise ValueError(f"dt has negative value {dt}, must be positive")
 
         lambda_m = _lambda(self.alpha, dt)
 

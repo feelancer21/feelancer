@@ -138,6 +138,8 @@ pytz==2024.1
     # via
     #   apscheduler
     #   pandas
+pyupgrade==3.19.1
+    # via -r dev.in
 referencing==0.35.1
     # via
     #   jsonschema
@@ -168,6 +170,8 @@ streamlit==1.37.1
     # via -r addon.in
 tenacity==8.5.0
     # via streamlit
+tokenize-rt==6.1.0
+    # via pyupgrade
 toml==0.10.2
     # via streamlit
 tomli==2.0.1
