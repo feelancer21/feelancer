@@ -5,7 +5,7 @@ import unittest
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import cast
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from test_analytics import EwmaCall, call_ewma
 
