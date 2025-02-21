@@ -140,18 +140,23 @@ class FeelancerDB:
                         session.rollback()
 
                     self.engine.dispose()
+
+                    if isinstance(e, IntegrityError):
+                        raise e
+
                     ex = e
 
                 finally:
                     session.close()
 
-            logging.warning(
-                f"Error occurred during database operation; "
-                f"Starting retry {r+1} in {DELAY}s ..."
-            )
-            time.sleep(DELAY)
-
-        logging.error(f"Maximum number of retries {MAX_EXECUTIONS} exceeded.")
+            msg = f"Error occurred during database operation: {ex}; "
+            if r < MAX_EXECUTIONS - 1:
+                logging.warning(msg + f"Starting retry {r+1} in {DELAY}s ...")
+                time.sleep(DELAY)
+            else:
+                logging.error(
+                    msg + f"Maximum number of retries {MAX_EXECUTIONS} exceeded."
+                )
 
         raise ex
 
@@ -252,9 +257,8 @@ class FeelancerDB:
             except IntegrityError as e:
                 if raise_integrity_err:
                     raise e
-                logging.warning(e)
-                logging.exception(e)
-                print(f"{e}")
+                logging.warning(f"IntegrityError: {e}")
+                logging.exception(f"IntegrityError: {e}")
 
 
 class SessionExecutor:
