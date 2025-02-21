@@ -23,11 +23,15 @@ ruff-check:
 pyright:
 	pyright .
 
+pyupgrade:
+	find src tests itests -name "*.py"  | grep -v grpc_generated | xargs -I {} pyupgrade --py312-plus {}
+
 format: black
 	make isort
 	make ruff
+	make pyupgrade
 
-check: black-check isort-check ruff-check pyright
+check: black-check isort-check ruff-check pyright pyupgrade
 
 clean:
 	rm -r $(PKG).egg-info/ || true
