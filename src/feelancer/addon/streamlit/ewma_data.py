@@ -16,7 +16,7 @@ def get_db() -> FeelancerDB:
     config = os.getenv("FEELANCER_CONFIG")
 
     if not config:
-        raise EnvironmentError(
+        raise OSError(
             "env variable 'FEELANCER_CONFIG' is not set. A config file with "
             "the information about the database is necessary."
         )
