@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable, Iterable
 
 import grpc
 
-from feelancer.grpc.client import RpcResponseHandler, SecureGrpcClient
+from feelancer.grpc.client import RpcResponseHandler, SecureGrpcClient, StreamDispatcher
 
 from .grpc_generated import lightning_pb2 as ln
 from .grpc_generated import lightning_pb2_grpc as lnrpc
+from .grpc_generated import router_pb2 as rt
+from .grpc_generated import router_pb2_grpc as rtrpc
 
 
 class EdgeNotFound(Exception): ...
@@ -76,10 +79,23 @@ def set_chan_point(chan_point_str: str, chan_point: ln.ChannelPoint) -> None:
 
 
 class LndGrpc(SecureGrpcClient):
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+
+        self.starter: list[Callable[...]] = []
+        self.stopper: list[Callable[...]] = []
+
+        self.track_payments_dispatcher = StreamDispatcher[ln.Payment](
+            name="LndPaymentTracker", producer=self.track_payments
+        )
+        self.starter.append(self.track_payments_dispatcher.start)
+        self.stopper.append(self.track_payments_dispatcher.stop)
+
     @property
     def _ln_stub(self) -> lnrpc.LightningStub:
         """
-        Create a ln_stub dynamically to ensure channel freshness
+        Creates a LightningStub
 
         If we make a call to the Lightning RPC service when the wallet
         is locked or the server is down we will get back an RpcError with
@@ -88,6 +104,14 @@ class LndGrpc(SecureGrpcClient):
         """
 
         return lnrpc.LightningStub(self._channel)
+
+    @property
+    def _router_stub(self) -> rtrpc.RouterStub:
+        """
+        Creates a RouterStub
+        """
+
+        return rtrpc.RouterStub(self._channel)
 
     @lnd_handle_rpc_errors
     def connect_peer(
@@ -230,6 +254,14 @@ class LndGrpc(SecureGrpcClient):
                 infee.fee_rate_ppm = inbound_fee_rate_ppm
 
         return self._ln_stub.UpdateChannelPolicy(req)
+
+    @lnd_handle_rpc_errors
+    def track_payments(self, no_inflight_updates: bool = False) -> Iterable[ln.Payment]:
+
+        req = rt.TrackPaymentsRequest()
+        req.no_inflight_updates = no_inflight_updates
+
+        return self._router_stub.TrackPayments(req)
 
 
 def update_failure_name(num) -> str:

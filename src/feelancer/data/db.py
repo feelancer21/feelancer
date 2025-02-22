@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Callable, Generator, Sequence
+from collections.abc import Callable, Generator, Iterable, Sequence
 from typing import TYPE_CHECKING, TypeVar
 
 from sqlalchemy import URL, create_engine
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 T = TypeVar("T")
@@ -139,18 +140,23 @@ class FeelancerDB:
                         session.rollback()
 
                     self.engine.dispose()
+
+                    if isinstance(e, IntegrityError):
+                        raise e
+
                     ex = e
 
                 finally:
                     session.close()
 
-            logging.warning(
-                f"Error occurred during database operation; "
-                f"Starting retry {r+1} in {DELAY}s ..."
-            )
-            time.sleep(DELAY)
-
-        logging.error(f"Maximum number of retries {MAX_EXECUTIONS} exceeded.")
+            msg = f"Error occurred during database operation: {ex}; "
+            if r < MAX_EXECUTIONS - 1:
+                logging.warning(msg + f"Starting retry {r+1} in {DELAY}s ...")
+                time.sleep(DELAY)
+            else:
+                logging.error(
+                    msg + f"Maximum number of retries {MAX_EXECUTIONS} exceeded."
+                )
 
         raise ex
 
@@ -221,6 +227,41 @@ class FeelancerDB:
             return convert(result)
 
         return self._execute(get_data, convert_default)
+
+    def add(self, data: DeclarativeBase, accept_integrity_err: bool = False) -> None:
+        """
+        Adds the data to the database.
+        """
+
+        try:
+            self.execute(lambda session: session.add(data))
+        except Exception as e:
+            logging.error(f"Error while adding data to db: {e}")
+
+            if accept_integrity_err and isinstance(e, IntegrityError):
+                return
+
+            raise e
+
+    def add_post(self, data: T, post: Callable[[T], V]) -> V:
+        """
+        Adds the data to the database and executes the post function on the result.
+        """
+
+        def add_data(session: Session) -> T:
+            session.add(data)
+            return data
+
+        return self.execute_post(add_data, post)
+
+    def add_all_from_iterable(
+        self, iter: Iterable[DeclarativeBase], accept_integrity_err: bool = False
+    ) -> None:
+        """
+        Adds all data from the iterable to the database.
+        """
+        for i in iter:
+            self.add(i, accept_integrity_err)
 
 
 class SessionExecutor:

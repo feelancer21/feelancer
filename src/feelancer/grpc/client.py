@@ -3,15 +3,26 @@ from __future__ import annotations
 import codecs
 import logging
 import os
-from collections.abc import Callable
+import queue
+import threading
+import time
+from collections.abc import Callable, Generator, Iterable
 from functools import wraps
+from typing import Generic, TypeVar
 
 import grpc
 
 DEFAULT_MESSAGE_SIZE_MB = 50 * 1024 * 1024
 DEFAULT_MAX_CONNECTION_IDLE_MS = 30000
+DEFAULT_SLEEP_ON_RPC_ERROR = 60
+
+T = TypeVar("T")
+V = TypeVar("V")
 
 os.environ["GRPC_SSL_CIPHER_SUITES"] = "HIGH+ECDSA"
+
+
+class LocallyCancelled(Exception): ...
 
 
 def _create_rpc_error_handler(
@@ -34,6 +45,11 @@ def _create_rpc_error_handler(
                 logging.error(msg)
                 raise e
 
+        # Can occur during rpc streams, when the user cancels the stream.
+        if code == grpc.StatusCode.CANCELLED:
+            if details == "Locally cancelled by application!":
+                raise LocallyCancelled(details)
+
         # We raise the exception if the server is not available.
         logging.error(msg)
         if code == grpc.StatusCode.UNAVAILABLE:
@@ -55,6 +71,17 @@ def default_error_handler(e: Exception) -> None:
     msg = f"unexpected error during rpc call: {e}"
     logging.error(msg)
     raise e
+
+
+def handle_rpc_stream(stream: Iterable[T]) -> Generator[T]:
+    """
+    Decorator for handling errors during a rpc stream.
+    """
+    rpc_handler = _create_rpc_error_handler()
+    try:
+        yield from stream
+    except grpc.RpcError as e:
+        rpc_handler(e)
 
 
 class RpcResponseHandler:
@@ -138,3 +165,116 @@ class SecureGrpcClient:
         return grpc.secure_channel(
             self.ip_address, self._credentials, self.channel_options
         )
+
+
+class StreamDispatcher(Generic[T]):
+    """
+    Receives grpc messages of Type T from an stream and handles the errors.
+    The message are distributors to all subscribers of the dispatchers.
+    """
+
+    def __init__(self, name: str, producer: Callable[..., Iterable[T]]):
+
+        self._name: str = name
+        self._producer: Callable[..., Iterable[T]] = producer
+
+        self._message_queues: list[queue.Queue[T | None]] = []
+        self._stream: Iterable[T] | None = None
+        self._is_stopped: bool = False
+        self._is_subscribed: bool = False
+        self._lock: threading.Lock = threading.Lock()
+
+    def subscribe(
+        self, convert: Callable[[T], V], filter: Callable[[T], bool] | None = None
+    ) -> Generator[V]:
+        """Returns a generator for all new incoming messages."""
+
+        while self._is_stopped is True:
+            return
+
+        self._is_subscribed = True
+
+        # Creates a mew queue and makes it available for the receiver of the grpc
+        # messages.
+        q = queue.Queue()
+        self._message_queues.append(q)
+
+        while True:
+            m = q.get()
+
+            # None is signals the end of the queue. We can break the loop.
+            if m is None:
+                break
+
+            # If a filter is given, we check if the message is valid.
+            if filter is not None and filter(m) is False:
+                continue
+
+            yield convert(m)
+
+    def start(self) -> None:
+        """
+        Starts receiving messages from the upstream. It is blocked until first
+        subscriber has registered.
+        """
+
+        with self._lock:
+            if self._is_stopped:
+                return None
+
+        # blocking until there is a first subscription
+        while not self._is_subscribed:
+            pass
+
+        while True:
+            try:
+                logging.info(f"Starting {self._name}...")
+                self._stream = self._producer()
+
+                # Receiving of the grp messages
+                for m in handle_rpc_stream(self._stream):
+                    self._put_to_queues(m)
+
+            except LocallyCancelled as e:
+                # User ended the stream.
+                logging.debug(f"{self._name} cancelled: {e}")
+
+                # Signaling the end of the queue to the consumer
+                self._put_to_queues(None)
+
+                break
+
+            # On RpcErrors we are doing a retry after 60s. E.g. server not available.
+            except grpc.RpcError as e:
+                logging.error(
+                    f"Rpc error in {self._name} occurred; {e=}; "
+                    f"retry in {DEFAULT_SLEEP_ON_RPC_ERROR}s"
+                )
+                time.sleep(DEFAULT_SLEEP_ON_RPC_ERROR)
+
+            # Unexpected errors are raised
+            except Exception as e:
+                raise e
+
+            self._stream = None
+
+        logging.info(f"Finished {self._name}")
+
+    def stop(self) -> None:
+        """Stops receiving of the messages from the upstream."""
+
+        logging.info(f"Shutting down {self._name}...")
+
+        with self._lock:
+            if self._is_stopped is True:
+                return None
+
+            if self._stream is not None:
+                self._stream.cancel()  # type: ignore
+
+            self._is_stopped = True
+
+    def _put_to_queues(self, data: T | None) -> None:
+        """Puts a message to each queue."""
+        for q in self._message_queues:
+            q.put(data)
