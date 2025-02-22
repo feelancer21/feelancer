@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
@@ -217,4 +218,13 @@ class Server:
             logging.info("Stopped server")
         except Exception as e:
             logging.error(f"Server stop: an unexpected error occurred: {e}")
-            raise e
+            logging.exception("Server sop: exception ")
+            self.kill()
+
+    def kill(self) -> None:
+        """
+        Kills the server.
+        """
+
+        logging.info("Killing server...\n")
+        os._exit(1)

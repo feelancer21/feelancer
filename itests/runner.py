@@ -1,6 +1,5 @@
 import logging
 import os
-import sys
 import tempfile
 import threading
 import time
@@ -112,11 +111,11 @@ class TestSetup:
         logging.debug("Starting queue runner...")
         self.sig_handler.add_handler(self.runner.stop)
 
-        def exit():
-            logging.debug("Queue runner aborted.")
-            sys.exit(255)
+        # def exit():
+        #     logging.debug("Queue runner aborted.")
+        #     sys.exit(255)
 
-        self.sig_handler.exit_on_signal = exit
+        # self.sig_handler.exit_on_signal = exit
 
         self.thread = threading.Thread(target=self.runner.start)
         self.thread.start()
