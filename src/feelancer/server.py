@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
@@ -17,7 +16,7 @@ from .pid.service import PidService
 from .reconnect.reconnector import LNDReconnector
 from .reconnect.service import ReconnectConfig, ReconnectService
 from .tasks.runner import TaskRunner
-from .utils import read_config_file
+from .utils import read_config_file, run_concurrent
 
 if TYPE_CHECKING:
     from feelancer.lightning.client import LightningClient
@@ -100,10 +99,10 @@ class Server:
         self.cfg = cfg
 
         # Threads to be started during start
-        self._threads_start: list[threading.Thread] = []
+        self._threads_start: list[Callable[..., None]] = []
 
         # Threads to be started during stop
-        self._threads_stop: list[threading.Thread] = []
+        self._threads_stop: list[Callable[..., None]] = []
 
         # Adding callables for starting and stopping internal services of the
         # lnclient, e.g. dispatcher of streams.
@@ -129,6 +128,8 @@ class Server:
         )
         runner.register_task(pid.run)
         runner.register_reset(pid.reset)
+        # Only one try for runner because it the runner has its own retry
+        # mechanism.
         self._register_sub_server(runner)
 
         # reconnect service is responsible for reconnecting inactive channels
@@ -146,19 +147,16 @@ class Server:
             )
             self._register_sub_server(paytrack_service)
 
-        # Lock will be released after start of the subservers has finished.
-        self.lock = threading.Lock()
-        self.lock.acquire()
-
     def _register_sub_server(self, subserver: SubServer) -> None:
+
         self._register_starter(subserver.start)
         self._register_stopper(subserver.stop)
 
     def _register_starter(self, start: Callable[...]) -> None:
-        self._threads_start.append(threading.Thread(target=start))
+        self._threads_start.append(start)
 
     def _register_stopper(self, stop: Callable[...]) -> None:
-        self._threads_stop.append(threading.Thread(target=stop))
+        self._threads_stop.append(stop)
 
     def read_feelancer_cfg(self) -> FeelancerConfig:
         """
@@ -196,33 +194,27 @@ class Server:
 
     def start(self) -> None:
         """
-        Starts the server.
+        Starts the server using concurrent futures.
+        If an error is raised by one thread, the stop method of the server is called.
         """
 
-        for t in self._threads_start:
-            t.start()
-
-        self.lock.release()
-
-        logging.debug("All start threads started")
-
-        for t in self._threads_start:
-            t.join()
-
-        logging.debug("All start threads joined")
+        try:
+            logging.info("Starting server...")
+            run_concurrent(self._threads_start)
+        except Exception as e:
+            logging.error(f"Server start: an unexpected error occurred: {e}")
+            logging.exception("Server start: exception ")
+            self.stop()
 
     def stop(self) -> None:
         """
         Stops the server.
         """
 
-        with self.lock:
-            for t in self._threads_stop:
-                t.start()
-
-        logging.debug("All stop threads started")
-
-        for t in self._threads_stop:
-            t.join()
-
-        logging.debug("All stop threads joined")
+        try:
+            logging.info("Stopping server...")
+            run_concurrent(self._threads_stop)
+            logging.info("Stopped server")
+        except Exception as e:
+            logging.error(f"Server stop: an unexpected error occurred: {e}")
+            raise e

@@ -5,6 +5,7 @@ import os
 import signal
 import threading
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
 from dataclasses import dataclass, fields
 from typing import TypeVar
@@ -131,3 +132,18 @@ def first_some(value1: U | None, value2: U) -> U:
     """Returns the first value which is not None"""
 
     return value1 if value1 is not None else value2
+
+
+def run_concurrent(
+    tasks: list[Callable[..., None]],
+) -> None:
+    """
+    Starts the server using concurrent futures.
+    If an error is raised by one thread, the stop method of the server is called.
+    """
+
+    with ThreadPoolExecutor() as executor:
+        futures = {executor.submit(t): t for t in tasks}
+
+        for future in as_completed(futures):
+            future.result()  # This will raise an exception if the thread raised one
