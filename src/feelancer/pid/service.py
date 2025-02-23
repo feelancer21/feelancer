@@ -22,12 +22,12 @@ class PidService:
         self,
         db: FeelancerDB,
         pubkey_local: str,
-        get_pid_config: Callable[..., PidConfig],
+        get_pid_config: Callable[..., PidConfig | None],
     ):
 
         self.pid_store = PidStore(db, pubkey_local)
         self.ln_store = LightningStore(db, pubkey_local)
-        self.get_pid_config: Callable[..., PidConfig] = get_pid_config
+        self.get_pid_config: Callable[..., PidConfig | None] = get_pid_config
         self.pid_controller: PidController | None = None
 
     def run(self, request: RunnerRequest) -> RunnerResult:
@@ -38,6 +38,8 @@ class PidService:
         logging.info("Running pid controller...")
 
         pid_config = self.get_pid_config()
+        if pid_config is None:
+            return RunnerResult(None, None)
 
         if not self.pid_controller:
             self.pid_controller = PidController(

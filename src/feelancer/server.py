@@ -167,6 +167,7 @@ class MainServer(BaseServer):
             self.cfg.feelancer_cfg.max_listener_attempts,
             self.read_feelancer_cfg,
         )
+        self._register_sub_server(runner)
 
         # pid service is responsible for updating the fees with the pid model.
         pid = PidService(
@@ -174,9 +175,6 @@ class MainServer(BaseServer):
         )
         runner.register_task(pid.run)
         runner.register_reset(pid.reset)
-        # Only one try for runner because it the runner has its own retry
-        # mechanism.
-        self._register_sub_server(runner)
 
         # reconnect service is responsible for reconnecting inactive channels
         # or channels with stuck htlcs.
@@ -210,8 +208,12 @@ class MainServer(BaseServer):
 
         return self.cfg.feelancer_cfg
 
-    def get_pid_config(self) -> PidConfig:
-        return PidConfig(self.cfg.feelancer_cfg.tasks_config["pid"])
+    def get_pid_config(self) -> PidConfig | None:
+        config_dict = self.cfg.feelancer_cfg.tasks_config.get("pid")
+        if config_dict is None:
+            return None
+
+        return PidConfig(config_dict)
 
     def get_reconnect_config(self) -> ReconnectConfig | None:
         config_dict = self.cfg.feelancer_cfg.tasks_config.get("reconnect")
