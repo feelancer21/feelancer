@@ -152,6 +152,27 @@ class LightningStore:
         self.db = db
         self.pubkey_local = pubkey_local
 
+    @property
+    def ln_node_id(self) -> int:
+        """
+        Returns the id of the lightning node.
+        """
+
+        def get_local_node() -> DBLnNode | None:
+            return self.db.query_first(query_node(self.pubkey_local), lambda c: c)
+
+        ln_node: DBLnNode | None = get_local_node()
+        if ln_node is None:
+            ln_node = self.db.execute_post(
+                lambda s: s.add(_new_ln_node(self.pubkey_local)), lambda c: c
+            )
+            ln_node: DBLnNode | None = get_local_node()
+
+        if ln_node is None:
+            raise Exception(f"Cannot get node.id for {self.pubkey_local=}")
+
+        return ln_node.id
+
     def local_policies(self, run_id: int, sequence_id: int) -> dict[int, ChannelPolicy]:
 
         qry = query_local_policies(run_id=run_id, sequence_id=sequence_id)

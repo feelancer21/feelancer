@@ -1,10 +1,6 @@
 from __future__ import annotations
 
-import logging
 import os
-import signal
-import threading
-from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass, fields
 from typing import TypeVar
@@ -80,51 +76,6 @@ def read_config_file(file_name: str) -> dict:
         res = tomli.load(config_file)
 
     return res
-
-
-class SignalHandler:
-    """
-    SignalHandler collects callables which have to be executed if SIGTERM or
-    SIGINT is received to shutdown the application gracefully.
-    """
-
-    def __init__(self) -> None:
-        self.handlers: list[Callable[..., None]] = []
-
-        self.lock = threading.Lock()
-        self.exit_on_signal: Callable[..., None] | None = None
-
-        # If one signal is received, self._call_handlers is called, which is a
-        # wrapper around all callables.
-        signal.signal(signal.SIGTERM, self._receive_signal)
-        signal.signal(signal.SIGINT, self._receive_signal)
-
-    def add_handler(self, handler: Callable[..., None]) -> None:
-        """Adds a Callable for execution."""
-
-        self.handlers.append(handler)
-
-    def _receive_signal(self, signum, frame) -> None:
-        """Calls all added callables."""
-
-        logging.debug(f"Signal received; signum {signum}, frame {frame}.")
-
-        self.call_handlers()
-        logging.debug("All signal handlers called.")
-
-        if self.exit_on_signal:
-            self.exit_on_signal()
-
-    def call_handlers(self) -> None:
-
-        self.lock.acquire()
-
-        for h in self.handlers:
-            h()
-
-        # Reset handlers to avoid calling them again
-        self.handlers = []
-        self.lock.release()
 
 
 def first_some(value1: U | None, value2: U) -> U:

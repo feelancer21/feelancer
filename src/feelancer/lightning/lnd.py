@@ -189,3 +189,9 @@ class LNDClient:
             )
         if len(response.failed_updates) > 0:
             raise Exception("update failure during policy update")
+
+    def start(self) -> None:
+        return self.lnd.start()
+
+    def stop(self) -> None:
+        return self.lnd.stop()

@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 
 import grpc
 
-from feelancer.grpc.client import RpcResponseHandler, SecureGrpcClient
+from feelancer.base import BaseServer
+from feelancer.grpc.client import RpcResponseHandler, SecureGrpcClient, StreamDispatcher
 
 from .grpc_generated import lightning_pb2 as ln
 from .grpc_generated import lightning_pb2_grpc as lnrpc
+from .grpc_generated import router_pb2 as rt
+from .grpc_generated import router_pb2_grpc as rtrpc
 
 
 class EdgeNotFound(Exception): ...
@@ -75,11 +79,33 @@ def set_chan_point(chan_point_str: str, chan_point: ln.ChannelPoint) -> None:
     chan_point.output_index = int(out_index)
 
 
-class LndGrpc(SecureGrpcClient):
+class LndGrpc(SecureGrpcClient, BaseServer):
+
+    def __init__(
+        self,
+        ip_address: str,
+        credentials: grpc.ChannelCredentials,
+        **kwargs,
+    ) -> None:
+        SecureGrpcClient.__init__(self, ip_address, credentials)
+
+        # Responsible for dispatching realtime streams form the grpc server
+        # to internal services.
+        BaseServer.__init__(self, **kwargs)
+
+        # Dispatcher for tracking payments. New class for logging purposes.
+        class LndPaymentDispatcher(StreamDispatcher[ln.Payment]): ...
+
+        self.track_payments_dispatcher = LndPaymentDispatcher(
+            producer=self.track_payments
+        )
+
+        self._register_sub_server(self.track_payments_dispatcher)
+
     @property
     def _ln_stub(self) -> lnrpc.LightningStub:
         """
-        Create a ln_stub dynamically to ensure channel freshness
+        Creates a LightningStub
 
         If we make a call to the Lightning RPC service when the wallet
         is locked or the server is down we will get back an RpcError with
@@ -88,6 +114,14 @@ class LndGrpc(SecureGrpcClient):
         """
 
         return lnrpc.LightningStub(self._channel)
+
+    @property
+    def _router_stub(self) -> rtrpc.RouterStub:
+        """
+        Creates a RouterStub
+        """
+
+        return rtrpc.RouterStub(self._channel)
 
     @lnd_handle_rpc_errors
     def connect_peer(
@@ -230,6 +264,14 @@ class LndGrpc(SecureGrpcClient):
                 infee.fee_rate_ppm = inbound_fee_rate_ppm
 
         return self._ln_stub.UpdateChannelPolicy(req)
+
+    @lnd_handle_rpc_errors
+    def track_payments(self, no_inflight_updates: bool = False) -> Iterable[ln.Payment]:
+
+        req = rt.TrackPaymentsRequest()
+        req.no_inflight_updates = no_inflight_updates
+
+        return self._router_stub.TrackPayments(req)
 
 
 def update_failure_name(num) -> str:
