@@ -1,3 +1,4 @@
+from feelancer.base import BaseServer, default_retry_handler
 from feelancer.data.db import FeelancerDB
 from feelancer.lightning.data import LightningStore
 
@@ -10,7 +11,7 @@ class PaytrackConfig:
     def __init__(self, config_dict: dict) -> None: ...
 
 
-class PaytrackService:
+class PaytrackService(BaseServer):
     """
     Receiving of payment data from a stream and storing in the database.
     """
@@ -20,14 +21,19 @@ class PaytrackService:
         db: FeelancerDB,
         payment_tracker: PaymentTracker,
         paytrack_config: PaytrackConfig,
+        **kwargs,
     ) -> None:
-
+        super().__init__(**kwargs)
         self._store = PaymentTrackerStore(db)
         self._ln_store = LightningStore(db, payment_tracker.pubkey_local)
         self._payment_tracker = payment_tracker
         self._paytrack_config = paytrack_config
 
-    def start(self) -> None:
+        self._register_starter(self._start_server)
+        self._register_stopper(self._stop_server)
+
+    @default_retry_handler
+    def _start_server(self) -> None:
         """Start of storing of payments in the store."""
 
         gen_attempts = self._payment_tracker.generate_attempts(
@@ -37,7 +43,7 @@ class PaytrackService:
         )
         self._store.add_attempts(gen_attempts)
 
-    def stop(self) -> None:
+    def _stop_server(self) -> None:
         # Not implemented. Service ends when the incoming payment stream has
         # exhausted.
         return None

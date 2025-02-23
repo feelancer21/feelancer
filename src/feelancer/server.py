@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import logging
 import os
+import signal
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING
 
+from .base import BaseServer
 from .config import FeelancerConfig
 from .data.db import FeelancerDB
 from .lightning.lnd import LNDClient
@@ -17,25 +20,18 @@ from .pid.service import PidService
 from .reconnect.reconnector import LNDReconnector
 from .reconnect.service import ReconnectConfig, ReconnectService
 from .tasks.runner import TaskRunner
-from .utils import read_config_file, run_concurrent
+from .utils import read_config_file
 
 if TYPE_CHECKING:
     from feelancer.lightning.client import LightningClient
     from feelancer.paytrack.tracker import PaymentTracker
     from feelancer.reconnect.reconnector import Reconnector
 
-
-class SubServer(Protocol):
-    """
-    A subserver is a service running as a daemon and have to be started and stopped.
-    """
-
-    def start(self) -> None: ...
-    def stop(self) -> None: ...
+DEFAULT_TIMEOUT = 180
 
 
 @dataclass
-class AppConfig:
+class MainConfig:
     db: FeelancerDB
     lnclient: LightningClient
     config_file: str
@@ -44,9 +40,10 @@ class AppConfig:
     feelancer_cfg: FeelancerConfig
     reconnector: Reconnector
     payment_tracker: PaymentTracker
+    timeout: int
 
     @classmethod
-    def from_config_dict(cls, config_dict: dict, config_file: str) -> AppConfig:
+    def from_config_dict(cls, config_dict: dict, config_file: str) -> MainConfig:
         """
         Initializes the ServerConfig with the config dictionary.
         """
@@ -63,6 +60,11 @@ class AppConfig:
             payment_tracker: PaymentTracker = LNDPaymentTracker(lndgrpc)
         else:
             raise ValueError("'lnd' section is not included in config-file")
+
+        if (timeout := config_dict.get("timeout")) is not None:
+            timeout = int(timeout)
+        else:
+            timeout = DEFAULT_TIMEOUT
 
         logfile = None
         loglevel = None
@@ -88,30 +90,73 @@ class AppConfig:
             feelancer_config,
             reconnector,
             payment_tracker,
+            timeout,
         )
 
     @classmethod
-    def from_config_file(cls, file_name: str) -> AppConfig:
+    def from_config_file(cls, file_name: str) -> MainConfig:
         return cls.from_config_dict(read_config_file(file_name), file_name)
 
 
-class Server:
-    def __init__(self, cfg: AppConfig):
+class SignalHandler:
+    """
+    Signal handler for SIGTERM and SIGINT signals.
+    """
+
+    def __init__(
+        self,
+        sig_handler: Callable[..., None],
+        alarm_handler: Callable[..., None],
+        timeout: int,
+    ) -> None:
+        self._timeout = timeout
+        self._sig_handler = sig_handler
+        self._alarm_handler = alarm_handler
+
+        self._lock = threading.Lock()
+        self._sig_received = False
+
+        # If one signal is received, self._receive_signal is called
+        signal.signal(signal.SIGTERM, self._receive_sig)
+        signal.signal(signal.SIGINT, self._receive_sig)
+
+    def _receive_sig(self, signum, frame) -> None:
+        """Action if SIGTERM or SIGINT is received."""
+
+        with self._lock:
+            if self._sig_received:
+                return
+            self._sig_received = True
+
+        logging.debug(f"Received {signal.Signals(signum).name}")
+
+        # Activate the timeout signal if it is set.
+        if self._timeout is not None:
+            logging.debug(f"Setting {self._timeout=}")
+            signal.alarm(self._timeout)
+            signal.signal(signal.SIGALRM, self._receive_alarm)
+
+        self._sig_handler()
+        logging.debug("Signal handler called.")
+
+    def _receive_alarm(self, signum, frame) -> None:
+        """Action if SIGALARM is received."""
+
+        logging.debug(f"SIGALARM received; signum {signum}, frame {frame}.")
+
+        self._alarm_handler()
+
+
+class MainServer(BaseServer):
+    def __init__(self, cfg: MainConfig) -> None:
+        super().__init__()
         self.cfg = cfg
 
-        # Threads to be started during start
-        self._threads_start: list[Callable[..., None]] = []
-
-        # Threads to be started during stop
-        self._threads_stop: list[Callable[..., None]] = []
+        self._signal_handler = SignalHandler(self.stop, self.kill, self.cfg.timeout)
 
         # Adding callables for starting and stopping internal services of the
         # lnclient, e.g. dispatcher of streams.
-        for starter in self.cfg.lnclient.get_starter():
-            self._register_starter(starter)
-
-        for stopper in self.cfg.lnclient.get_stopper():
-            self._register_stopper(stopper)
+        self._register_sub_server(cfg.lnclient)
 
         # We init a task runner which controls the scheduler for the job
         # execution.
@@ -148,17 +193,6 @@ class Server:
             )
             self._register_sub_server(paytrack_service)
 
-    def _register_sub_server(self, subserver: SubServer) -> None:
-
-        self._register_starter(subserver.start)
-        self._register_stopper(subserver.stop)
-
-    def _register_starter(self, start: Callable[...]) -> None:
-        self._threads_start.append(start)
-
-    def _register_stopper(self, stop: Callable[...]) -> None:
-        self._threads_stop.append(stop)
-
     def read_feelancer_cfg(self) -> FeelancerConfig:
         """
         Reads the config file and init a new Feelancer Config.
@@ -193,38 +227,10 @@ class Server:
 
         return PaytrackConfig(config_dict)
 
-    def start(self) -> None:
-        """
-        Starts the server using concurrent futures.
-        If an error is raised by one thread, the stop method of the server is called.
-        """
-
-        try:
-            logging.info("Starting server...")
-            run_concurrent(self._threads_start)
-        except Exception as e:
-            logging.error(f"Server start: an unexpected error occurred: {e}")
-            logging.exception("Server start: exception ")
-            self.stop()
-
-    def stop(self) -> None:
-        """
-        Stops the server.
-        """
-
-        try:
-            logging.info("Stopping server...")
-            run_concurrent(self._threads_stop)
-            logging.info("Stopped server")
-        except Exception as e:
-            logging.error(f"Server stop: an unexpected error occurred: {e}")
-            logging.exception("Server sop: exception ")
-            self.kill()
-
     def kill(self) -> None:
         """
         Kills the server.
         """
 
-        logging.info("Killing server...\n")
+        logging.info(f"{self._name} killing...\n")
         os._exit(1)

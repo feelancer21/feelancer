@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import time
 from collections.abc import Callable, Generator, Iterable, Sequence
 from typing import TYPE_CHECKING, TypeVar
 
@@ -9,11 +8,13 @@ from sqlalchemy import URL, create_engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
+from feelancer.base import create_retry_handler
+
 T = TypeVar("T")
 V = TypeVar("V")
 W = TypeVar("W")
 
-MAX_EXECUTIONS = 5
+MAX_RETRIES = 5
 DELAY = 5
 
 if TYPE_CHECKING:
@@ -76,6 +77,17 @@ def _create_dict_gen_call(
     return func
 
 
+# Retry handler for database operations. We are raising IntegrityError amd retrying
+# on all other exceptions.
+_retry_handler = create_retry_handler(
+    exceptions_retry=(Exception,),
+    exceptions_raise=(IntegrityError,),
+    max_retries=MAX_RETRIES,
+    delay=DELAY,
+    min_tolerance_delta=None,
+)
+
+
 class FeelancerDB:
     def __init__(self, url_database: URL):
         self.engine = create_engine(url_database)
@@ -103,6 +115,7 @@ class FeelancerDB:
         """
         return self._execute(func, post)
 
+    @_retry_handler
     def _execute(
         self,
         pre_commit: Callable[[Session], V],
@@ -112,53 +125,33 @@ class FeelancerDB:
         The main executor for database operations.
         """
 
-        ex = Exception("Undefined error during database execution occurred.")
+        needs_commit = False
 
-        for r in range(MAX_EXECUTIONS):
-            needs_commit = False
+        with self.session() as session:
+            try:
+                # We execute the pre_commit function in the session, check
+                # if a commit is needed and eventually we process the
+                # post_commit function on the result after the commit.
+                res = pre_commit(session)
 
-            with self.session() as session:
-                try:
+                if session.new or session.dirty or session.deleted:
+                    # storing the information for rollback
+                    needs_commit = True
+                    session.commit()
 
-                    # We execute the pre_commit function in the session, check
-                    # if a commit is needed and eventually we process the
-                    # post_commit function on the result after the commit.
+                if post_commit is None:
+                    return res  # type: ignore
+                return post_commit(res)
 
-                    res = pre_commit(session)
+            except Exception as e:
+                if needs_commit:
+                    session.rollback()
+                self.engine.dispose()
 
-                    if session.new or session.dirty or session.deleted:
-                        # storing the information for rollback
-                        needs_commit = True
-                        session.commit()
+                raise e
 
-                    if post_commit is None:
-                        return res  # type: ignore
-                    return post_commit(res)
-
-                except Exception as e:
-                    if needs_commit:
-                        session.rollback()
-
-                    self.engine.dispose()
-
-                    if isinstance(e, IntegrityError):
-                        raise e
-
-                    ex = e
-
-                finally:
-                    session.close()
-
-            msg = f"Error occurred during database operation: {ex}; "
-            if r < MAX_EXECUTIONS - 1:
-                logging.warning(msg + f"Starting retry {r+1} in {DELAY}s ...")
-                time.sleep(DELAY)
-            else:
-                logging.error(
-                    msg + f"Maximum number of retries {MAX_EXECUTIONS} exceeded."
-                )
-
-        raise ex
+            finally:
+                session.close()
 
     def query_all_to_list(
         self, qry: Select[tuple[T]], convert: Callable[[T], V]

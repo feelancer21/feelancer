@@ -13,6 +13,7 @@ from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_SCHEDULER_STARTED
 from apscheduler.schedulers.blocking import BlockingScheduler, Event
 from apscheduler.triggers.interval import IntervalTrigger
 
+from feelancer.base import BaseServer
 from feelancer.config import FeelancerConfig
 from feelancer.data.db import FeelancerDB
 from feelancer.lightning.chan_updates import update_channel_policies
@@ -38,7 +39,7 @@ class RunnerRequest:
     ln: LightningCache
 
 
-class TaskRunner:
+class TaskRunner(BaseServer):
     def __init__(
         self,
         lnclient: LightningClient,
@@ -46,7 +47,9 @@ class TaskRunner:
         seconds: int,
         max_listener_attempts: int,
         read_feelancer_cfg: Callable[..., FeelancerConfig],
+        **kwargs,
     ):
+        super().__init__(**kwargs)
         self.lnclient = lnclient
         self.db = db
         self.read_feelancer_cfg = read_feelancer_cfg
@@ -75,6 +78,9 @@ class TaskRunner:
         # Counter for attempted listener starts
         self.listener_attempts: int = 0
         self.max_listener_attempts = max_listener_attempts
+
+        self._register_sync_starter(self._start)
+        self._register_sync_stopper(self._stop)
 
         # Setting up a scheduler which call self._run in an interval of
         # self.seconds.
@@ -184,7 +190,7 @@ class TaskRunner:
 
         logging.debug("Reset of internal objects completed.")
 
-    def start(self) -> None:
+    def _start(self) -> None:
         """
         Initializes a BlockingScheduler and starts it.
         """
@@ -258,19 +264,18 @@ class TaskRunner:
         if self.listener_attempts > self.max_listener_attempts:
             raise Exception(f"{self.max_listener_attempts=} exceeded")
 
-    def stop(self) -> None:
+    def _stop(self) -> None:
         """
         Stops the BlockingScheduler
         """
 
-        self.lock.acquire()
+        with self.lock:
 
-        # Return early if scheduler is not running.
-        if not self.scheduler.running:
-            return None
+            # Return early if scheduler is not running.
+            if not self.scheduler.running:
+                return None
 
-        logging.info("Shutting down the scheduler...")
-        self.scheduler.shutdown(wait=True)
+            logging.info("Shutting down the scheduler...")
+            self.scheduler.shutdown(wait=True)
 
-        self.lock.release()
-        logging.info("Scheduler shutdown completed.")
+            logging.info("Scheduler shutdown completed.")

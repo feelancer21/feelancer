@@ -4,13 +4,14 @@ import codecs
 import logging
 import os
 import queue
-import threading
 import time
 from collections.abc import Callable, Generator, Iterable
 from functools import wraps
 from typing import Generic, TypeVar
 
 import grpc
+
+from feelancer.base import BaseServer, default_retry_handler
 
 DEFAULT_MESSAGE_SIZE_MB = 50 * 1024 * 1024
 DEFAULT_MAX_CONNECTION_IDLE_MS = 30000
@@ -167,29 +168,31 @@ class SecureGrpcClient:
         )
 
 
-class StreamDispatcher(Generic[T]):
+class StreamDispatcher(Generic[T], BaseServer):
     """
     Receives grpc messages of Type T from an stream and handles the errors.
     The message are distributors to all subscribers of the dispatchers.
     """
 
-    def __init__(self, name: str, producer: Callable[..., Iterable[T]]):
+    def __init__(self, producer: Callable[..., Iterable[T]], **kwargs) -> None:
 
-        self._name: str = name
+        BaseServer.__init__(self, **kwargs)
+
         self._producer: Callable[..., Iterable[T]] = producer
 
         self._message_queues: list[queue.Queue[T | None]] = []
         self._stream: Iterable[T] | None = None
-        self._is_stopped: bool = False
         self._is_subscribed: bool = False
-        self._lock: threading.Lock = threading.Lock()
+
+        self._register_sync_starter(self._start)
+        self._register_sync_stopper(self._stop)
 
     def subscribe(
         self, convert: Callable[[T], V], filter: Callable[[T], bool] | None = None
     ) -> Generator[V]:
         """Returns a generator for all new incoming messages."""
 
-        while self._is_stopped is True:
+        if self._is_stopped is True:
             return
 
         self._is_subscribed = True
@@ -212,20 +215,22 @@ class StreamDispatcher(Generic[T]):
 
             yield convert(m)
 
-    def start(self) -> None:
+    @default_retry_handler
+    def _start(self) -> None:
         """
         Starts receiving messages from the upstream. It is blocked until first
         subscriber has registered.
         """
 
-        with self._lock:
-            if self._is_stopped:
-                return None
-
-        # blocking until there is a first subscription
-        while not self._is_subscribed:
+        # blocking until there is a first subscription or the server is stopped.
+        while not (self._is_subscribed or self._is_stopped):
             pass
 
+        # Returning early if the server is stopped.
+        if self._is_stopped:
+            return None
+
+        # We have a subscriber. We can start the stream.
         while True:
             try:
                 logging.info(f"Starting {self._name}...")
@@ -258,21 +263,11 @@ class StreamDispatcher(Generic[T]):
 
             self._stream = None
 
-        logging.info(f"Finished {self._name}")
-
-    def stop(self) -> None:
+    def _stop(self) -> None:
         """Stops receiving of the messages from the upstream."""
 
-        logging.info(f"Shutting down {self._name}...")
-
-        with self._lock:
-            if self._is_stopped is True:
-                return None
-
-            if self._stream is not None:
-                self._stream.cancel()  # type: ignore
-
-            self._is_stopped = True
+        if self._stream is not None:
+            self._stream.cancel()  # type: ignore
 
     def _put_to_queues(self, data: T | None) -> None:
         """Puts a message to each queue."""

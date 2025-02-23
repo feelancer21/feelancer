@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Iterable
+from collections.abc import Iterable
 
 import grpc
 
+from feelancer.base import BaseServer
 from feelancer.grpc.client import RpcResponseHandler, SecureGrpcClient, StreamDispatcher
 
 from .grpc_generated import lightning_pb2 as ln
@@ -78,19 +79,28 @@ def set_chan_point(chan_point_str: str, chan_point: ln.ChannelPoint) -> None:
     chan_point.output_index = int(out_index)
 
 
-class LndGrpc(SecureGrpcClient):
+class LndGrpc(SecureGrpcClient, BaseServer):
 
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
+    def __init__(
+        self,
+        ip_address: str,
+        credentials: grpc.ChannelCredentials,
+        **kwargs,
+    ) -> None:
+        SecureGrpcClient.__init__(self, ip_address, credentials)
 
-        self.starter: list[Callable[...]] = []
-        self.stopper: list[Callable[...]] = []
+        # Responsible for dispatching realtime streams form the grpc server
+        # to internal services.
+        BaseServer.__init__(self, **kwargs)
 
-        self.track_payments_dispatcher = StreamDispatcher[ln.Payment](
-            name="LndPaymentTracker", producer=self.track_payments
+        # Dispatcher for tracking payments. New class for logging purposes.
+        class LndPaymentDispatcher(StreamDispatcher[ln.Payment]): ...
+
+        self.track_payments_dispatcher = LndPaymentDispatcher(
+            producer=self.track_payments
         )
-        self.starter.append(self.track_payments_dispatcher.start)
-        self.stopper.append(self.track_payments_dispatcher.stop)
+
+        self._register_sub_server(self.track_payments_dispatcher)
 
     @property
     def _ln_stub(self) -> lnrpc.LightningStub:

@@ -4,7 +4,6 @@ Defines a Protocol for lightning client. Currently implemented for lnd only.
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -92,14 +91,14 @@ class LightningClient(Protocol):
         """
         ...
 
-    def get_starter(self) -> list[Callable[...]]:
+    def start(self) -> None:
         """
-        Returns a list of callables for starting internal services of the client.
+        Starts all dispatchers of the client.
         """
         ...
 
-    def get_stopper(self) -> list[Callable[...]]:
+    def stop(self) -> None:
         """
-        Returns a list of callables for stopping internal services of the client.
+        Stops all dispatchers of the client.
         """
         ...
