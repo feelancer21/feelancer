@@ -152,7 +152,8 @@ class MainServer(BaseServer):
         super().__init__()
         self.cfg = cfg
 
-        self._signal_handler = SignalHandler(self.stop, self.kill, self.cfg.timeout)
+        # Setting up the signal handler for SIGTERM and SIGINT.
+        SignalHandler(self.stop, self.kill, self.cfg.timeout)
 
         # Adding callables for starting and stopping internal services of the
         # lnclient, e.g. dispatcher of streams.

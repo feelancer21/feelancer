@@ -14,8 +14,11 @@ T = TypeVar("T")
 V = TypeVar("V")
 W = TypeVar("W")
 
+EXCEPTIONS_RETRY = (Exception,)
+EXCEPTIONS_RAISE = (IntegrityError,)
 MAX_RETRIES = 5
 DELAY = 5
+MIN_TOLERANCE_DELTA = 60
 
 if TYPE_CHECKING:
     from sqlalchemy import Select
@@ -80,11 +83,11 @@ def _create_dict_gen_call(
 # Retry handler for database operations. We are raising IntegrityError amd retrying
 # on all other exceptions.
 _retry_handler = create_retry_handler(
-    exceptions_retry=(Exception,),
-    exceptions_raise=(IntegrityError,),
+    exceptions_retry=EXCEPTIONS_RETRY,
+    exceptions_raise=EXCEPTIONS_RAISE,
     max_retries=MAX_RETRIES,
     delay=DELAY,
-    min_tolerance_delta=None,
+    min_tolerance_delta=MIN_TOLERANCE_DELTA,
 )
 
 
