@@ -57,7 +57,7 @@ class MainConfig:
             lndgrpc = LndGrpc.from_file(**config_dict["lnd"])
             lnclient: LightningClient = LNDClient(lndgrpc)
             reconnector: Reconnector = LNDReconnector(lndgrpc)
-            payment_tracker: PaymentTracker = LNDPaymentTracker(lndgrpc)
+            payment_tracker: PaymentTracker = LNDPaymentTracker(lndgrpc, db)
         else:
             raise ValueError("'lnd' section is not included in config-file")
 
@@ -186,7 +186,6 @@ class MainServer(BaseServer):
         paytrack_service: PaytrackService | None = None
         if paytrack_conf is not None:
             paytrack_service = PaytrackService(
-                db=self.cfg.db,
                 payment_tracker=self.cfg.payment_tracker,
                 paytrack_config=paytrack_conf,
             )

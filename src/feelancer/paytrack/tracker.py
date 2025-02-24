@@ -1,17 +1,19 @@
 import datetime
 import hashlib
 import logging
-from collections.abc import Callable, Generator, Iterable
+from collections.abc import Generator, Iterable
 from typing import Protocol
 
 import pytz
 from google.protobuf.json_format import MessageToDict
 
+from feelancer.data.db import FeelancerDB
+from feelancer.lightning.data import LightningStore
 from feelancer.lightning.lnd import LNDClient
 from feelancer.lnd.client import LndGrpc
 from feelancer.lnd.grpc_generated import lightning_pb2 as ln
 
-from .data import PaymentNotFound
+from .data import PaymentNotFound, PaymentTrackerStore
 from .models import (
     Failure,
     FailureCode,
@@ -133,66 +135,59 @@ def _convert_payment(payment: ln.Payment) -> Payment:
 
 class PaymentTracker(Protocol):
 
-    def generate_attempts(
-        self,
-        ln_node_id: int,
-        get_payment_id: Callable[[str], int],
-        add_payment: Callable[[Payment], int],
-    ) -> Generator[HTLCAttempt]: ...
+    def store_payments(self) -> None: ...
 
-    @property
-    def pubkey_local(self) -> str:
-        """
-        Returns the pubkey of the local node.
-        """
-        ...
+    """
+    Stores payments in the database.
+    """
 
 
 class LNDPaymentTracker:
 
-    def __init__(self, lnd: LndGrpc):
+    def __init__(self, lnd: LndGrpc, db: FeelancerDB):
 
-        self.lnd = LNDClient(lnd)
+        self._lnd = LNDClient(lnd)
+        self._store = PaymentTrackerStore(db)
+        self._ln_store = LightningStore(db, self._lnd.pubkey_local)
 
-    @property
-    def pubkey_local(self) -> str:
-        return self.lnd.pubkey_local
+    def store_payments(self) -> None:
 
-    def generate_attempts(
-        self,
-        ln_node_id: int,
-        get_payment_id: Callable[[str], int],
-        add_payment: Callable[[Payment], int],
-    ) -> Generator[HTLCAttempt]:
+        self._store.add_attempts(self._generate_attempts())
 
-        # Callback function for the subscription. Converts the payment object
-        # to an Iterable of HTLCAttempt objects.
-        def convert(p: ln.Payment) -> Iterable[HTLCAttempt]:
-
-            # only process status SUCCEEDED or FAILED
-            if p.status not in [2, 3]:
-                return
-
-            payment_id: int
-
-            # Check if we have already stored the payment in the database.
-            # Maybe from the last run.
-            try:
-                payment_id = get_payment_id(p.payment_hash)
-            except PaymentNotFound as e:
-                logging.warning(e)
-                # If found not we store it and get the id of the payment.
-                payment_id = add_payment(_convert_payment(p))
-
-            logging.debug(f"payment {p.payment_hash=}:\n {MessageToDict(p)}")
-            for h in p.htlcs:
-                logging.debug(
-                    f"payment {p.payment_hash=} {p.status=} {h.attempt_id=} {h.status=} {_sha256_payment(p)=} {_sha256_payment(h)=}"
-                )
-                yield _convert_htlc_attempt(h, ln_node_id, payment_id)
+    def _generate_attempts(self) -> Generator[HTLCAttempt]:
 
         subscription: Generator[Iterable[HTLCAttempt]]
-        subscription = self.lnd.lnd.track_payments_dispatcher.subscribe(convert)
+        subscription = self._lnd.lnd.track_payments_dispatcher.subscribe(
+            self._process_payment
+        )
 
         for s in subscription:
             yield from s
+
+    def _process_payment(self, p: ln.Payment) -> Iterable[HTLCAttempt]:
+        """
+        Callback function for the subscription. Converts the payment object
+        to an Iterable of HTLCAttempt objects.
+        """
+
+        # only process status SUCCEEDED or FAILED
+        if p.status not in [2, 3]:
+            return
+
+        payment_id: int
+
+        # Check if we have already stored the payment in the database.
+        # Maybe from the last run.
+        try:
+            payment_id = self._store.get_payment_id(p.payment_hash)
+        except PaymentNotFound as e:
+            logging.warning(e)
+            # If found not we store it and get the id of the payment.
+            payment_id = self._store.add_payment(_convert_payment(p))
+
+        logging.debug(f"payment {p.payment_hash=}:\n {MessageToDict(p)}")
+        for h in p.htlcs:
+            logging.debug(
+                f"payment {p.payment_hash=} {p.status=} {h.attempt_id=} {h.status=} {_sha256_payment(p)=} {_sha256_payment(h)=}"
+            )
+            yield _convert_htlc_attempt(h, self._ln_store.ln_node_id, payment_id)
