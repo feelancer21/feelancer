@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import faulthandler
 import logging
 import os
+import pprint
 import signal
+import sys
 import threading
+import traceback
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from .base import BaseServer
@@ -28,6 +33,8 @@ if TYPE_CHECKING:
     from feelancer.reconnect.reconnector import Reconnector
 
 DEFAULT_TIMEOUT = 180
+TRACEBACK_DUMP_FILE = "traceback_dump.txt"
+FAULTHANDLER_DUMP_FILE = "faulthandler_dump.txt"
 
 
 @dataclass
@@ -119,6 +126,8 @@ class SignalHandler:
         # If one signal is received, self._receive_signal is called
         signal.signal(signal.SIGTERM, self._receive_sig)
         signal.signal(signal.SIGINT, self._receive_sig)
+        signal.signal(signal.SIGUSR1, self._receive_sigusr1)
+        signal.signal(signal.SIGUSR2, self._receive_sigusr2)
 
     def _receive_sig(self, signum, frame) -> None:
         """Action if SIGTERM or SIGINT is received."""
@@ -142,9 +151,49 @@ class SignalHandler:
     def _receive_alarm(self, signum, frame) -> None:
         """Action if SIGALARM is received."""
 
-        logging.debug(f"SIGALARM received; signum {signum}, frame {frame}.")
+        logging.debug(f"Received {signal.Signals(signum).name}")
 
         self._alarm_handler()
+
+    def _receive_sigusr1(self, signum, frame):
+        """Dump all thread stack traces using faulthandler to a file."""
+
+        logging.debug(f"Received {signal.Signals(signum).name}")
+
+        dump_file = (
+            f"{datetime.now().strftime("%Y%m%d_%H%M%S")}_{FAULTHANDLER_DUMP_FILE}"
+        )
+        with open(dump_file, "w") as f:
+            # Dump stack traces of all threads into the file
+            faulthandler.dump_traceback(file=f, all_threads=True)
+        logging.debug(f"Faulthandler dump written to {dump_file=}.")
+
+    def _receive_sigusr2(self, signum, frame):
+        """Dump all thread stack traces using the traceback module to another file."""
+
+        logging.debug(f"Received {signal.Signals(signum).name}")
+
+        dump_file = f"{datetime.now().strftime("%Y%m%d_%H%M%S")}_{TRACEBACK_DUMP_FILE}"
+        with open(dump_file, "w") as f:
+
+            f.write("Dump of all thread stack traces:\n")
+            for thread_id, stack in sys._current_frames().items():
+                f.write(f"\nThread ID: {thread_id}\n")
+                traceback.print_stack(stack, file=f)
+
+                f.write("Local variables per frame:\n")
+                current_frame = stack
+                while current_frame:
+                    f.write(
+                        f"\nFrame '{current_frame.f_code.co_name}' "
+                        f"(Line {current_frame.f_lineno}):\n"
+                    )
+                    # Pretty-print the local variables
+                    f.write(pprint.pformat(current_frame.f_locals, indent=4))
+                    f.write("\n")
+                    current_frame = current_frame.f_back
+
+        logging.debug(f"Traceback dump written to {dump_file=}.")
 
 
 class MainServer(BaseServer):
