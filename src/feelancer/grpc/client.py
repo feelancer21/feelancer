@@ -10,6 +10,7 @@ from functools import wraps
 from typing import Generic, TypeVar
 
 import grpc
+from google.protobuf.message import Message
 
 from feelancer.base import BaseServer, default_retry_handler
 
@@ -19,7 +20,8 @@ DEFAULT_KEEPALIVE_TIME_MS = 30000
 DEFAULT_KEEPALIVE_TIMEOUT_MS = 20000
 DEFAULT_SLEEP_ON_RPC_ERROR = 60
 
-T = TypeVar("T")
+T = TypeVar("T", bound=Message)
+U = TypeVar("U", bound=Message)
 V = TypeVar("V")
 
 os.environ["GRPC_SSL_CIPHER_SUITES"] = "HIGH+ECDSA"
