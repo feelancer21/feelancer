@@ -8,6 +8,7 @@ import datetime
 from enum import Enum as PyEnum
 
 from sqlalchemy import (
+    ARRAY,
     BigInteger,
     DateTime,
     Enum,
@@ -119,6 +120,30 @@ class Payment(Base):
     )
 
 
+class GraphNode(Base):
+    __tablename__ = "ln_graph_node"
+
+    id: Mapped[int] = mapped_column(autoincrement=True, primary_key=True)
+
+    pub_key: Mapped[str] = mapped_column(
+        String, nullable=False, unique=True, index=True
+    )
+
+
+class GraphPath(Base):
+    __tablename__ = "ln_graph_path"
+
+    id: Mapped[int] = mapped_column(autoincrement=True, primary_key=True)
+
+    # The sha256sum of the concatenation of all ids separated by a comma.
+    sha256_sum: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+
+    # Use the ARRAY type to store a variable-length list of node ids
+    node_ids: Mapped[list[int]] = mapped_column(
+        ARRAY(Integer), unique=True, nullable=False
+    )
+
+
 class HTLCAttempt(Base):
     __tablename__ = "ln_payment_htlc_attempt"
     __table_args__ = (UniqueConstraint("ln_node_id", "attempt_id", "status"),)
@@ -211,11 +236,17 @@ class Route(Base):
     # Relationship to hops
     hops: Mapped[list[Hop]] = relationship("Hop", back_populates="route")
 
-    # Number of hops in the route.
-    hops_num: Mapped[int] = mapped_column(Integer, nullable=False)
+    path_id: Mapped[int] = mapped_column(ForeignKey("ln_graph_path.id"), nullable=False)
 
-    # The sha256sum of the concatenation of all public keys of the route.
-    hops_sha256_sum: Mapped[String] = mapped_column(String(64), nullable=False)
+    path: Mapped[GraphPath] = relationship("GraphPath", foreign_keys=[path_id])
+
+    path_success_id: Mapped[int] = mapped_column(
+        ForeignKey("ln_graph_path.id"), nullable=True
+    )
+
+    path_success: Mapped[GraphPath] = relationship(
+        "GraphPath", foreign_keys=[path_success_id]
+    )
 
 
 class Hop(Base):
@@ -234,8 +265,9 @@ class Hop(Base):
     # The position of the hop in the route. Position zero is the sender node.
     position_id: Mapped[int] = mapped_column(Integer, nullable=False)
 
-    # Public key of the hop.
-    pub_key: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    node_id: Mapped[int] = mapped_column(ForeignKey("ln_graph_node.id"), nullable=False)
+
+    node: Mapped[GraphNode] = relationship(GraphNode, foreign_keys=[node_id])
 
     # The expiry value (originally a uint32).
     expiry: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -245,3 +277,17 @@ class Hop(Base):
 
     # Fee in millisatoshis.
     fee_msat: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+    node_outgoing_id: Mapped[int] = mapped_column(
+        ForeignKey("ln_graph_node.id"), nullable=True
+    )
+    node_outgoing: Mapped[GraphNode] = relationship(
+        GraphNode, foreign_keys=[node_outgoing_id]
+    )
+
+    node_incoming_id: Mapped[int] = mapped_column(
+        ForeignKey("ln_graph_node.id"), nullable=True
+    )
+    node_incoming: Mapped[GraphNode] = relationship(
+        GraphNode, foreign_keys=[node_incoming_id]
+    )
