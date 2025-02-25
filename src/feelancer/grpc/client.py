@@ -15,6 +15,8 @@ from feelancer.base import BaseServer, default_retry_handler
 
 DEFAULT_MESSAGE_SIZE_MB = 50 * 1024 * 1024
 DEFAULT_MAX_CONNECTION_IDLE_MS = 30000
+DEFAULT_KEEPALIVE_TIME_MS = 30000
+DEFAULT_KEEPALIVE_TIMEOUT_MS = 20000
 DEFAULT_SLEEP_ON_RPC_ERROR = 60
 
 T = TypeVar("T")
@@ -136,6 +138,8 @@ class SecureGrpcClient:
             ("grpc.max_message_length", DEFAULT_MESSAGE_SIZE_MB),
             ("grpc.max_receive_message_length", DEFAULT_MESSAGE_SIZE_MB),
             ("grpc.max_connection_idle_ms", DEFAULT_MAX_CONNECTION_IDLE_MS),
+            ("grpc.keepalive_time_ms", DEFAULT_KEEPALIVE_TIME_MS),
+            ("grpc.keepalive_timeout_ms", DEFAULT_KEEPALIVE_TIMEOUT_MS),
         ]
         self.ip_address = ip_address
         self._credentials = credentials
