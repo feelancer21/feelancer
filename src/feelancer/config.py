@@ -34,8 +34,8 @@ class FeelancerConfig:
 
         self.tasks_config: dict[str, dict] = {}
 
-        tasks = ["pid", "reconnect"]
-        tasks_required = ["pid"]
+        tasks = ["pid", "reconnect", "paytrack"]
+        tasks_required = []
 
         for task in tasks:
             if not (task_config := config_dict.get(task)) and task in tasks_required:

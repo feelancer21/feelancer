@@ -1,19 +1,24 @@
 from __future__ import annotations
 
 import logging
-import time
-from collections.abc import Callable, Generator, Sequence
+from collections.abc import Callable, Generator, Iterable, Sequence
 from typing import TYPE_CHECKING, TypeVar
 
 from sqlalchemy import URL, create_engine
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+
+from feelancer.base import create_retry_handler
 
 T = TypeVar("T")
 V = TypeVar("V")
 W = TypeVar("W")
 
-MAX_EXECUTIONS = 5
+EXCEPTIONS_RETRY = (Exception,)
+EXCEPTIONS_RAISE = (IntegrityError,)
+MAX_RETRIES = 5
 DELAY = 5
+MIN_TOLERANCE_DELTA = 60
 
 if TYPE_CHECKING:
     from sqlalchemy import Select
@@ -75,6 +80,17 @@ def _create_dict_gen_call(
     return func
 
 
+# Retry handler for database operations. We are raising IntegrityError amd retrying
+# on all other exceptions.
+_retry_handler = create_retry_handler(
+    exceptions_retry=EXCEPTIONS_RETRY,
+    exceptions_raise=EXCEPTIONS_RAISE,
+    max_retries=MAX_RETRIES,
+    delay=DELAY,
+    min_tolerance_delta=MIN_TOLERANCE_DELTA,
+)
+
+
 class FeelancerDB:
     def __init__(self, url_database: URL):
         self.engine = create_engine(url_database)
@@ -102,6 +118,7 @@ class FeelancerDB:
         """
         return self._execute(func, post)
 
+    @_retry_handler
     def _execute(
         self,
         pre_commit: Callable[[Session], V],
@@ -111,48 +128,33 @@ class FeelancerDB:
         The main executor for database operations.
         """
 
-        ex = Exception("Undefined error during database execution occurred.")
+        needs_commit = False
 
-        for r in range(MAX_EXECUTIONS):
-            needs_commit = False
+        with self.session() as session:
+            try:
+                # We execute the pre_commit function in the session, check
+                # if a commit is needed and eventually we process the
+                # post_commit function on the result after the commit.
+                res = pre_commit(session)
 
-            with self.session() as session:
-                try:
+                if session.new or session.dirty or session.deleted:
+                    # storing the information for rollback
+                    needs_commit = True
+                    session.commit()
 
-                    # We execute the pre_commit function in the session, check
-                    # if a commit is needed and eventually we process the
-                    # post_commit function on the result after the commit.
+                if post_commit is None:
+                    return res  # type: ignore
+                return post_commit(res)
 
-                    res = pre_commit(session)
+            except Exception as e:
+                if needs_commit:
+                    session.rollback()
+                self.engine.dispose()
 
-                    if session.new or session.dirty or session.deleted:
-                        # storing the information for rollback
-                        needs_commit = True
-                        session.commit()
+                raise e
 
-                    if post_commit is None:
-                        return res  # type: ignore
-                    return post_commit(res)
-
-                except Exception as e:
-                    if needs_commit:
-                        session.rollback()
-
-                    self.engine.dispose()
-                    ex = e
-
-                finally:
-                    session.close()
-
-            logging.warning(
-                f"Error occurred during database operation; "
-                f"Starting retry {r+1} in {DELAY}s ..."
-            )
-            time.sleep(DELAY)
-
-        logging.error(f"Maximum number of retries {MAX_EXECUTIONS} exceeded.")
-
-        raise ex
+            finally:
+                session.close()
 
     def query_all_to_list(
         self, qry: Select[tuple[T]], convert: Callable[[T], V]
@@ -221,6 +223,41 @@ class FeelancerDB:
             return convert(result)
 
         return self._execute(get_data, convert_default)
+
+    def add(self, data: DeclarativeBase, accept_integrity_err: bool = False) -> None:
+        """
+        Adds the data to the database.
+        """
+
+        try:
+            self.execute(lambda session: session.add(data))
+        except Exception as e:
+            logging.error(f"Error while adding data to db: {e}")
+
+            if accept_integrity_err and isinstance(e, IntegrityError):
+                return
+
+            raise e
+
+    def add_post(self, data: T, post: Callable[[T], V]) -> V:
+        """
+        Adds the data to the database and executes the post function on the result.
+        """
+
+        def add_data(session: Session) -> T:
+            session.add(data)
+            return data
+
+        return self.execute_post(add_data, post)
+
+    def add_all_from_iterable(
+        self, iter: Iterable[DeclarativeBase], accept_integrity_err: bool = False
+    ) -> None:
+        """
+        Adds all data from the iterable to the database.
+        """
+        for i in iter:
+            self.add(i, accept_integrity_err)
 
 
 class SessionExecutor:
