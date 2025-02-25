@@ -1,12 +1,13 @@
 import datetime
+import functools
 import hashlib
 import logging
-from collections.abc import Generator, Iterable
-from typing import Protocol
+from collections.abc import Callable, Generator, Iterable
+from typing import Any, Protocol, TypeVar
 
 import pytz
-from google.protobuf.json_format import MessageToDict
 
+from feelancer.base import default_retry_handler
 from feelancer.data.db import FeelancerDB
 from feelancer.lightning.data import LightningStore
 from feelancer.lightning.lnd import LNDClient
@@ -31,6 +32,8 @@ from .models import (
     PaymentStatus,
     Route,
 )
+
+T = TypeVar("T")
 
 
 # Helper function for converting nanoseconds to a datetime object.
@@ -68,6 +71,38 @@ class PaymentTracker(Protocol):
     Stores payments in the database.
     """
 
+    def pre_sync_start(self) -> None: ...
+    def pre_sync_stop(self) -> None: ...
+
+
+def _create_call_logger(
+    interval: int,
+) -> Callable[[Callable[..., Generator[T]]], Callable[..., Generator[T]]]:
+    """
+    Decorator for writing a log message every interval of payments. To see the
+    process is still alive.
+    """
+
+    def decorator(
+        generator_func: Callable[..., Generator[T]]
+    ) -> Callable[..., Generator[T]]:
+
+        @functools.wraps(generator_func)
+        def wrapper(*args: Any, **kwargs: Any) -> Generator[T]:
+            count: int = 0
+            for item in generator_func(*args, **kwargs):
+                count += 1
+                if count == interval:
+                    logging.info(f"Processed {count} payments")
+                    count = 0
+                yield item
+
+            logging.info(f"Processed {count} payments")
+
+        return wrapper
+
+    return decorator
+
 
 class LNDPaymentTracker:
 
@@ -78,15 +113,58 @@ class LNDPaymentTracker:
         self._pub_key = self._lnd.pubkey_local
         self._ln_store = LightningStore(db, self._pub_key)
         self._ln_node_id = self._ln_store.ln_node_id
+        self._is_stopped = False
 
     def store_payments(self) -> None:
+        self._store.add_attempts(self._generate_from_stream())
 
-        self._store.add_attempts(self._generate_attempts())
+    def pre_sync_start(self) -> None:
+        """
+        Presync payments from the LND ListPayments API. This is done before the
+        subscription starts. This is necessary to get the payments that were
+        made while the subscription was not running.
+        """
 
-    def _generate_attempts(self) -> Generator[HTLCAttempt]:
+        logging.info(f"Presync payments for {self._pub_key} from lnd ListPayments...")
+
+        self._pre_sync_start()
+
+        logging.info(f"Presync payments for {self._pub_key} finished")
+
+    def pre_sync_stop(self) -> None:
+        """
+        Stops the presync process.
+        """
+        self._is_stopped = True
+
+    @default_retry_handler
+    def _pre_sync_start(self) -> None:
+        """
+        Starts the presync process with a retry handler.
+        """
+
+        if self._is_stopped:
+            return
+        self._store.add_attempt_chunks(self._generate_from_paginator())
+
+    @_create_call_logger(interval=1000)
+    def _generate_from_paginator(self) -> Generator[HTLCAttempt]:
+
+        index_offset = self._store.get_max_payment_index()
+        logging.debug(f"Starting from index {index_offset} for {self._pub_key}")
+
+        generator = self._lnd.lnd.paginate_payments(index_offset=index_offset)
+        for payment in generator:
+            if self._is_stopped:
+                generator.close()
+
+            yield from self._process_payment(payment)
+
+    @_create_call_logger(interval=100)
+    def _generate_from_stream(self) -> Generator[HTLCAttempt]:
 
         dispatcher = self._lnd.lnd.track_payments_dispatcher
-        for s in dispatcher.subscribe(self._process_payment):
+        for s in dispatcher.subscribe(lambda p: self._process_payment(p)):
             yield from s
 
     def _process_payment(self, p: ln.Payment) -> Generator[HTLCAttempt]:
@@ -105,16 +183,11 @@ class LNDPaymentTracker:
         # Maybe from the last run.
         try:
             payment_id = self._store.get_payment_id(p.payment_hash)
-        except PaymentNotFound as e:
-            logging.warning(e)
+        except PaymentNotFound:
             # If found not we store it and get the id of the payment.
             payment_id = self._store.add_payment(self._convert_payment(p))
 
-        logging.debug(f"payment {p.payment_hash=}:\n {MessageToDict(p)}")
         for h in p.htlcs:
-            logging.debug(
-                f"payment {p.payment_hash=} {p.status=} {h.attempt_id=} {h.status=} {_sha256_payment(p)=} {_sha256_payment(h)=}"
-            )
             yield self._convert_htlc_attempt(h, payment_id)
 
     def _convert_payment(self, payment: ln.Payment) -> Payment:
@@ -140,14 +213,21 @@ class LNDPaymentTracker:
         else:
             resolve_time = None
 
-        if attempt.route is not None:
-            failure_source_index = attempt.failure.failure_source_index
+        # Determination of the index of the last used hop. It is the failure source
+        # index if the attempt failed. If the attempt succeeded it is the receiver
+        # of the attempt.
+        if attempt.status == 2 and attempt.failure is not None:
+            last_used_hop_index = attempt.failure.failure_source_index
+        elif attempt.status == 1:
+            last_used_hop_index = len(attempt.route.hops) + 1
         else:
-            failure_source_index = None
+            last_used_hop_index = None
 
-        route = self._convert_route(attempt.route, failure_source_index)
+        route = self._convert_route(attempt.route, last_used_hop_index)
 
-        if attempt.failure is not None:
+        # If the attempt failed we store the failure information. For succeeded
+        # attempts we don't need to store this information.
+        if attempt.status == 2 and attempt.failure is not None:
             try:
                 source_hop = route.hops[attempt.failure.failure_source_index]
             except IndexError:
@@ -171,9 +251,7 @@ class LNDPaymentTracker:
             failure=failure,
         )
 
-    def _convert_route(
-        self, route: ln.Route, failure_source_index: int | None
-    ) -> Route:
+    def _convert_route(self, route: ln.Route, last_used_hop_index: int | None) -> Route:
 
         hops: list[Hop] = []
         path: list[int] = []
@@ -210,8 +288,8 @@ class LNDPaymentTracker:
 
         path_id = self._get_graph_path_id(path)
 
-        if failure_source_index is not None and failure_source_index >= 0:
-            path_success = path[:failure_source_index]
+        if last_used_hop_index is not None and last_used_hop_index >= 0:
+            path_success = path[:last_used_hop_index]
             path_success_id = self._get_graph_path_id(path_success)
         else:
             path_success_id = None
@@ -220,7 +298,6 @@ class LNDPaymentTracker:
             total_time_lock=route.total_time_lock,
             total_amt_msat=route.total_amt_msat,
             total_fees_msat=route.total_fees_msat,
-            first_hop_amount_msat=route.first_hop_amount_msat,
             hops=hops,
             path_id=path_id,
             path_success_id=path_success_id,

@@ -259,6 +259,26 @@ class FeelancerDB:
         for i in iter:
             self.add(i, accept_integrity_err)
 
+    def add_chunks_from_iterable(
+        self, iter: Iterable[DeclarativeBase], chunk_size: int
+    ) -> None:
+        """
+        Adds all data from the iterable to the database in chunks.
+        """
+
+        def add_all(data: list[DeclarativeBase]) -> None:
+            self.execute(lambda session: session.add_all(data))
+
+        chunk = []
+        for i in iter:
+            chunk.append(i)
+            if len(chunk) == chunk_size:
+                add_all(chunk)
+                chunk = []
+
+        if len(chunk) > 0:
+            add_all(chunk)
+
 
 class SessionExecutor:
     """

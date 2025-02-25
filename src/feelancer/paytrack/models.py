@@ -227,9 +227,6 @@ class Route(Base):
     # The total amount in millisatoshis.
     total_amt_msat: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
-    # The actual on-chain amount that was sent out to the first hop.
-    first_hop_amount_msat: Mapped[int] = mapped_column(BigInteger, nullable=False)
-
     # The payment attempt
     attempt: Mapped[HTLCAttempt] = relationship("HTLCAttempt", back_populates="route")
 

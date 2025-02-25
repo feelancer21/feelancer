@@ -33,6 +33,8 @@ class PaytrackService(BaseServer):
         self._payment_tracker.store_payments()
 
     def _stop_server(self) -> None:
-        # Not implemented. Service ends when the incoming payment stream has
-        # exhausted.
+        # Service ends when the incoming payment stream has exhausted.
+        # But we have to stop the pre sync with is started synchronously.
+
+        self._payment_tracker.pre_sync_stop()
         return None

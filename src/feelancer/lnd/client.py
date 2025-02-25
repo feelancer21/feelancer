@@ -1,17 +1,25 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
+from collections.abc import Generator, Iterable, Sequence
 
 import grpc
 
 from feelancer.base import BaseServer
-from feelancer.grpc.client import RpcResponseHandler, SecureGrpcClient, StreamDispatcher
+from feelancer.grpc.client import (
+    Paginator,
+    RpcResponseHandler,
+    SecureGrpcClient,
+    StreamDispatcher,
+)
 
 from .grpc_generated import lightning_pb2 as ln
 from .grpc_generated import lightning_pb2_grpc as lnrpc
 from .grpc_generated import router_pb2 as rt
 from .grpc_generated import router_pb2_grpc as rtrpc
+
+PAGINATOR_MAX_FORWARDING_EVENTS = 10000
+PAGINATOR_MAX_PAYMENTS = 10000
 
 
 class EdgeNotFound(Exception): ...
@@ -77,6 +85,12 @@ def set_chan_point(chan_point_str: str, chan_point: ln.ChannelPoint) -> None:
     txid_reversed.reverse()
     chan_point.funding_txid_bytes = bytes(txid_reversed)
     chan_point.output_index = int(out_index)
+
+
+class LndForwardingEventPaginator(Paginator[ln.ForwardingEvent]): ...
+
+
+class LndPaymentPaginator(Paginator[ln.Payment]): ...
 
 
 class LndGrpc(SecureGrpcClient, BaseServer):
@@ -272,6 +286,56 @@ class LndGrpc(SecureGrpcClient, BaseServer):
         req.no_inflight_updates = no_inflight_updates
 
         return self._router_stub.TrackPayments(req)
+
+    def paginate_forwarding_events(
+        self,
+        num_max_events: int | None = None,
+        index_offset: int = 0,
+        start_time: int = 0,
+        end_time: int = 0,
+    ) -> Generator[ln.ForwardingEvent]:
+
+        def _read(
+            d: ln.ForwardingHistoryResponse,
+        ) -> tuple[Sequence[ln.ForwardingEvent], int]:
+            return d.forwarding_events, d.last_offset_index
+
+        def _set(d: ln.ForwardingHistoryRequest, offset: int, max: int) -> None:
+            d.index_offset = offset
+            d.num_max_events = max
+
+        paginator = LndForwardingEventPaginator(
+            producer=self._ln_stub.ForwardingHistory,
+            request=ln.ForwardingHistoryRequest,
+            max_responses=PAGINATOR_MAX_FORWARDING_EVENTS,
+            read_response=_read,
+            set_request=_set,
+        )
+
+        return paginator.request(
+            num_max_events, index_offset, start_time=start_time, end_time=end_time
+        )
+
+    def paginate_payments(
+        self, max_payments: int | None = None, index_offset: int = 0, **kwargs
+    ) -> Generator[ln.Payment]:
+
+        def _read(d: ln.ListPaymentsResponse) -> tuple[Sequence[ln.Payment], int]:
+            return d.payments, d.last_index_offset
+
+        def _set(d: ln.ListPaymentsRequest, offset: int, max: int) -> None:
+            d.index_offset = offset
+            d.max_payments = max
+
+        paginator = LndPaymentPaginator(
+            producer=self._ln_stub.ListPayments,
+            request=ln.ListPaymentsRequest,
+            max_responses=PAGINATOR_MAX_PAYMENTS,
+            read_response=_read,
+            set_request=_set,
+        )
+
+        return paginator.request(max_payments, index_offset)
 
 
 def update_failure_name(num) -> str:

@@ -5,7 +5,7 @@ import logging
 import os
 import queue
 import time
-from collections.abc import Callable, Generator, Iterable
+from collections.abc import Callable, Generator, Iterable, Sequence
 from functools import wraps
 from typing import Generic, TypeVar
 
@@ -23,6 +23,7 @@ DEFAULT_SLEEP_ON_RPC_ERROR = 60
 T = TypeVar("T", bound=Message)
 U = TypeVar("U", bound=Message)
 V = TypeVar("V")
+W = TypeVar("W", bound=Message)
 
 os.environ["GRPC_SSL_CIPHER_SUITES"] = "HIGH+ECDSA"
 
@@ -279,3 +280,60 @@ class StreamDispatcher(Generic[T], BaseServer):
         """Puts a message to each queue."""
         for q in self._message_queues:
             q.put(data)
+
+
+class Paginator(Generic[W]):
+    # T is the type of the request message
+    # V is the type of the response message
+    # W is the type of the response data (some. submessage of V)
+
+    def __init__(
+        self,
+        producer: grpc.UnaryUnaryMultiCallable,
+        request: type[T],
+        max_responses: int,
+        read_response: Callable[[V], tuple[Sequence[W], int]],
+        set_request: Callable[[T, int, int], None],
+    ) -> None:
+        self._producer = producer
+        self._request = request
+        self._max_responses = max_responses
+        self._read_response = read_response
+        self._set_request = set_request
+
+    def request(
+        self, max_events: int | None, offset: int = 0, **kwargs
+    ) -> Generator[W]:
+
+        events_open = max_events
+
+        # Max number of events to request in the next call
+        next_max = self._max_responses
+        next_offset = offset
+
+        while True:
+
+            if events_open is not None and events_open < self._max_responses:
+                next_max = events_open
+
+            req = self._request(**kwargs)
+            self._set_request(req, next_offset, next_max)
+
+            resp = self._producer(req)
+
+            data, next_offset = self._read_response(resp)
+
+            yield from data
+
+            # Next call would not return any more events
+            if len(data) < self._max_responses:
+                break
+
+            # If there is no limit on the number of events, we continue until the
+            # last event is reached.
+            if events_open is None:
+                continue
+
+            events_open -= len(data)
+            if events_open == 0:
+                break

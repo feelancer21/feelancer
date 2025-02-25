@@ -173,6 +173,9 @@ class BaseServer:
         If an error is raised by one thread, the stop method of the server is called.
         """
 
+        if self._is_stopped:
+            return
+
         # If an error occurs, a SIGTERM signal is sent to the signal handler
         # to stop the server.
         # The signal handler stops all sub servers of the main server.
@@ -181,6 +184,9 @@ class BaseServer:
         try:
             logging.info(f"{self._name} starting...")
             _run_sync(self._sync_start)
+
+            if self._is_stopped:
+                return
             _run_concurrent(self._concurrent_start, err_signal)
             logging.info(f"{self._name} finished")
         except Exception as e:

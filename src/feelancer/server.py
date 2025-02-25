@@ -240,6 +240,11 @@ class MainServer(BaseServer):
             )
             self._register_sub_server(paytrack_service)
 
+            # Pre sync before threadpool execution starts to sync faster
+            self._register_sync_starter(
+                paytrack_service._payment_tracker.pre_sync_start
+            )
+
     def read_feelancer_cfg(self) -> FeelancerConfig:
         """
         Reads the config file and init a new Feelancer Config.

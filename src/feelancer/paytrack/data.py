@@ -1,12 +1,13 @@
 import functools
 from collections.abc import Iterable
 
-from sqlalchemy import Select, select
+from sqlalchemy import Select, func, select
 
 from feelancer.data.db import FeelancerDB
 
 from .models import Base, GraphNode, GraphPath, HTLCAttempt, Payment
 
+CHUNK_SIZE = 1000
 CACHE_SIZE_PAYMENT_ID = 10000
 CACHE_SIZE_GRAPH_NODE_ID = 50000
 CACHE_SIZE_GRAPH_PATH = 100000
@@ -24,6 +25,11 @@ class GraphPathNotFound(Exception): ...
 def query_payment(payment_hash: str) -> Select[tuple[Payment]]:
     qry = select(Payment).where(Payment.payment_hash == payment_hash)
 
+    return qry
+
+
+def query_max_payment_index() -> Select[tuple[int]]:
+    qry = select(func.max(Payment.payment_index))
     return qry
 
 
@@ -51,6 +57,13 @@ class PaymentTrackerStore:
         # TODO: We accept integrity errors because of this lnd issue
         # https://github.com/lightningnetwork/lnd/issues/9542
         self.db.add_all_from_iterable(attempts, True)
+
+    def add_attempt_chunks(self, attempts: Iterable[HTLCAttempt]) -> None:
+        """
+        Adds a list of attempts to the database in chunks.
+        """
+
+        self.db.add_chunks_from_iterable(attempts, CHUNK_SIZE)
 
     def add_payment(self, payment: Payment) -> int:
         """
@@ -107,3 +120,10 @@ class PaymentTrackerStore:
                 f"Graph path with sha256 sum {sha_256_sum} not found."
             )
         return id
+
+    def get_max_payment_index(self) -> int:
+        """
+        Returns the maximum payment index.
+        """
+
+        return self.db.query_first(query_max_payment_index(), lambda p: p, 0)
