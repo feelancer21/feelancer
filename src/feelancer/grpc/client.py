@@ -181,7 +181,7 @@ _channel_retry_handler = create_retry_handler(
     exceptions_retry=(Exception,),
     exceptions_raise=(),
     max_retries=5,
-    delay=15,
+    delay=180,  # For testing only
     min_tolerance_delta=120,
 )
 
@@ -228,6 +228,8 @@ class StreamDispatcher(Generic[T], BaseServer):
 
         while True:
             m = q.get()
+            if q.qsize() >= 2:
+                logging.debug(f"Queue size of {self._name}: {q.qsize()}")
 
             # None is signals the end of the queue. We can break the loop.
             if m is None:
