@@ -12,7 +12,7 @@ from typing import Generic, TypeVar
 import grpc
 from google.protobuf.message import Message
 
-from feelancer.base import BaseServer, default_retry_handler, create_retry_handler
+from feelancer.base import BaseServer, create_retry_handler, default_retry_handler
 
 DEFAULT_MESSAGE_SIZE_MB = 50 * 1024 * 1024
 DEFAULT_MAX_CONNECTION_IDLE_MS = 30000
@@ -179,7 +179,7 @@ class SecureGrpcClient:
 # Retrying using the same grpc channel
 _channel_retry_handler = create_retry_handler(
     exceptions_retry=(Exception,),
-    exceptions_raise=(),
+    exceptions_raise=(LocallyCancelled,),
     max_retries=5,
     delay=180,  # For testing only
     min_tolerance_delta=120,
@@ -252,14 +252,12 @@ class StreamDispatcher(Generic[T], BaseServer):
         while not (self._is_subscribed or self._is_stopped):
             pass
 
-        # Returning early if the server is stopped.
-        if self._is_stopped:
-            return None
-
         # We have a subscriber. We can start the stream.
         while True:
             try:
-                logging.info(f"Starting {self._name}...")
+                # Returning early if the server is stopped.
+                if self._is_stopped:
+                    return None
 
                 # The stream initializer allows creating rpc streams in the same
                 # grpc channel.
@@ -299,6 +297,7 @@ class StreamDispatcher(Generic[T], BaseServer):
         # Receiving of the grp messages
         for m in handle_rpc_stream(self._stream):  # type: ignore
             self._put_to_queues(m)
+        print("stop")
 
     def _stop(self) -> None:
         """Stops receiving of the messages from the upstream."""

@@ -185,9 +185,8 @@ class BaseServer:
             logging.info(f"{self._name} starting...")
             _run_sync(self._sync_start)
 
-            if self._is_stopped:
-                return
-            _run_concurrent(self._concurrent_start, err_signal)
+            if not self._is_stopped:
+                _run_concurrent(self._concurrent_start, err_signal)
             logging.info(f"{self._name} finished")
         except Exception as e:
             logging.error(f"{self._name} start: an unexpected error occurred: {e}")
