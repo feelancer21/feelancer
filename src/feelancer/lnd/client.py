@@ -93,6 +93,10 @@ class LndForwardingEventPaginator(Paginator[ln.ForwardingEvent]): ...
 class LndPaymentPaginator(Paginator[ln.Payment]): ...
 
 
+# Dispatcher for tracking payments. New class for logging purposes.
+class LndPaymentDispatcher(StreamDispatcher[ln.Payment]): ...
+
+
 class LndGrpc(SecureGrpcClient, BaseServer):
 
     def __init__(
@@ -107,12 +111,7 @@ class LndGrpc(SecureGrpcClient, BaseServer):
         # to internal services.
         BaseServer.__init__(self, **kwargs)
 
-        # Dispatcher for tracking payments. New class for logging purposes.
-        class LndPaymentDispatcher(StreamDispatcher[ln.Payment]): ...
-
-        self.track_payments_dispatcher = LndPaymentDispatcher(
-            producer=self.track_payments
-        )
+        self.track_payments_dispatcher = self._new_payments_dispatcher()
 
         self._register_sub_server(self.track_payments_dispatcher)
 
@@ -341,6 +340,17 @@ class LndGrpc(SecureGrpcClient, BaseServer):
 
         return paginator.request(
             max_payments, index_offset, include_incomplete=include_incomplete, **kwargs
+        )
+
+    def _new_payments_dispatcher(
+        self, no_inflight_updates: bool = False
+    ) -> LndPaymentDispatcher:
+
+        req = rt.TrackPaymentsRequest()
+        req.no_inflight_updates = no_inflight_updates
+
+        return LndPaymentDispatcher(
+            new_stream_initializer=lambda: self._router_stub.TrackPayments, request=req
         )
 
 
