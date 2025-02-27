@@ -12,7 +12,7 @@ from typing import Generic, TypeVar
 import grpc
 from google.protobuf.message import Message
 
-from feelancer.base import BaseServer, default_retry_handler
+from feelancer.base import BaseServer, create_retry_handler, default_retry_handler
 
 DEFAULT_MESSAGE_SIZE_MB = 50 * 1024 * 1024
 DEFAULT_MAX_CONNECTION_IDLE_MS = 30000
@@ -24,6 +24,7 @@ T = TypeVar("T", bound=Message)
 U = TypeVar("U", bound=Message)
 V = TypeVar("V")
 W = TypeVar("W", bound=Message)
+
 
 os.environ["GRPC_SSL_CIPHER_SUITES"] = "HIGH+ECDSA"
 
@@ -175,17 +176,33 @@ class SecureGrpcClient:
         )
 
 
+# Retrying using the same grpc channel
+_channel_retry_handler = create_retry_handler(
+    exceptions_retry=(Exception,),
+    exceptions_raise=(LocallyCancelled,),
+    max_retries=5,
+    delay=15,
+    min_tolerance_delta=120,
+)
+
+
 class StreamDispatcher(Generic[T], BaseServer):
     """
     Receives grpc messages of Type T from an stream and handles the errors.
     The message are distributors to all subscribers of the dispatchers.
     """
 
-    def __init__(self, producer: Callable[..., Iterable[T]], **kwargs) -> None:
+    def __init__(
+        self,
+        new_stream_initializer: Callable[..., grpc.UnaryStreamMultiCallable],
+        request: Message,
+        **kwargs,
+    ) -> None:
 
         BaseServer.__init__(self, **kwargs)
 
-        self._producer: Callable[..., Iterable[T]] = producer
+        self._new_stream_initializer = new_stream_initializer
+        self._request: Message = request
 
         self._message_queues: list[queue.Queue[T | None]] = []
         self._stream: Iterable[T] | None = None
@@ -233,19 +250,18 @@ class StreamDispatcher(Generic[T], BaseServer):
         while not (self._is_subscribed or self._is_stopped):
             pass
 
-        # Returning early if the server is stopped.
-        if self._is_stopped:
-            return None
-
         # We have a subscriber. We can start the stream.
         while True:
             try:
-                logging.info(f"Starting {self._name}...")
-                self._stream = self._producer()
+                # Returning early if the server is stopped.
+                if self._is_stopped:
+                    return None
 
-                # Receiving of the grp messages
-                for m in handle_rpc_stream(self._stream):
-                    self._put_to_queues(m)
+                # The stream initializer allows creating rpc streams in the same
+                # grpc channel.
+                stream_initializer = self._new_stream_initializer()
+
+                self._start_stream(stream_initializer)
 
             except LocallyCancelled as e:
                 # User ended the stream.
@@ -269,6 +285,17 @@ class StreamDispatcher(Generic[T], BaseServer):
                 raise e
 
             self._stream = None
+
+    @_channel_retry_handler
+    def _start_stream(self, stream_initializer: grpc.UnaryStreamMultiCallable) -> None:
+
+        # Creating a new stream in the grpc channel
+        self._stream = stream_initializer(self._request)
+
+        # Receiving of the grp messages
+        for m in handle_rpc_stream(self._stream):  # type: ignore
+            self._put_to_queues(m)
+        print("stop")
 
     def _stop(self) -> None:
         """Stops receiving of the messages from the upstream."""

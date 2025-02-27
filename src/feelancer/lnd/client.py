@@ -87,10 +87,8 @@ def set_chan_point(chan_point_str: str, chan_point: ln.ChannelPoint) -> None:
     chan_point.output_index = int(out_index)
 
 
-class LndForwardingEventPaginator(Paginator[ln.ForwardingEvent]): ...
-
-
-class LndPaymentPaginator(Paginator[ln.Payment]): ...
+# Dispatcher for tracking payments. New class for logging purposes.
+class LndPaymentDispatcher(StreamDispatcher[ln.Payment]): ...
 
 
 class LndGrpc(SecureGrpcClient, BaseServer):
@@ -107,12 +105,7 @@ class LndGrpc(SecureGrpcClient, BaseServer):
         # to internal services.
         BaseServer.__init__(self, **kwargs)
 
-        # Dispatcher for tracking payments. New class for logging purposes.
-        class LndPaymentDispatcher(StreamDispatcher[ln.Payment]): ...
-
-        self.track_payments_dispatcher = LndPaymentDispatcher(
-            producer=self.track_payments
-        )
+        self.track_payments_dispatcher = self._new_payments_dispatcher()
 
         self._register_sub_server(self.track_payments_dispatcher)
 
@@ -304,7 +297,7 @@ class LndGrpc(SecureGrpcClient, BaseServer):
             d.index_offset = offset
             d.num_max_events = max
 
-        paginator = LndForwardingEventPaginator(
+        paginator = Paginator[ln.ForwardingEvent](
             producer=self._ln_stub.ForwardingHistory,
             request=ln.ForwardingHistoryRequest,
             max_responses=PAGINATOR_MAX_FORWARDING_EVENTS,
@@ -331,7 +324,7 @@ class LndGrpc(SecureGrpcClient, BaseServer):
             d.index_offset = offset
             d.max_payments = max
 
-        paginator = LndPaymentPaginator(
+        paginator = Paginator[ln.Payment](
             producer=self._ln_stub.ListPayments,
             request=ln.ListPaymentsRequest,
             max_responses=PAGINATOR_MAX_PAYMENTS,
@@ -341,6 +334,17 @@ class LndGrpc(SecureGrpcClient, BaseServer):
 
         return paginator.request(
             max_payments, index_offset, include_incomplete=include_incomplete, **kwargs
+        )
+
+    def _new_payments_dispatcher(
+        self, no_inflight_updates: bool = False
+    ) -> LndPaymentDispatcher:
+
+        req = rt.TrackPaymentsRequest()
+        req.no_inflight_updates = no_inflight_updates
+
+        return LndPaymentDispatcher(
+            new_stream_initializer=lambda: self._router_stub.TrackPayments, request=req
         )
 
 
