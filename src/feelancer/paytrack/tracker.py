@@ -17,7 +17,7 @@ from feelancer.lnd.grpc_generated import lightning_pb2 as ln
 from .data import (
     GraphNodeNotFound,
     GraphPathNotFound,
-    PaymentNotFound,
+    PaymentRequestNotFound,
     PaymentTrackerStore,
 )
 from .models import (
@@ -29,6 +29,7 @@ from .models import (
     HTLCStatus,
     Payment,
     PaymentFailureReason,
+    PaymentRequest,
     PaymentStatus,
     Route,
 )
@@ -127,7 +128,7 @@ class LNDPaymentTracker:
 
         logging.info(f"Presync payments for {self._pub_key} from lnd ListPayments...")
 
-        self._pre_sync_start()
+        # self._pre_sync_start()
 
         logging.info(f"Presync payments for {self._pub_key} finished")
 
@@ -177,27 +178,33 @@ class LNDPaymentTracker:
         if p.status not in [2, 3]:
             return
 
-        payment_id: int
+        payment_request_id: int
 
         # Check if we have already stored the payment in the database.
         # Maybe from the last run.
         try:
-            payment_id = self._store.get_payment_id(p.payment_hash)
-        except PaymentNotFound:
-            # If found not we store it and get the id of the payment.
-            payment_id = self._store.add_payment(self._convert_payment(p))
+            payment_request_id = self._store.get_payment_request_id(p.payment_hash)
+        except PaymentRequestNotFound:
+            pay_req = PaymentRequest(
+                payment_hash=p.payment_hash,
+                payment_request=p.payment_request,
+            )
+            # If not found, we store it and get the id of the payment.
+            payment_request_id = self._store.add_payment_request(pay_req)
+
+        payment = self._convert_payment(p, payment_request_id)
 
         for h in p.htlcs:
-            yield self._convert_htlc_attempt(h, payment_id)
+            yield self._convert_htlc_attempt(h, payment)
 
-    def _convert_payment(self, payment: ln.Payment) -> Payment:
+    def _convert_payment(self, payment: ln.Payment, payment_request_id: int) -> Payment:
         """
         Converts a payment object from the LND gRPC API to a Payment
         """
 
         return Payment(
-            payment_hash=payment.payment_hash,
-            payment_preimage=payment.payment_preimage,
+            payment_request_id=payment_request_id,
+            ln_node_id=self._ln_node_id,
             value_msat=payment.value_msat,
             status=PaymentStatus(payment.status),
             creation_time=_ns_to_datetime(payment.creation_time_ns),
@@ -206,7 +213,9 @@ class LNDPaymentTracker:
             failure_reason=PaymentFailureReason(payment.failure_reason),
         )
 
-    def _convert_htlc_attempt(self, attempt: ln.HTLCAttempt, payment_id) -> HTLCAttempt:
+    def _convert_htlc_attempt(
+        self, attempt: ln.HTLCAttempt, payment: Payment
+    ) -> HTLCAttempt:
 
         if attempt.resolve_time_ns > 0:
             resolve_time = _ns_to_datetime(attempt.resolve_time_ns)
@@ -241,8 +250,7 @@ class LNDPaymentTracker:
             failure = None
 
         return HTLCAttempt(
-            ln_node_id=self._ln_node_id,
-            payment_id=payment_id,
+            payment=payment,
             attempt_id=attempt.attempt_id,
             status=HTLCStatus(attempt.status),
             attempt_time=_ns_to_datetime(attempt.attempt_time_ns),

@@ -78,23 +78,39 @@ class PaymentStatus(PyEnum):
     INITIATED = 4
 
 
-class Payment(Base):
-    __tablename__ = "ln_payment"
+class PaymentRequest(Base):
+    __tablename__ = "ln_payment_request"
 
-    # unique identifier of the payment
+    # unique identifier of the payment request
     id: Mapped[int] = mapped_column(autoincrement=True, primary_key=True)
 
     # The payment hash
     payment_hash: Mapped[str] = mapped_column(String, nullable=False, index=True)
 
-    # The payment preimage
-    payment_preimage: Mapped[str] = mapped_column(String, nullable=True)
+    # The optional payment request being fulfilled
+    payment_request: Mapped[str] = mapped_column(String, nullable=True)
+
+
+class Payment(Base):
+    __tablename__ = "ln_payment"
+    __table_args__ = (UniqueConstraint("payment_index", "ln_node_id"),)
+
+    # unique identifier of the payment
+    id: Mapped[int] = mapped_column(autoincrement=True, primary_key=True)
+
+    # the id of the local lightning node
+    ln_node_id: Mapped[int] = mapped_column(ForeignKey("ln_node.id"), nullable=False)
+
+    # the local lightning node
+    ln_node: Mapped[DBLnNode] = relationship(DBLnNode)
+
+    payment_request_id: Mapped[int] = mapped_column(
+        ForeignKey("ln_payment_request.id"), nullable=True
+    )
+    payment_request: Mapped[PaymentRequest] = relationship("PaymentRequest")
 
     # The value of the payment in milli-satoshis
     value_msat: Mapped[int] = mapped_column(BigInteger, nullable=False)
-
-    # The optional payment request being fulfilled
-    payment_request: Mapped[str] = mapped_column(String, nullable=True)
 
     status: Mapped[PaymentStatus] = mapped_column(Enum(PaymentStatus), nullable=False)
 
@@ -146,16 +162,10 @@ class GraphPath(Base):
 
 class HTLCAttempt(Base):
     __tablename__ = "ln_payment_htlc_attempt"
-    __table_args__ = (UniqueConstraint("ln_node_id", "attempt_id", "status"),)
+    __table_args__ = (UniqueConstraint("payment_id", "attempt_id", "status"),)
 
     # unique identifier of the attempt
     id: Mapped[int] = mapped_column(autoincrement=True, primary_key=True)
-
-    # the id of the local lightning node
-    ln_node_id: Mapped[int] = mapped_column(ForeignKey("ln_node.id"), nullable=False)
-
-    # the local lightning node
-    ln_node: Mapped[DBLnNode] = relationship(DBLnNode)
 
     payment_id: Mapped[BigInteger] = mapped_column(
         ForeignKey("ln_payment.id"), nullable=True
