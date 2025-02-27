@@ -157,7 +157,9 @@ class LNDPaymentTracker:
         index_offset = self._store.get_max_payment_index()
         logging.debug(f"Starting from index {index_offset} for {self._pub_key}")
 
-        generator = self._lnd.lnd.paginate_payments(index_offset=index_offset)
+        generator = self._lnd.lnd.paginate_payments(
+            index_offset=index_offset, include_incomplete=True
+        )
         for payment in generator:
             if self._is_stopped:
                 generator.close()

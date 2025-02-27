@@ -317,7 +317,11 @@ class LndGrpc(SecureGrpcClient, BaseServer):
         )
 
     def paginate_payments(
-        self, max_payments: int | None = None, index_offset: int = 0, **kwargs
+        self,
+        max_payments: int | None = None,
+        index_offset: int = 0,
+        include_incomplete: bool = False,
+        **kwargs,
     ) -> Generator[ln.Payment]:
 
         def _read(d: ln.ListPaymentsResponse) -> tuple[Sequence[ln.Payment], int]:
@@ -335,7 +339,9 @@ class LndGrpc(SecureGrpcClient, BaseServer):
             set_request=_set,
         )
 
-        return paginator.request(max_payments, index_offset)
+        return paginator.request(
+            max_payments, index_offset, include_incomplete=include_incomplete, **kwargs
+        )
 
 
 def update_failure_name(num) -> str:
