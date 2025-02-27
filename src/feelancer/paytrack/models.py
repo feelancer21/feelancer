@@ -105,7 +105,7 @@ class Payment(Base):
     ln_node: Mapped[DBLnNode] = relationship(DBLnNode)
 
     payment_request_id: Mapped[int] = mapped_column(
-        ForeignKey("ln_payment_request.id"), nullable=True
+        ForeignKey("ln_payment_request.id"), nullable=False
     )
     payment_request: Mapped[PaymentRequest] = relationship("PaymentRequest")
 
@@ -168,7 +168,7 @@ class HTLCAttempt(Base):
     id: Mapped[int] = mapped_column(autoincrement=True, primary_key=True)
 
     payment_id: Mapped[BigInteger] = mapped_column(
-        ForeignKey("ln_payment.id"), nullable=True
+        ForeignKey("ln_payment.id"), nullable=False
     )
 
     payment: Mapped[Payment] = relationship("Payment", back_populates="attempts")
@@ -195,10 +195,7 @@ class HTLCAttempt(Base):
     )
     route: Mapped[Route] = relationship("Route", back_populates="attempt")
 
-    failure_id: Mapped[BigInteger] = mapped_column(
-        ForeignKey("ln_payment_failure.id"), nullable=True
-    )
-    failure: Mapped[Failure] = relationship("Failure")
+    failure = relationship("Failure", uselist=False, back_populates="htlc_attempt")
 
 
 class Failure(Base):
@@ -206,6 +203,13 @@ class Failure(Base):
 
     # unique identifier of the failure
     id: Mapped[int] = mapped_column(autoincrement=True, primary_key=True)
+
+    htlc_attempt_id: Mapped[BigInteger] = mapped_column(
+        ForeignKey("ln_payment_htlc_attempt.id"), nullable=False
+    )
+    htlc_attempt: Mapped[HTLCAttempt] = relationship(
+        HTLCAttempt, back_populates="failure"
+    )
 
     # Failure code as defined in the Lightning spec.
     code: Mapped[FailureCode] = mapped_column(Enum(FailureCode), nullable=False)
@@ -238,7 +242,7 @@ class Route(Base):
     total_amt_msat: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
     # The payment attempt
-    attempt: Mapped[HTLCAttempt] = relationship("HTLCAttempt", back_populates="route")
+    attempt: Mapped[HTLCAttempt] = relationship(HTLCAttempt, back_populates="route")
 
     # Relationship to hops
     hops: Mapped[list[Hop]] = relationship("Hop", back_populates="route")
@@ -248,7 +252,7 @@ class Route(Base):
     path: Mapped[GraphPath] = relationship("GraphPath", foreign_keys=[path_id])
 
     path_success_id: Mapped[int] = mapped_column(
-        ForeignKey("ln_graph_path.id"), nullable=True
+        ForeignKey("ln_graph_path.id"), nullable=False
     )
 
     path_success: Mapped[GraphPath] = relationship(

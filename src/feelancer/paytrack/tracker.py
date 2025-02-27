@@ -56,11 +56,14 @@ def _sha256_payment(payment: ln.Payment | ln.HTLCAttempt) -> str:
     return hashlib.sha256(payment.SerializeToString(deterministic=True)).hexdigest()
 
 
-def _convert_failure(failure: ln.Failure, source_hop: Hop | None) -> Failure:
+def _convert_failure(
+    failure: ln.Failure, attempt: HTLCAttempt, source_hop: Hop | None
+) -> Failure:
     return Failure(
         code=FailureCode(failure.code),
         source_index=failure.failure_source_index,
         source_hop=source_hop,
+        htlc_attempt=attempt,
     )
 
 
@@ -128,7 +131,7 @@ class LNDPaymentTracker:
 
         logging.info(f"Presync payments for {self._pub_key} from lnd ListPayments...")
 
-        # self._pre_sync_start()
+        self._pre_sync_start()
 
         logging.info(f"Presync payments for {self._pub_key} finished")
 
@@ -234,6 +237,15 @@ class LNDPaymentTracker:
 
         route = self._convert_route(attempt.route, last_used_hop_index)
 
+        htlc_attempt = HTLCAttempt(
+            payment=payment,
+            attempt_id=attempt.attempt_id,
+            status=HTLCStatus(attempt.status),
+            attempt_time=_ns_to_datetime(attempt.attempt_time_ns),
+            resolve_time=resolve_time,
+            route=route,
+        )
+
         # If the attempt failed we store the failure information. For succeeded
         # attempts we don't need to store this information.
         if attempt.status == 2 and attempt.failure is not None:
@@ -245,19 +257,11 @@ class LNDPaymentTracker:
                     f"Failure source index out of bounds: {attempt.failure.failure_source_index=}, ",
                     f"{attempt.attempt_id=}",
                 )
-            failure = _convert_failure(attempt.failure, source_hop)
-        else:
-            failure = None
+            htlc_attempt.failure = _convert_failure(
+                attempt.failure, htlc_attempt, source_hop
+            )
 
-        return HTLCAttempt(
-            payment=payment,
-            attempt_id=attempt.attempt_id,
-            status=HTLCStatus(attempt.status),
-            attempt_time=_ns_to_datetime(attempt.attempt_time_ns),
-            resolve_time=resolve_time,
-            route=route,
-            failure=failure,
-        )
+        return htlc_attempt
 
     def _convert_route(self, route: ln.Route, last_used_hop_index: int | None) -> Route:
 
