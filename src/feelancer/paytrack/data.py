@@ -4,6 +4,7 @@ from collections.abc import Iterable
 from sqlalchemy import Select, func, select
 
 from feelancer.data.db import FeelancerDB
+from feelancer.lightning.data import LightningStore
 
 from .models import Base, GraphNode, GraphPath, HTLCAttempt, Payment, PaymentRequest
 
@@ -11,6 +12,9 @@ CHUNK_SIZE = 1000
 CACHE_SIZE_PAYMENT_REQUEST_ID = 1000
 CACHE_SIZE_GRAPH_NODE_ID = 50000
 CACHE_SIZE_GRAPH_PATH = 100000
+
+
+class PaymentNotFound(Exception): ...
 
 
 class PaymentRequestNotFound(Exception): ...
@@ -28,8 +32,15 @@ def query_payment_request(payment_hash: str) -> Select[tuple[PaymentRequest]]:
     return qry
 
 
-def query_max_payment_index() -> Select[tuple[int]]:
-    qry = select(func.max(Payment.payment_index))
+def query_payment(payment_index: int) -> Select[tuple[Payment]]:
+    qry = select(Payment).where(Payment.payment_index == payment_index)
+    return qry
+
+
+def query_max_payment_index(ln_node_id: int) -> Select[tuple[int]]:
+    qry = select(func.max(Payment.payment_index)).where(
+        Payment.ln_node_id == ln_node_id
+    )
     return qry
 
 
@@ -45,9 +56,12 @@ def query_graph_path(sha256_sum: str) -> Select[tuple[GraphPath]]:
 
 class PaymentTrackerStore:
 
-    def __init__(self, db: FeelancerDB) -> None:
+    def __init__(self, db: FeelancerDB, pubkey_local: str) -> None:
         self.db = db
         self.db.create_base(Base)
+
+        ln_store = LightningStore(db, pubkey_local)
+        self.ln_node_id = ln_store.ln_node_id
 
     def add_attempts(self, attempts: Iterable[HTLCAttempt]) -> None:
         """
@@ -85,6 +99,16 @@ class PaymentTrackerStore:
         """
 
         return self.db.add_post(path, lambda p: p.id)
+
+    def get_payment_id(self, payment_index: int) -> int:
+        """
+        Returns the payment id for a given payment index.
+        """
+
+        id = self.db.query_first(query_payment(payment_index), lambda p: p.id)
+        if id is None:
+            raise PaymentNotFound(f"Payment with index {payment_index} not found.")
+        return id
 
     @functools.lru_cache(maxsize=CACHE_SIZE_PAYMENT_REQUEST_ID)
     def get_payment_request_id(self, payment_hash: str) -> int:
@@ -128,4 +152,6 @@ class PaymentTrackerStore:
         Returns the maximum payment index.
         """
 
-        return self.db.query_first(query_max_payment_index(), lambda p: p, 0)
+        return self.db.query_first(
+            query_max_payment_index(self.ln_node_id), lambda p: p, 0
+        )

@@ -18,7 +18,8 @@ DEFAULT_MESSAGE_SIZE_MB = 50 * 1024 * 1024
 DEFAULT_MAX_CONNECTION_IDLE_MS = 30000
 DEFAULT_KEEPALIVE_TIME_MS = 30000
 DEFAULT_KEEPALIVE_TIMEOUT_MS = 20000
-DEFAULT_SLEEP_ON_RPC_ERROR = 60
+SLEEP_RECON = 5
+
 
 T = TypeVar("T", bound=Message)
 U = TypeVar("U", bound=Message)
@@ -176,12 +177,12 @@ class SecureGrpcClient:
         )
 
 
-# Retrying using the same grpc channel
+# Retrying using the same grpc channel.
 _channel_retry_handler = create_retry_handler(
     exceptions_retry=(Exception,),
     exceptions_raise=(LocallyCancelled,),
-    max_retries=5,
-    delay=15,
+    max_retries=1,
+    delay=1,
     min_tolerance_delta=120,
 )
 
@@ -204,40 +205,86 @@ class StreamDispatcher(Generic[T], BaseServer):
         self._new_stream_initializer = new_stream_initializer
         self._request: Message = request
 
-        self._message_queues: list[queue.Queue[T | None]] = []
+        self._message_queues: list[queue.Queue[T | Exception]] = []
         self._stream: Iterable[T] | None = None
+
+        # Indicates whether there is a subscriber for the messages.
         self._is_subscribed: bool = False
+
+        # Indicates whether the dispatcher is receiving messages from the source
+        self._is_receiving: bool = False
 
         self._register_sync_starter(self._start)
         self._register_sync_stopper(self._stop)
 
     def subscribe(
-        self, convert: Callable[[T], V], filter: Callable[[T], bool] | None = None
+        self,
+        convert: Callable[[T, bool], V],
+        get_recon_source: Callable[..., Generator[T]] | None = None,
     ) -> Generator[V]:
         """Returns a generator for all new incoming messages."""
 
-        if self._is_stopped is True:
-            return
-
-        self._is_subscribed = True
-
-        # Creates a mew queue and makes it available for the receiver of the grpc
-        # messages.
+        # Creates a mew queue and makes it available for the subscriber of the
+        # grpc stream.
         q = queue.Queue()
         self._message_queues.append(q)
 
+        self._is_subscribed = True
+
         while True:
-            m = q.get()
 
-            # None is signals the end of the queue. We can break the loop.
-            if m is None:
-                break
+            # Blocking until we know that the dispatcher is receiving messages
+            # from the source. Otherwise reconciliation would start too
+            # early.
+            while not (self._is_receiving or self._is_stopped):
+                pass
 
-            # If a filter is given, we check if the message is valid.
-            if filter is not None and filter(m) is False:
-                continue
+            if self._is_stopped:
+                return None
 
-            yield convert(m)
+            # Indicates the subscriber whether the messages were created during
+            # reconciliation. In this way he can decide if the messages are
+            # processed or not.
+            in_recon = False
+
+            # If there are messages from the reconciliation source, we yield them
+            # first.
+            if get_recon_source is not None:
+                logging.info(f"{self._name} reconciliation started")
+                in_recon = True
+
+                # Sleeping a little bit before fetching from the reconciliation
+                # source.
+                time.sleep(SLEEP_RECON)
+                for m in get_recon_source():
+                    yield convert(m, in_recon)
+
+                    # Safety check for big reconciliation sources.
+                    if self._is_stopped:
+                        return
+
+                logging.info(f"{self._name} reconciliation stage 1 finished")
+
+            # We yield the messages from the stream until we got an exception.
+            while True:
+                m = q.get()
+
+                # If the service is stopped by the user we return early
+                if isinstance(m, LocallyCancelled):
+                    return None
+
+                # If there is an unknown exception we break here and start
+                # with a new reconciliation. Maybe data have been run out of sync.
+                if isinstance(m, Exception):
+                    break
+
+                yield convert(m, in_recon)
+
+                # From the first time the queue is empty, the caller will only
+                # receive messages from the stream.
+                if q.qsize() == 0 and in_recon is True:
+                    logging.info(f"{self._name} reconciliation finished")
+                    in_recon = False
 
     @default_retry_handler
     def _start(self) -> None:
@@ -250,52 +297,51 @@ class StreamDispatcher(Generic[T], BaseServer):
         while not (self._is_subscribed or self._is_stopped):
             pass
 
-        # We have a subscriber. We can start the stream.
-        while True:
-            try:
-                # Returning early if the server is stopped.
-                if self._is_stopped:
-                    return None
+        # Returning early if the server is stopped.
+        if self._is_stopped:
+            return None
 
-                # The stream initializer allows creating rpc streams in the same
-                # grpc channel.
-                stream_initializer = self._new_stream_initializer()
+        # We have a subscriber. We can start the stream
+        try:
+            # The stream initializer allows creating rpc streams in the same
+            # grpc channel. We have to init it outside _channel_retry_handler.
+            stream_initializer = self._new_stream_initializer()
 
-                self._start_stream(stream_initializer)
+            self._start_stream(stream_initializer)
 
-            except LocallyCancelled as e:
+        # Unexpected errors are raised
+        except Exception as e:
+
+            # Signaling the end of the queue to the consumers.
+            self._put_to_queues(e)
+
+            if isinstance(e, LocallyCancelled):
                 # User ended the stream.
                 logging.debug(f"{self._name} cancelled: {e}")
 
-                # Signaling the end of the queue to the consumer
-                self._put_to_queues(None)
+                return None
 
-                break
-
-            # On RpcErrors we are doing a retry after 60s. E.g. server not available.
-            except grpc.RpcError as e:
-                logging.error(
-                    f"Rpc error in {self._name} occurred; {e=}; "
-                    f"retry in {DEFAULT_SLEEP_ON_RPC_ERROR}s"
-                )
-                time.sleep(DEFAULT_SLEEP_ON_RPC_ERROR)
-
-            # Unexpected errors are raised
-            except Exception as e:
-                raise e
-
-            self._stream = None
+            raise e
 
     @_channel_retry_handler
     def _start_stream(self, stream_initializer: grpc.UnaryStreamMultiCallable) -> None:
 
         # Creating a new stream in the grpc channel
         self._stream = stream_initializer(self._request)
+        logging.debug(f"{self._name} stream started")
 
-        # Receiving of the grp messages
-        for m in handle_rpc_stream(self._stream):  # type: ignore
-            self._put_to_queues(m)
-        print("stop")
+        try:
+            self._is_receiving = True
+            # Receiving of the grp messages
+            for m in handle_rpc_stream(self._stream):  # type: ignore
+                self._put_to_queues(m)
+
+        except Exception as e:
+            raise e
+
+        finally:
+            self._stream = None
+            self._is_receiving = False
 
     def _stop(self) -> None:
         """Stops receiving of the messages from the upstream."""
@@ -303,7 +349,7 @@ class StreamDispatcher(Generic[T], BaseServer):
         if self._stream is not None:
             self._stream.cancel()  # type: ignore
 
-    def _put_to_queues(self, data: T | None) -> None:
+    def _put_to_queues(self, data: T | Exception) -> None:
         """Puts a message to each queue."""
         for q in self._message_queues:
             q.put(data)
