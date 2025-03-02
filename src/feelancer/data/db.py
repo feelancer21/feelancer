@@ -108,7 +108,7 @@ class FeelancerDB:
         Executes a callable in session. If it fails we repeat the execution
         multiple times.
         """
-        return self._execute(func, None)
+        return self._execute(func)
 
     def execute_post(self, func: Callable[[Session], V], post: Callable[[V], T]) -> T:
         """
@@ -122,7 +122,7 @@ class FeelancerDB:
     def _execute(
         self,
         pre_commit: Callable[[Session], V],
-        post_commit: Callable[[V], T] | None,
+        post_commit: Callable[[V], T] = lambda x: x,
     ) -> T:
         """
         The main executor for database operations.
@@ -142,19 +142,13 @@ class FeelancerDB:
                     needs_commit = True
                     session.commit()
 
-                if post_commit is None:
-                    return res  # type: ignore
                 return post_commit(res)
 
             except Exception as e:
                 if needs_commit:
                     session.rollback()
-                self.engine.dispose()
 
                 raise e
-
-            finally:
-                session.close()
 
     def query_all_to_list(
         self, qry: Select[tuple[T]], convert: Callable[[T], V]
