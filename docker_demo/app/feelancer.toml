@@ -6,9 +6,7 @@ ip_address = "192.168.2.21:10009"
 
 
 [sqlalchemy.url]
-# # Sqlalchemy configuration for your database.
-#drivername = "sqlite"
-#database = "/app/feelancer.db"
+# Sqlalchemy configuration for your database.
 drivername = "postgresql"
 username = "feelancer"
 port = 5432
