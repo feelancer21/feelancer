@@ -247,6 +247,10 @@ class Route(Base):
     # Relationship to hops
     hops: Mapped[list[Hop]] = relationship("Hop", back_populates="route")
 
+    # Number of hops that were successfully reached. The sender node is not included
+    # in this count.
+    num_hops_successful: Mapped[int] = mapped_column(Integer, nullable=True)
+
     path_id: Mapped[int] = mapped_column(ForeignKey("ln_graph_path.id"), nullable=False)
 
     path: Mapped[GraphPath] = relationship("GraphPath", foreign_keys=[path_id])

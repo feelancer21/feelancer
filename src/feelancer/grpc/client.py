@@ -182,7 +182,7 @@ _channel_retry_handler = create_retry_handler(
     exceptions_retry=(Exception,),
     exceptions_raise=(LocallyCancelled,),
     max_retries=1,
-    delay=1,
+    delay=10,
     min_tolerance_delta=120,
 )
 

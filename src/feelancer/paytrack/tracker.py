@@ -259,7 +259,7 @@ class LNDPaymentTracker:
         if attempt.status == 2 and attempt.failure is not None:
             last_used_hop_index = attempt.failure.failure_source_index
         elif attempt.status == 1:
-            last_used_hop_index = len(attempt.route.hops) + 1
+            last_used_hop_index = len(attempt.route.hops)
         else:
             last_used_hop_index = None
 
@@ -341,6 +341,7 @@ class LNDPaymentTracker:
             hops=hops,
             path_id=path_id,
             path_success_id=path_success_id,
+            num_hops_successful=last_used_hop_index,
         )
 
     def _get_graph_node_id(self, pub_key: str) -> int:
