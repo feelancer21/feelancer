@@ -35,11 +35,11 @@ class PidService:
         Runs the the pid model.
         """
 
-        logging.info("Running pid controller...")
-
         pid_config = self.get_pid_config()
         if pid_config is None:
             return RunnerResult(None, None)
+
+        logging.info("Running pid controller...")
 
         if not self.pid_controller:
             self.pid_controller = PidController(

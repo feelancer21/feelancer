@@ -1,12 +1,22 @@
 import functools
 from collections.abc import Iterable
+from datetime import datetime
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, desc, func, select
 
 from feelancer.data.db import FeelancerDB
 from feelancer.lightning.data import LightningStore
 
-from .models import Base, GraphNode, GraphPath, HTLCAttempt, Payment, PaymentRequest
+from .models import (
+    Base,
+    GraphNode,
+    GraphPath,
+    Hop,
+    HTLCAttempt,
+    Payment,
+    PaymentRequest,
+    Route,
+)
 
 CHUNK_SIZE = 1000
 CACHE_SIZE_PAYMENT_REQUEST_ID = 1000
@@ -51,6 +61,62 @@ def query_graph_node(pub_key: str) -> Select[tuple[GraphNode]]:
 
 def query_graph_path(sha256_sum: str) -> Select[tuple[GraphPath]]:
     qry = select(GraphPath).where(GraphPath.sha256_sum == sha256_sum)
+    return qry
+
+
+def query_average_node_speed(
+    start_time: datetime, end_time: datetime, htlc_time_cap: float
+) -> Select[tuple[str, float, int]]:
+    # Calculate the time difference in seconds
+    time_diff = func.extract(
+        "epoch", HTLCAttempt.resolve_time - HTLCAttempt.attempt_time
+    )
+
+    # Calculate the average time per route
+    time_per_route = time_diff / Route.num_hops_successful
+
+    # Limit the time per route to 60 seconds
+    time_per_route = func.least(time_per_route, htlc_time_cap)
+
+    # Query to calculate the average latency for each node
+    qry = (
+        select(
+            GraphNode.pub_key,
+            func.avg(time_per_route).label("average_speed_sec"),
+            func.count(HTLCAttempt.id).label("num_attempts"),
+        )
+        .join(HTLCAttempt, HTLCAttempt.route_id == Route.id)
+        .join(Hop, Hop.route_id == Route.id)
+        .join(GraphNode, GraphNode.id == Hop.node_id)
+        .filter(
+            HTLCAttempt.resolve_time.between(start_time, end_time),
+            Route.num_hops_successful > 0,
+            Hop.position_id >= 1,
+            Hop.position_id <= Route.num_hops_successful,
+        )
+        .group_by(GraphNode.pub_key)
+        .order_by(desc("average_speed_sec"))
+    )
+
+    return qry
+
+
+def query_slow_nodes(
+    start_time: datetime,
+    end_time: datetime,
+    htlc_time_cap: float,
+    min_average_speed: float,
+    min_num_attempts: int,
+) -> Select[tuple[str]]:
+    # Subquery to calculate the average latency for each node
+    subquery = query_average_node_speed(start_time, end_time, htlc_time_cap).subquery()
+
+    # Main query to select pub_keys with average_speed_sec higher than min_average_speed
+    qry = select(subquery.c.pub_key).where(
+        subquery.c.average_speed_sec >= min_average_speed,
+        subquery.c.num_attempts >= min_num_attempts,
+    )
+
     return qry
 
 

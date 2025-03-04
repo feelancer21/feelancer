@@ -236,7 +236,8 @@ class MainServer(BaseServer):
         if paytrack_conf is not None:
             paytrack_service = PaytrackService(
                 payment_tracker=self.cfg.payment_tracker,
-                paytrack_config=paytrack_conf,
+                get_paytrack_config=self.get_paytrack_config,
+                to_csv=self.cfg.db.query_all_to_csv,
             )
             self._register_sub_server(paytrack_service)
 
@@ -244,6 +245,8 @@ class MainServer(BaseServer):
             self._register_sync_starter(
                 paytrack_service._payment_tracker.pre_sync_start
             )
+
+            runner.register_task(paytrack_service.run)
 
     def read_feelancer_cfg(self) -> FeelancerConfig:
         """

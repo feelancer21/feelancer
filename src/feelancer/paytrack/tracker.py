@@ -6,6 +6,7 @@ from collections.abc import Callable, Generator, Iterable
 from typing import Any, Protocol, TypeVar
 
 import pytz
+from google.protobuf.json_format import MessageToDict
 
 from feelancer.base import default_retry_handler
 from feelancer.data.db import FeelancerDB
@@ -74,7 +75,7 @@ class PaymentTracker(Protocol):
     def store_payments(self) -> None: ...
 
     """
-    Stores payments in the database.
+    Stores the payments in the database.
     """
 
     def pre_sync_start(self) -> None: ...
@@ -192,6 +193,8 @@ class LNDPaymentTracker:
         Callback function for the subscription. Converts the payment object
         to an Iterable of HTLCAttempt objects.
         """
+
+        # logging.debug(f"Processing payment: {recon_running=} {MessageToDict(p)=}")
 
         # only process status SUCCEEDED or FAILED
         if p.status not in [2, 3]:

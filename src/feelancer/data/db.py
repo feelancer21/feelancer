@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import csv
 import logging
+import os
+import tempfile
 from collections.abc import Callable, Generator, Iterable, Sequence
 from typing import TYPE_CHECKING, TypeVar
 
-from sqlalchemy import URL, create_engine
+from sqlalchemy import URL, Row, create_engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
@@ -197,6 +200,38 @@ class FeelancerDB:
             return session.execute(qry).scalars().all()
 
         return self._execute(get_data, _create_dict_gen_call(qry))
+
+    def query_all_to_csv(
+        self,
+        qry: Select[tuple[T, ...]],
+        file_path: str,
+        header: list[str] | None = None,
+    ) -> None:
+        """
+        Executes the query and writes the result to a csv file.
+        """
+
+        def get_data(session: Session) -> Sequence[Row[tuple[T, ...]]]:
+            return session.execute(qry).all()
+
+        result: Sequence[Row[tuple[T, ...]]] = self.execute(get_data)
+
+        path = os.path.expanduser(file_path)
+
+        # Write the result to a temporary file first.
+        dir_name = os.path.dirname(path)
+        with tempfile.NamedTemporaryFile(
+            "w", newline="", dir=dir_name, delete=False
+        ) as tmp_file:
+            temp_path = tmp_file.name
+            writer = csv.writer(tmp_file)
+            if header is not None:
+                writer.writerow(header)
+            for row in result:
+                writer.writerow(row)
+
+        # Atomically move the temporary file to the final destination
+        os.replace(temp_path, path)
 
     def query_first(
         self, qry: Select[tuple[T]], convert: Callable[[T], V], default: W = None

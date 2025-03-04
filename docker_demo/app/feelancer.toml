@@ -157,5 +157,24 @@ max_blocks_to_expiry = 13
 [paytrack]
 # If the 'paytrack' section is included in config file a paytrack service will be started.
 # It stores all successful and failed payments in the database.
-# Beyond pure storage, there are currently no functions that require this data
 
+# The following params control the creation of csv files using the stored data.
+# The files are created every feelancer.seconds.
+
+# Create the a list with pub_key, average node speed and count of payments
+node_speed_write_csv = true
+# time window of the historical data
+node_speed_time_window_hours = 168
+# time cap in seconds of a htlc attempt, to minimize the influence of extreme outliers
+node_speed_htlc_time_cap = 30.0
+# csv file path
+node_speed_csv_file = "~/.feelancer/node_speed.csv"
+
+# Create a list with pub_keys of all slow nodes
+slow_nodes_write_csv = true
+# minimum number of htlc attempts
+slow_nodes_min_attempts = 70
+# minimum average node speed
+slow_nodes_min_speed = 15
+# csv file path
+slow_nodes_csv_file = "~/.feelancer/node_speed/slow_nodes.csv"
