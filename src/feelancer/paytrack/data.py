@@ -2,7 +2,7 @@ import functools
 from collections.abc import Iterable
 from datetime import datetime
 
-from sqlalchemy import Select, desc, func, select
+from sqlalchemy import Float, Select, cast, desc, func, select
 
 from feelancer.data.db import FeelancerDB
 from feelancer.lightning.data import LightningStore
@@ -66,23 +66,57 @@ def query_graph_path(sha256_sum: str) -> Select[tuple[GraphPath]]:
 
 def query_average_node_speed(
     start_time: datetime, end_time: datetime, htlc_time_cap: float
-) -> Select[tuple[str, float, int]]:
+) -> Select[tuple[str, float, float, float, int]]:
     # Calculate the time difference in seconds
     time_diff = func.extract(
         "epoch", HTLCAttempt.resolve_time - HTLCAttempt.attempt_time
     )
 
-    # Calculate the average time per route
-    time_per_route = time_diff / Route.num_hops_successful
+    n = Route.num_hops_successful
 
-    # Limit the time per route to 60 seconds
-    time_per_route = func.least(time_per_route, htlc_time_cap)
+    # Calculate the average time per route
+    time_per_route = time_diff / n
+
+    # Rationale for liquidity locked:
+    # The average total liquidity locked for payments over the given time window
+    # is
+
+    # \sum_i A_i * t_i / (end_time - start_time),
+
+    # where i is over all payments,  A_i is the amount to forward in msat and
+    # t_i is resolve_time - attempt_time in seconds.
+
+    # We'd like to break down A_i * t_i per hop in way that the sum over all
+    # hops and payments keeps the same.
+
+    # Easiest way is to assume that each hop has contributed A_i * t_i / n_i
+    # with n_i being the number of hops in the route.
+
+    # But in reality is liquidity is locked because of using  hop 1 for
+    # c * n_i * t_i, because of hop 2 for c * (n_i - 1) * t_i, and so on.
+    # \sum_{j=0}^{n_i-1} c * (n_i - j)  = c * n_i * (n_i + 1) / 2
+
+    # We can solve for c by setting the sum to 1:
+    # => c = 2 / (n_i * (n_i + 1))
+
+    # Hence c * (n_i - j) is:
+    # 2 * (n_i - j) / (n_i * (n_i + 1)) = 2  * (1 - j / n_i) / (n_i + 1)
+    # and j = h - 1  with h=Hop.position_id
+
+    liquidity_locked = (2 * time_diff * (1 - (Hop.position_id - 1) / n) / (n + 1)) * (
+        Route.total_amt_msat / (end_time - start_time).total_seconds() / 1_000
+    )
+
+    # Limit the time per route to the given cap.
+    time_per_route_capped = func.least(time_per_route, htlc_time_cap)
 
     # Query to calculate the average latency for each node
     qry = (
         select(
             GraphNode.pub_key,
+            func.avg(time_per_route_capped).label("average_speed_capped_sec"),
             func.avg(time_per_route).label("average_speed_sec"),
+            cast(func.sum(liquidity_locked), Float).label("liquidity_locked_sat"),
             func.count(HTLCAttempt.id).label("num_attempts"),
         )
         .join(HTLCAttempt, HTLCAttempt.route_id == Route.id)
@@ -95,7 +129,42 @@ def query_average_node_speed(
             Hop.position_id <= Route.num_hops_successful,
         )
         .group_by(GraphNode.pub_key)
-        .order_by(desc("average_speed_sec"))
+        .order_by(desc("average_speed_capped_sec"))
+    )
+
+    return qry
+
+
+def query_liquidity_locked_per_htlc(
+    start_time: datetime, end_time: datetime
+) -> Select[tuple[int, datetime, datetime | None, int, float]]:
+    """
+    Calculates the locked liquidity per HTLC over the given time window.
+    """
+
+    # Calculate the time difference in seconds
+    time_diff = func.extract(
+        "epoch", HTLCAttempt.resolve_time - HTLCAttempt.attempt_time
+    )
+
+    liquidity_locked = (
+        time_diff * Route.total_amt_msat / (end_time - start_time).total_seconds()
+    ) / 1_000
+
+    qry = (
+        select(
+            HTLCAttempt.attempt_id,
+            HTLCAttempt.attempt_time,
+            HTLCAttempt.resolve_time,
+            time_diff,
+            cast(liquidity_locked, Float).label("liquidity_locked_sat"),
+        )
+        .join(HTLCAttempt, HTLCAttempt.route_id == Route.id)
+        .filter(
+            HTLCAttempt.resolve_time.between(start_time, end_time),
+            Route.num_hops_successful > 0,
+        )
+        .order_by(desc("liquidity_locked_sat"))
     )
 
     return qry
@@ -113,7 +182,7 @@ def query_slow_nodes(
 
     # Main query to select pub_keys with average_speed_sec higher than min_average_speed
     qry = select(subquery.c.pub_key).where(
-        subquery.c.average_speed_sec >= min_average_speed,
+        subquery.c.average_speed_capped_sec >= min_average_speed,
         subquery.c.num_attempts >= min_num_attempts,
     )
 

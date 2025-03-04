@@ -177,4 +177,9 @@ slow_nodes_min_attempts = 70
 # minimum average node speed
 slow_nodes_min_speed = 15
 # csv file path
-slow_nodes_csv_file = "~/.feelancer/node_speed/slow_nodes.csv"
+slow_nodes_csv_file = "~/.feelancer/slow_nodes.csv"
+
+# Create a list with all htlc attempts and its locked liquidity
+htlc_liquidity_write_csv = true
+# csv file path
+htlc_liquidity_locked_csv_file = "~/.feelancer/htlc_liquidity_locked.csv"

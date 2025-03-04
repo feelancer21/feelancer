@@ -91,7 +91,7 @@ def _create_yield_logger(
     """
 
     def decorator(
-        generator_func: Callable[..., Generator[T]]
+        generator_func: Callable[..., Generator[T]],
     ) -> Callable[..., Generator[T]]:
 
         @functools.wraps(generator_func)

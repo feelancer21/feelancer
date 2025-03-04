@@ -7,7 +7,11 @@ from sqlalchemy import Select
 from feelancer.base import BaseServer, default_retry_handler
 from feelancer.tasks.runner import RunnerRequest, RunnerResult
 
-from .data import query_average_node_speed, query_slow_nodes
+from .data import (
+    query_average_node_speed,
+    query_liquidity_locked_per_htlc,
+    query_slow_nodes,
+)
 from .tracker import PaymentTracker
 
 DEFAULT_NODE_SPEED_WRITE_CSV = False
@@ -19,6 +23,9 @@ DEFAULT_SLOW_NODES_WRITE_CSV = False
 DEFAULT_SLOW_NODES_CSV_FILE = "~/.feelancer/slow_nodes.csv"
 DEFAULT_SLOW_NODES_MIN_ATTEMPTS = 0
 DEFAULT_SLOW_NODES_MIN_SPEED = 21.0
+
+DEFAULT_HTLC_LIQUIDITY_LOCKED_WRITE_CSV = False
+DEFAULT_HTLC_LIQUIDITY_LOCKED_CSV_FILE = "~/.feelancer/htlc_liquidity_locked.csv"
 
 
 # A config. But it is only a dummy at the moment.
@@ -58,6 +65,17 @@ class PaytrackConfig:
             )
             self.slow_nodes_min_speed = float(
                 config_dict.get("slow_nodes_min_speed", DEFAULT_SLOW_NODES_MIN_SPEED)
+            )
+            self.htlc_liquidity_locked_write_csv = bool(
+                config_dict.get(
+                    "htlc_liquidity_write_csv", DEFAULT_HTLC_LIQUIDITY_LOCKED_WRITE_CSV
+                )
+            )
+            self.htlc_liquidity_locked_csv_file = str(
+                config_dict.get(
+                    "htlc_liquidity_locked_csv_file",
+                    DEFAULT_HTLC_LIQUIDITY_LOCKED_CSV_FILE,
+                )
             )
 
         except Exception as e:
@@ -103,7 +121,13 @@ class PaytrackService(BaseServer):
                 end_time=request.timestamp,
                 htlc_time_cap=config.node_speed_htlc_time_cap,
             )
-            header = ["pub_key", "average_speed_sec", "num_attempts"]
+            header = [
+                "pub_key",
+                "average_speed_capped_sec",
+                "average_speed_sec",
+                "liquidity_locked_sat",
+                "num_attempts",
+            ]
             self._to_csv(qry, config.node_speed_csv_file, header)
 
         if config.slow_nodes_write_csv:
@@ -116,9 +140,25 @@ class PaytrackService(BaseServer):
                 min_num_attempts=config.slow_nodes_min_attempts,
             )
             self._to_csv(qry, config.slow_nodes_csv_file, None)
-        
+
+        if config.htlc_liquidity_locked_write_csv:
+            qry = query_liquidity_locked_per_htlc(
+                start_time=request.timestamp
+                + timedelta(hours=-config.node_speed_time_window_hours),
+                end_time=request.timestamp,
+            )
+            header = [
+                "attempt_id",
+                "attempt_time",
+                "resolve_time",
+                "time_diff",
+                "liquidity_locked_sat",
+            ]
+
+            self._to_csv(qry, config.htlc_liquidity_locked_csv_file, header)
+
         logging.info(f"{self._name} finished...")
-        
+
         return RunnerResult()
 
     @default_retry_handler
