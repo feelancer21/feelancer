@@ -162,24 +162,33 @@ max_blocks_to_expiry = 13
 # The files are created every feelancer.seconds.
 
 # Create the a list with pub_key, average node speed and count of payments
-node_speed_write_csv = true
+node_speed_write_csv = false
 # time window of the historical data
-node_speed_time_window_hours = 168
-# time cap in seconds of a htlc attempt, to minimize the influence of extreme outliers
-node_speed_htlc_time_cap = 30.0
+node_speed_time_window_hours = 48
+# percentiles to calculate, separated by comma. First element determines the 
+# order of the list
+node_speed_percentiles = [50]
 # csv file path
 node_speed_csv_file = "~/.feelancer/node_speed.csv"
 
 # Create a list with pub_keys of all slow nodes
-slow_nodes_write_csv = true
+slow_nodes_write_csv = false
 # minimum number of htlc attempts
-slow_nodes_min_attempts = 70
+slow_nodes_min_attempts = 0
+# percentile to use.
+slow_nodes_percentile = 50
 # minimum average node speed
-slow_nodes_min_speed = 15
+slow_nodes_min_speed = 21
 # csv file path
 slow_nodes_csv_file = "~/.feelancer/slow_nodes.csv"
 
 # Create a list with all htlc attempts and its locked liquidity
-htlc_liquidity_write_csv = true
+htlc_liquidity_write_csv = false
 # csv file path
 htlc_liquidity_locked_csv_file = "~/.feelancer/htlc_liquidity_locked.csv"
+
+# Housekeeping, delete failed payments and htlc attempts. Job is running every
+# feelancer.seconds. Orphaned payment requests are deleted during next startup.
+delete_failed = true
+# Number of hours to keep failed payments and htlc attempts
+delete_failed_hours = 168

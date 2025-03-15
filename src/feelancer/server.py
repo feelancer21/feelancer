@@ -238,6 +238,7 @@ class MainServer(BaseServer):
                 payment_tracker=self.cfg.payment_tracker,
                 get_paytrack_config=self.get_paytrack_config,
                 to_csv=self.cfg.db.query_all_to_csv,
+                delete_data=self.cfg.db.core_delete,
             )
             self._register_sub_server(paytrack_service)
 

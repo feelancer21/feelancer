@@ -6,7 +6,6 @@ from collections.abc import Callable, Generator, Iterable
 from typing import Any, Protocol, TypeVar
 
 import pytz
-from google.protobuf.json_format import MessageToDict
 
 from feelancer.base import default_retry_handler
 from feelancer.data.db import FeelancerDB
@@ -27,10 +26,12 @@ from .models import (
     GraphPath,
     Hop,
     HTLCAttempt,
+    HTLCResolveInfo,
     HTLCStatus,
     Payment,
     PaymentFailureReason,
     PaymentRequest,
+    PaymentResolveInfo,
     PaymentStatus,
     Route,
 )
@@ -59,14 +60,48 @@ def _sha256_payment(payment: ln.Payment | ln.HTLCAttempt) -> str:
     return hashlib.sha256(payment.SerializeToString(deterministic=True)).hexdigest()
 
 
-def _convert_failure(
-    failure: ln.Failure, attempt: HTLCAttempt, source_hop: Hop | None
-) -> Failure:
+def _create_failure(failure: ln.Failure, source_hop: Hop | None) -> Failure:
     return Failure(
         code=FailureCode(failure.code),
         source_index=failure.failure_source_index,
         source_hop=source_hop,
-        htlc_attempt=attempt,
+    )
+
+
+def _create_htlc_resolve_info(
+    attempt: ln.HTLCAttempt, hops: list[Hop]
+) -> HTLCResolveInfo | None:
+    """
+    Creates the resolve info object for the HTLCAttempt. This object is used
+    to store the resolve information in the database.
+    """
+
+    # If htlc attempt is in flight the htlc is not resolved and we return None.
+    if attempt.status == 0:
+        return None
+
+    if attempt.resolve_time_ns > 0:
+        resolve_time = _ns_to_datetime(attempt.resolve_time_ns)
+    else:
+        resolve_time = None
+
+    # If the attempt failed we store the failure information. For succeeded
+    # attempts we don't need to store this information.
+    if attempt.status == 2 and attempt.failure is not None:
+        try:
+            source_hop = hops[attempt.failure.failure_source_index]
+        except IndexError:
+            source_hop = None
+            logging.warning(
+                f"Failure source index out of bounds: {attempt.failure.failure_source_index=}, ",
+                f"{attempt.attempt_id=}",
+            )
+        failure = _create_failure(attempt.failure, source_hop)
+    else:
+        failure = None
+
+    return HTLCResolveInfo(
+        resolve_time=resolve_time, status=HTLCStatus(attempt.status), failure=failure
     )
 
 
@@ -132,6 +167,9 @@ class LNDPaymentTracker:
 
         logging.info(f"Presync payments for {self._pub_key}...")
 
+        # Delete orphaned objects in sync mode. This is necessary here to avoid
+        # foreign key constraints violations when adding new objects.
+        self._store.delete_orphaned()
         self._pre_sync_start()
 
         logging.info(f"Presync payments for {self._pub_key} finished")
@@ -212,49 +250,49 @@ class LNDPaymentTracker:
                 logging.debug(f"Payment reconciliation: {p.payment_index=} not found.")
                 pass
 
-        payment_request_id: int
+        payment = self._convert_payment(p)
 
-        # Check if we have already stored the payment in the database.
+        # Check if we have already stored the payment request in the database.
         # Maybe from the last run.
         try:
-            payment_request_id = self._store.get_payment_request_id(p.payment_hash)
+            payment.payment_request_id = self._store.get_payment_request_id(
+                p.payment_hash
+            )
+
         except PaymentRequestNotFound:
-            pay_req = PaymentRequest(
+            payment.payment_request = PaymentRequest(
                 payment_hash=p.payment_hash,
                 payment_request=p.payment_request,
             )
-            # If not found, we store it and get the id of the payment.
-            payment_request_id = self._store.add_payment_request(pay_req)
-
-        payment = self._convert_payment(p, payment_request_id)
 
         for h in p.htlcs:
             yield self._convert_htlc_attempt(h, payment)
 
-    def _convert_payment(self, payment: ln.Payment, payment_request_id: int) -> Payment:
+    def _convert_payment(self, payment: ln.Payment) -> Payment:
         """
         Converts a payment object from the LND gRPC API to a Payment
         """
 
-        return Payment(
-            payment_request_id=payment_request_id,
-            ln_node_id=self._store.ln_node_id,
-            value_msat=payment.value_msat,
+        # We are storing resolved payments at the moment. Hence we can create
+        # the resolve info object directly. Maybe a TODO for the future if we
+        # want to store unresolved payments too.
+        resolve_info = PaymentResolveInfo(
             status=PaymentStatus(payment.status),
-            creation_time=_ns_to_datetime(payment.creation_time_ns),
-            fee_msat=payment.fee_msat,
-            payment_index=payment.payment_index,
             failure_reason=PaymentFailureReason(payment.failure_reason),
+            value_msat=payment.value_msat,
+            fee_msat=payment.fee_msat,
+        )
+
+        return Payment(
+            ln_node_id=self._store.ln_node_id,
+            creation_time=_ns_to_datetime(payment.creation_time_ns),
+            payment_index=payment.payment_index,
+            resolve_info=resolve_info,
         )
 
     def _convert_htlc_attempt(
         self, attempt: ln.HTLCAttempt, payment: Payment
     ) -> HTLCAttempt:
-
-        if attempt.resolve_time_ns > 0:
-            resolve_time = _ns_to_datetime(attempt.resolve_time_ns)
-        else:
-            resolve_time = None
 
         # Determination of the index of the last used hop. It is the failure source
         # index if the attempt failed. If the attempt succeeded it is the receiver
@@ -267,34 +305,23 @@ class LNDPaymentTracker:
             last_used_hop_index = None
 
         route = self._convert_route(attempt.route, last_used_hop_index)
+        resolve_info = _create_htlc_resolve_info(attempt, route.hops)
 
         htlc_attempt = HTLCAttempt(
             payment=payment,
             attempt_id=attempt.attempt_id,
-            status=HTLCStatus(attempt.status),
             attempt_time=_ns_to_datetime(attempt.attempt_time_ns),
-            resolve_time=resolve_time,
             route=route,
+            resolve_info=resolve_info,
         )
-
-        # If the attempt failed we store the failure information. For succeeded
-        # attempts we don't need to store this information.
-        if attempt.status == 2 and attempt.failure is not None:
-            try:
-                source_hop = route.hops[attempt.failure.failure_source_index]
-            except IndexError:
-                source_hop = None
-                logging.warning(
-                    f"Failure source index out of bounds: {attempt.failure.failure_source_index=}, ",
-                    f"{attempt.attempt_id=}",
-                )
-            htlc_attempt.failure = _convert_failure(
-                attempt.failure, htlc_attempt, source_hop
-            )
 
         return htlc_attempt
 
-    def _convert_route(self, route: ln.Route, last_used_hop_index: int | None) -> Route:
+    def _convert_route(
+        self,
+        route: ln.Route,
+        last_used_hop_index: int | None,
+    ) -> Route:
 
         hops: list[Hop] = []
         path: list[int] = []

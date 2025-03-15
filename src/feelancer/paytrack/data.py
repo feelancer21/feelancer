@@ -1,8 +1,8 @@
 import functools
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from datetime import datetime
 
-from sqlalchemy import Float, Select, cast, desc, func, select
+from sqlalchemy import Delete, Float, Select, cast, delete, desc, func, select
 
 from feelancer.data.db import FeelancerDB
 from feelancer.lightning.data import LightningStore
@@ -13,8 +13,12 @@ from .models import (
     GraphPath,
     Hop,
     HTLCAttempt,
+    HTLCResolveInfo,
+    HTLCStatus,
     Payment,
     PaymentRequest,
+    PaymentResolveInfo,
+    PaymentStatus,
     Route,
 )
 
@@ -65,11 +69,16 @@ def query_graph_path(sha256_sum: str) -> Select[tuple[GraphPath]]:
 
 
 def query_average_node_speed(
-    start_time: datetime, end_time: datetime, htlc_time_cap: float
-) -> Select[tuple[str, float, float, float, int]]:
+    start_time: datetime, end_time: datetime, percentiles: Sequence[int]
+) -> tuple[Select[tuple[str, float, int]], list[str]]:
+    """
+    Returns a query and header to calculate the percentiles of node speed over
+    the given time window.
+    """
+
     # Calculate the time difference in seconds
     time_diff = func.extract(
-        "epoch", HTLCAttempt.resolve_time - HTLCAttempt.attempt_time
+        "epoch", HTLCResolveInfo.resolve_time - HTLCAttempt.attempt_time
     )
 
     n = Route.num_hops_successful
@@ -107,44 +116,61 @@ def query_average_node_speed(
         Route.total_amt_msat / (end_time - start_time).total_seconds() / 1_000
     )
 
-    # Limit the time per route to the given cap.
-    time_per_route_capped = func.least(time_per_route, htlc_time_cap)
+    def label_percentile(p: int) -> str:
+        return f"percentile_{p}_speed_sec"
 
-    # Query to calculate the average latency for each node
+    def func_percentile_time_per_route(p: int):
+        label = label_percentile(p)
+        return func.percentile_cont(p / 100).within_group(time_per_route).label(label)
+
+    # Make it unique with a set and sorted
+    percs = sorted(list(set(percentiles)))
+    func_perc = [func_percentile_time_per_route(p) for p in percs]
+
     qry = (
         select(
             GraphNode.pub_key,
-            func.avg(time_per_route_capped).label("average_speed_capped_sec"),
-            func.avg(time_per_route).label("average_speed_sec"),
+            *func_perc,
             cast(func.sum(liquidity_locked), Float).label("liquidity_locked_sat"),
             func.count(HTLCAttempt.id).label("num_attempts"),
         )
-        .join(HTLCAttempt, HTLCAttempt.route_id == Route.id)
-        .join(Hop, Hop.route_id == Route.id)
+        .select_from(HTLCResolveInfo)
+        .join(HTLCAttempt, HTLCResolveInfo.htlc_attempt_id == HTLCAttempt.id)
+        .join(Route, HTLCAttempt.id == Route.htlc_attempt_id)
+        .join(Hop, Hop.htlc_attempt_id == Route.htlc_attempt_id)
         .join(GraphNode, GraphNode.id == Hop.node_id)
         .filter(
-            HTLCAttempt.resolve_time.between(start_time, end_time),
+            HTLCResolveInfo.resolve_time.between(start_time, end_time),
             Route.num_hops_successful > 0,
             Hop.position_id >= 1,
             Hop.position_id <= Route.num_hops_successful,
         )
         .group_by(GraphNode.pub_key)
-        .order_by(desc("average_speed_capped_sec"))
+        # First percentile of the list is used for ordering. Hence user can
+        # influence the order by the config.
+        .order_by(desc(label_percentile(percentiles[0])))
     )
 
-    return qry
+    header = [
+        "pub_key",
+        *[label_percentile(p) for p in percs],
+        "liquidity_locked_sat",
+        "num_attempts",
+    ]
+
+    return qry, header
 
 
 def query_liquidity_locked_per_htlc(
     start_time: datetime, end_time: datetime
-) -> Select[tuple[int, datetime, datetime | None, int, float]]:
+) -> tuple[Select[tuple[int, datetime, datetime | None, int, float]], list[str]]:
     """
     Calculates the locked liquidity per HTLC over the given time window.
     """
 
     # Calculate the time difference in seconds
     time_diff = func.extract(
-        "epoch", HTLCAttempt.resolve_time - HTLCAttempt.attempt_time
+        "epoch", HTLCResolveInfo.resolve_time - HTLCAttempt.attempt_time
     )
 
     liquidity_locked = (
@@ -155,38 +181,84 @@ def query_liquidity_locked_per_htlc(
         select(
             HTLCAttempt.attempt_id,
             HTLCAttempt.attempt_time,
-            HTLCAttempt.resolve_time,
+            HTLCResolveInfo.resolve_time,
             time_diff,
             cast(liquidity_locked, Float).label("liquidity_locked_sat"),
         )
-        .join(HTLCAttempt, HTLCAttempt.route_id == Route.id)
+        .select_from(HTLCResolveInfo)
+        .join(HTLCAttempt, HTLCResolveInfo.htlc_attempt_id == HTLCAttempt.id)
+        .join(Route, HTLCAttempt.attempt_id == Route.htlc_attempt_id)
         .filter(
-            HTLCAttempt.resolve_time.between(start_time, end_time),
+            HTLCResolveInfo.resolve_time.between(start_time, end_time),
             Route.num_hops_successful > 0,
         )
         .order_by(desc("liquidity_locked_sat"))
     )
-
-    return qry
+    header = [
+        "attempt_id",
+        "attempt_time",
+        "resolve_time",
+        "time_diff",
+        "liquidity_locked_sat",
+    ]
+    return qry, header
 
 
 def query_slow_nodes(
     start_time: datetime,
     end_time: datetime,
-    htlc_time_cap: float,
-    min_average_speed: float,
+    percentile: int,
+    min_speed: float,
     min_num_attempts: int,
 ) -> Select[tuple[str]]:
-    # Subquery to calculate the average latency for each node
-    subquery = query_average_node_speed(start_time, end_time, htlc_time_cap).subquery()
+    # Subquery to calculate the median latency for each node
 
-    # Main query to select pub_keys with average_speed_sec higher than min_average_speed
+    res = query_average_node_speed(start_time, end_time, [percentile])
+    subquery = res[0].subquery()
+
+    # Main query to select pub_keys with a speed higher than min_speed
     qry = select(subquery.c.pub_key).where(
-        subquery.c.average_speed_capped_sec >= min_average_speed,
+        list(subquery.c)[1] >= min_speed,
         subquery.c.num_attempts >= min_num_attempts,
     )
 
     return qry
+
+
+def delete_failed_htlc_attempts(
+    deletion_cutoff: datetime,
+) -> Delete[tuple[HTLCAttempt]]:
+    """
+    Returns a query to delete all failed HTLC attempts that are older than the
+    given time. Time is exclusive.
+    """
+
+    return delete(HTLCAttempt).where(
+        HTLCAttempt.id == HTLCResolveInfo.htlc_attempt_id,
+        HTLCAttempt.attempt_time < deletion_cutoff,
+        HTLCResolveInfo.status == HTLCStatus.FAILED,
+    )
+
+
+def delete_failed_payments(deletion_cutoff: datetime) -> Delete[tuple[Payment]]:
+    """
+    Returns a query to delete all failed payments that are older than the given
+    time. Time is exclusive.
+    """
+
+    return delete(Payment).where(
+        Payment.id == PaymentResolveInfo.payment_id,
+        Payment.creation_time < deletion_cutoff,
+        PaymentResolveInfo.status == PaymentStatus.FAILED,
+    )
+
+
+def delete_orphaned_payment_requests() -> Delete[tuple[int]]:
+    """
+    Returns a query to delete all orphaned payment requests.
+    """
+
+    return delete(PaymentRequest).where(~PaymentRequest.payments.any())
 
 
 class PaymentTrackerStore:
@@ -214,13 +286,6 @@ class PaymentTrackerStore:
 
         self.db.add_chunks_from_iterable(attempts, CHUNK_SIZE)
 
-    def add_payment_request(self, payment_request: PaymentRequest) -> int:
-        """
-        Adds a payment to the database. Returns the id of the payment.
-        """
-
-        return self.db.add_post(payment_request, lambda p: p.id)
-
     def add_graph_node(self, pub_key: str) -> int:
         """
         Adds a graph node to the database. Returns the id of the graph node.
@@ -234,6 +299,15 @@ class PaymentTrackerStore:
         """
 
         return self.db.add_post(path, lambda p: p.id)
+
+    def delete_orphaned(self) -> None:
+        """
+        Deletes all orphaned objects of this store. Atm only orphaned payment
+        requests are deleted.
+        """
+
+        # TODO: Delete orphaned graph paths and graph nodes
+        self.db.core_delete(delete_orphaned_payment_requests())
 
     def get_payment_id(self, payment_index: int) -> int:
         """

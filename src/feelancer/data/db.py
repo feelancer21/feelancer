@@ -5,6 +5,7 @@ import logging
 import os
 import tempfile
 from collections.abc import Callable, Generator, Iterable, Sequence
+from itertools import batched
 from typing import TYPE_CHECKING, TypeVar
 
 from sqlalchemy import URL, Row, create_engine
@@ -24,7 +25,7 @@ DELAY = 5
 MIN_TOLERANCE_DELTA = 60
 
 if TYPE_CHECKING:
-    from sqlalchemy import Select
+    from sqlalchemy import Delete, Select
 
 
 def _fields_to_dict(result, relations: dict[str, dict]) -> dict:
@@ -126,12 +127,11 @@ class FeelancerDB:
         self,
         pre_commit: Callable[[Session], V],
         post_commit: Callable[[V], T] = lambda x: x,
+        needs_commit: bool = False,
     ) -> T:
         """
         The main executor for database operations.
         """
-
-        needs_commit = False
 
         with self.session() as session:
             try:
@@ -140,9 +140,14 @@ class FeelancerDB:
                 # post_commit function on the result after the commit.
                 res = pre_commit(session)
 
+                # If we are using sqlqlchemy's ORM we need to check if the session
+                # is dirty, new or deleted. If so we need to commit the session
+                # and eventually rollback if an exception occurs.
+                # In case of Core API the flag has to provided by the caller.
                 if session.new or session.dirty or session.deleted:
-                    # storing the information for rollback
                     needs_commit = True
+
+                if needs_commit:
                     session.commit()
 
                 return post_commit(res)
@@ -295,18 +300,26 @@ class FeelancerDB:
         Adds all data from the iterable to the database in chunks.
         """
 
-        def add_all(data: list[DeclarativeBase]) -> None:
-            self.execute(lambda session: session.add_all(data))
+        for chunk in batched(iter, chunk_size):
+            self.execute(lambda session: session.add_all(chunk))
 
-        chunk = []
-        for i in iter:
-            chunk.append(i)
-            if len(chunk) == chunk_size:
-                add_all(chunk)
-                chunk = []
+    def core_delete(self, queries: Iterable[Delete[tuple]] | Delete[tuple]) -> None:
+        """
+        Deletes all data from the database using the core API. One can provide
+        a single query or an iterable of queries. In the latter case all queries
+        are executed in the same session.
+        """
 
-        if len(chunk) > 0:
-            add_all(chunk)
+        def delete_data(session: Session) -> None:
+            # Case if one query is provided
+            if not isinstance(queries, Iterable):
+                session.execute(queries)
+                return
+
+            for q in queries:
+                session.execute(q)
+
+        self._execute(pre_commit=delete_data, needs_commit=True)
 
 
 class SessionExecutor:

@@ -90,6 +90,10 @@ class PaymentRequest(Base):
     # The optional payment request being fulfilled
     payment_request: Mapped[str] = mapped_column(String, nullable=True)
 
+    payments: Mapped[list[Payment]] = relationship(
+        "Payment", back_populates="payment_request"
+    )
+
 
 class Payment(Base):
     __tablename__ = "ln_payment"
@@ -98,24 +102,23 @@ class Payment(Base):
     # unique identifier of the payment
     id: Mapped[int] = mapped_column(autoincrement=True, primary_key=True)
 
-    # the id of the local lightning node
-    ln_node_id: Mapped[int] = mapped_column(ForeignKey("ln_node.id"), nullable=False)
+    # the id of the local lightning node. Not at payment request because a request
+    # can theoretical be tried to be paid by multiple nodes.
+    ln_node_id: Mapped[int] = mapped_column(
+        ForeignKey("ln_node.id", ondelete="CASCADE"), nullable=False
+    )
 
     # the local lightning node
     ln_node: Mapped[DBLnNode] = relationship(DBLnNode)
 
     payment_request_id: Mapped[int] = mapped_column(
-        ForeignKey("ln_payment_request.id"), nullable=False
+        ForeignKey("ln_payment_request.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
-    payment_request: Mapped[PaymentRequest] = relationship("PaymentRequest")
-
-    # The value of the payment in milli-satoshis
-    value_msat: Mapped[int] = mapped_column(BigInteger, nullable=False)
-
-    status: Mapped[PaymentStatus] = mapped_column(Enum(PaymentStatus), nullable=False)
-
-    # The fee paid for this payment in milli-satoshis
-    fee_msat: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    payment_request: Mapped[PaymentRequest] = relationship(
+        PaymentRequest, uselist=False, back_populates="payments"
+    )
 
     # The time in UNIX nanoseconds at which the payment was created
     creation_time: Mapped[datetime.datetime] = mapped_column(
@@ -126,10 +129,36 @@ class Payment(Base):
         "HTLCAttempt", back_populates="payment"
     )
 
+    resolve_info: Mapped[PaymentResolveInfo] = relationship(
+        "PaymentResolveInfo", uselist=False, back_populates="payment"
+    )
+
     # The creation index of this payment. Each payment can be uniquely identified
     # by this index, which may not strictly increment by 1 for payments made in
     # older versions of lnd.
     payment_index: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+
+class PaymentResolveInfo(Base):
+    __tablename__ = "ln_payment_resolve_info"
+
+    payment_id: Mapped[BigInteger] = mapped_column(
+        ForeignKey("ln_payment.id", ondelete="CASCADE"),
+        nullable=False,
+        primary_key=True,
+    )
+
+    payment: Mapped[Payment] = relationship(
+        Payment, uselist=False, back_populates="resolve_info"
+    )
+
+    # The value of the payment in milli-satoshis
+    value_msat: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+    # The fee paid for this payment in milli-satoshis
+    fee_msat: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+    status: Mapped[PaymentStatus] = mapped_column(Enum(PaymentStatus), nullable=False)
 
     failure_reason: Mapped[PaymentFailureReason] = mapped_column(
         Enum(PaymentFailureReason), nullable=False
@@ -162,13 +191,16 @@ class GraphPath(Base):
 
 class HTLCAttempt(Base):
     __tablename__ = "ln_payment_htlc_attempt"
-    __table_args__ = (UniqueConstraint("payment_id", "attempt_id", "status"),)
+
+    # TODO: Redesign this table to have a better unique constraint.
+    # e.g. node id, payment id)
+    __table_args__ = (UniqueConstraint("payment_id", "attempt_id"),)
 
     # unique identifier of the attempt
     id: Mapped[int] = mapped_column(autoincrement=True, primary_key=True)
 
     payment_id: Mapped[BigInteger] = mapped_column(
-        ForeignKey("ln_payment.id"), nullable=False
+        ForeignKey("ln_payment.id", ondelete="CASCADE"), nullable=False, index=True
     )
 
     payment: Mapped[Payment] = relationship("Payment", back_populates="attempts")
@@ -176,12 +208,31 @@ class HTLCAttempt(Base):
     # The unique ID that is used for this attempt.
     attempt_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
-    # The status of the HTLC.
-    status: Mapped[HTLCStatus] = mapped_column(Enum(HTLCStatus), nullable=False)
-
     # The time in UNIX nanoseconds at which this HTLC was sent.
     attempt_time: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
+    )
+
+    route: Mapped[Route] = relationship(
+        "Route", uselist=False, back_populates="htlc_attempt"
+    )
+
+    resolve_info: Mapped[HTLCResolveInfo] = relationship(
+        "HTLCResolveInfo", uselist=False, back_populates="htlc_attempt"
+    )
+
+
+class HTLCResolveInfo(Base):
+    __tablename__ = "ln_payment_htlc_resolve_info"
+
+    htlc_attempt_id: Mapped[BigInteger] = mapped_column(
+        ForeignKey("ln_payment_htlc_attempt.id", ondelete="CASCADE"),
+        nullable=False,
+        primary_key=True,
+    )
+
+    htlc_attempt: Mapped[HTLCAttempt] = relationship(
+        HTLCAttempt, uselist=False, back_populates="resolve_info"
     )
 
     # The time in UNIX nanoseconds at which this HTLC was settled or failed.
@@ -190,25 +241,24 @@ class HTLCAttempt(Base):
         DateTime(timezone=True), nullable=True
     )
 
-    route_id: Mapped[BigInteger] = mapped_column(
-        ForeignKey("ln_payment_route.id"), nullable=False
-    )
-    route: Mapped[Route] = relationship("Route", back_populates="attempt")
+    # The status of the HTLC.
+    status: Mapped[HTLCStatus] = mapped_column(Enum(HTLCStatus), nullable=False)
 
-    failure = relationship("Failure", uselist=False, back_populates="htlc_attempt")
+    failure: Mapped[Failure] = relationship(
+        "Failure", uselist=False, back_populates="htlc_attempt"
+    )
 
 
 class Failure(Base):
     __tablename__ = "ln_payment_failure"
 
-    # unique identifier of the failure
-    id: Mapped[int] = mapped_column(autoincrement=True, primary_key=True)
-
     htlc_attempt_id: Mapped[BigInteger] = mapped_column(
-        ForeignKey("ln_payment_htlc_attempt.id"), nullable=False
+        ForeignKey("ln_payment_htlc_resolve_info.htlc_attempt_id", ondelete="CASCADE"),
+        nullable=False,
+        primary_key=True,
     )
     htlc_attempt: Mapped[HTLCAttempt] = relationship(
-        HTLCAttempt, back_populates="failure"
+        HTLCResolveInfo, uselist=False, back_populates="failure"
     )
 
     # Failure code as defined in the Lightning spec.
@@ -221,7 +271,7 @@ class Failure(Base):
     # source hops is added in an sql update after initial insert.
     # That's why nullable is True.
     source_hop_id: Mapped[BigInteger] = mapped_column(
-        ForeignKey("ln_payment_hop.id"), nullable=True
+        ForeignKey("ln_payment_hop.id"), nullable=True, index=True
     )
     source_hop: Mapped[Hop] = relationship("Hop", post_update=True)
 
@@ -229,8 +279,15 @@ class Failure(Base):
 class Route(Base):
     __tablename__ = "ln_payment_route"
 
-    # unique identifier of the route
-    id: Mapped[int] = mapped_column(autoincrement=True, primary_key=True)
+    htlc_attempt_id: Mapped[BigInteger] = mapped_column(
+        ForeignKey("ln_payment_htlc_attempt.id", ondelete="CASCADE"),
+        nullable=False,
+        primary_key=True,
+    )
+
+    htlc_attempt: Mapped[HTLCAttempt] = relationship(
+        HTLCAttempt, back_populates="route"
+    )
 
     # The cumulative (final) time lock across the entire route.
     total_time_lock: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -241,9 +298,6 @@ class Route(Base):
     # The total amount in millisatoshis.
     total_amt_msat: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
-    # The payment attempt
-    attempt: Mapped[HTLCAttempt] = relationship(HTLCAttempt, back_populates="route")
-
     # Relationship to hops
     hops: Mapped[list[Hop]] = relationship("Hop", back_populates="route")
 
@@ -251,12 +305,14 @@ class Route(Base):
     # in this count.
     num_hops_successful: Mapped[int] = mapped_column(Integer, nullable=True)
 
-    path_id: Mapped[int] = mapped_column(ForeignKey("ln_graph_path.id"), nullable=False)
+    path_id: Mapped[int] = mapped_column(
+        ForeignKey("ln_graph_path.id"), nullable=False, index=True
+    )
 
     path: Mapped[GraphPath] = relationship("GraphPath", foreign_keys=[path_id])
 
     path_success_id: Mapped[int] = mapped_column(
-        ForeignKey("ln_graph_path.id"), nullable=False
+        ForeignKey("ln_graph_path.id"), nullable=False, index=True
     )
 
     path_success: Mapped[GraphPath] = relationship(
@@ -266,21 +322,25 @@ class Route(Base):
 
 class Hop(Base):
     __tablename__ = "ln_payment_hop"
-    __table_args__ = (UniqueConstraint("route_id", "position_id"),)
+    __table_args__ = (UniqueConstraint("htlc_attempt_id", "position_id"),)
 
     # unique identifier of the hop
     id: Mapped[int] = mapped_column(autoincrement=True, primary_key=True)
 
     # the id of the route
-    route_id: Mapped[BigInteger] = mapped_column(
-        ForeignKey("ln_payment_route.id"), nullable=False
+    htlc_attempt_id: Mapped[BigInteger] = mapped_column(
+        ForeignKey("ln_payment_route.htlc_attempt_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
-    route: Mapped[Route] = relationship(Route, back_populates="hops")
+    route: Mapped[Route] = relationship(Route, uselist=False, back_populates="hops")
 
     # The position of the hop in the route. Position zero is the sender node.
-    position_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    position_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
 
-    node_id: Mapped[int] = mapped_column(ForeignKey("ln_graph_node.id"), nullable=False)
+    node_id: Mapped[int] = mapped_column(
+        ForeignKey("ln_graph_node.id"), nullable=False, index=True
+    )
 
     node: Mapped[GraphNode] = relationship(GraphNode, foreign_keys=[node_id])
 
@@ -294,14 +354,14 @@ class Hop(Base):
     fee_msat: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
     node_outgoing_id: Mapped[int] = mapped_column(
-        ForeignKey("ln_graph_node.id"), nullable=True
+        ForeignKey("ln_graph_node.id"), nullable=True, index=True
     )
     node_outgoing: Mapped[GraphNode] = relationship(
         GraphNode, foreign_keys=[node_outgoing_id]
     )
 
     node_incoming_id: Mapped[int] = mapped_column(
-        ForeignKey("ln_graph_node.id"), nullable=True
+        ForeignKey("ln_graph_node.id"), nullable=True, index=True
     )
     node_incoming: Mapped[GraphNode] = relationship(
         GraphNode, foreign_keys=[node_incoming_id]
