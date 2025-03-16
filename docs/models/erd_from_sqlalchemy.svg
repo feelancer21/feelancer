@@ -850,7 +850,7 @@
 <title>ln_graph_node&#45;&#45;ln_payment_hop</title>
 <path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M1396.55,-410.87C1427.13,-410.09 1460.51,-409.91 1492.45,-410.3"/>
 <text text-anchor="start" x="1468.34" y="-397.7" font-family="Times,serif" font-size="14.00">0..N</text>
-<text text-anchor="start" x="1396.55" y="-398.27" font-family="Times,serif" font-size="14.00">{0,1}</text>
+<text text-anchor="start" x="1396.55" y="-398.27" font-family="Times,serif" font-size="14.00">1</text>
 </g>
 <!-- ln_graph_node&#45;&#45;ln_payment_hop -->
 <g id="edge23" class="edge">
@@ -864,7 +864,7 @@
 <title>ln_graph_node&#45;&#45;ln_payment_hop</title>
 <path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M1396.55,-436.33C1427.13,-437.11 1460.51,-437.29 1492.45,-436.9"/>
 <text text-anchor="start" x="1468.34" y="-441.1" font-family="Times,serif" font-size="14.00">0..N</text>
-<text text-anchor="start" x="1396.55" y="-440.53" font-family="Times,serif" font-size="14.00">1</text>
+<text text-anchor="start" x="1396.55" y="-440.53" font-family="Times,serif" font-size="14.00">{0,1}</text>
 </g>
 <!-- ln_payment_failure -->
 <g id="node23" class="node">
