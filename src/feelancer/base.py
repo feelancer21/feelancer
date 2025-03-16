@@ -65,14 +65,14 @@ def create_retry_handler(
     max_retries: int,
     delay: int,
     min_tolerance_delta: int | None,
-) -> Callable[[Callable[..., T]], Callable[..., T]]:
+) -> Callable:
     """
     Retries the function max_retries times if the function returned None.
     If a delay is given, the function waits for the given amount of seconds
     before retrying.
     """
 
-    def retry_handler(func: Callable[..., T]) -> Callable[..., T]:
+    def retry_handler(func):
 
         @wraps(func)
         def wrapper(*args, **kwargs):

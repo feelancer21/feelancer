@@ -3,7 +3,7 @@ import functools
 import hashlib
 import logging
 from collections.abc import Callable, Generator, Iterable
-from typing import Any, Protocol, TypeVar
+from typing import Any, Protocol
 
 import pytz
 
@@ -35,8 +35,6 @@ from .models import (
     PaymentStatus,
     Route,
 )
-
-T = TypeVar("T")
 
 RECON_TIME_INTERVAL = 30 * 24 * 3600  # 30 days in seconds
 
@@ -82,18 +80,16 @@ class PaymentTracker(Protocol):
 
 def _create_yield_logger(
     interval: int,
-) -> Callable[[Callable[..., Generator[T]]], Callable[..., Generator[T]]]:
+) -> Callable:
     """
     Decorator for writing a log message in the given interval of yielded items.
     To see the process is still alive.
     """
 
-    def decorator(
-        generator_func: Callable[..., Generator[T]],
-    ) -> Callable[..., Generator[T]]:
+    def decorator(generator_func):
 
         @functools.wraps(generator_func)
-        def wrapper(*args: Any, **kwargs: Any) -> Generator[T]:
+        def wrapper(*args: Any, **kwargs: Any):
             count: int = 0
             for item in generator_func(*args, **kwargs):
                 count += 1
