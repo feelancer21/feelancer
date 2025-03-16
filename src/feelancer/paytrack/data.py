@@ -187,7 +187,7 @@ def query_liquidity_locked_per_htlc(
         )
         .select_from(HTLCResolveInfo)
         .join(HTLCAttempt, HTLCResolveInfo.htlc_attempt_id == HTLCAttempt.id)
-        .join(Route, HTLCAttempt.attempt_id == Route.htlc_attempt_id)
+        .join(Route, HTLCAttempt.id == Route.htlc_attempt_id)
         .filter(
             HTLCResolveInfo.resolve_time.between(start_time, end_time),
             HTLCResolveInfo.num_hops_successful > 0,
