@@ -68,43 +68,6 @@ def _create_failure(failure: ln.Failure, source_hop: Hop | None) -> Failure:
     )
 
 
-def _create_htlc_resolve_info(
-    attempt: ln.HTLCAttempt, hops: list[Hop]
-) -> HTLCResolveInfo | None:
-    """
-    Creates the resolve info object for the HTLCAttempt. This object is used
-    to store the resolve information in the database.
-    """
-
-    # If htlc attempt is in flight the htlc is not resolved and we return None.
-    if attempt.status == 0:
-        return None
-
-    if attempt.resolve_time_ns > 0:
-        resolve_time = _ns_to_datetime(attempt.resolve_time_ns)
-    else:
-        resolve_time = None
-
-    # If the attempt failed we store the failure information. For succeeded
-    # attempts we don't need to store this information.
-    if attempt.status == 2 and attempt.failure is not None:
-        try:
-            source_hop = hops[attempt.failure.failure_source_index]
-        except IndexError:
-            source_hop = None
-            logging.warning(
-                f"Failure source index out of bounds: {attempt.failure.failure_source_index=}, ",
-                f"{attempt.attempt_id=}",
-            )
-        failure = _create_failure(attempt.failure, source_hop)
-    else:
-        failure = None
-
-    return HTLCResolveInfo(
-        resolve_time=resolve_time, status=HTLCStatus(attempt.status), failure=failure
-    )
-
-
 class PaymentTracker(Protocol):
 
     def store_payments(self) -> None: ...
@@ -304,8 +267,11 @@ class LNDPaymentTracker:
         else:
             last_used_hop_index = None
 
-        route = self._convert_route(attempt.route, last_used_hop_index)
-        resolve_info = _create_htlc_resolve_info(attempt, route.hops)
+        route, path = self._convert_route(attempt.route)
+
+        resolve_info = self._convert_htlc_resolve_info(
+            attempt, route.hops, last_used_hop_index, path
+        )
 
         htlc_attempt = HTLCAttempt(
             payment=payment,
@@ -317,11 +283,7 @@ class LNDPaymentTracker:
 
         return htlc_attempt
 
-    def _convert_route(
-        self,
-        route: ln.Route,
-        last_used_hop_index: int | None,
-    ) -> Route:
+    def _convert_route(self, route: ln.Route) -> tuple[Route, list[int]]:
 
         hops: list[Hop] = []
         path: list[int] = []
@@ -358,18 +320,62 @@ class LNDPaymentTracker:
 
         path_id = self._get_graph_path_id(path)
 
+        res_route = Route(
+            total_time_lock=route.total_time_lock,
+            total_amt_msat=route.total_amt_msat,
+            total_fees_msat=route.total_fees_msat,
+            hops=hops,
+            path_id=path_id,
+        )
+
+        return res_route, path
+
+    def _convert_htlc_resolve_info(
+        self,
+        attempt: ln.HTLCAttempt,
+        hops: list[Hop],
+        last_used_hop_index: int | None,
+        path: list[int],
+    ) -> HTLCResolveInfo | None:
+        """
+        Creates the resolve info object for the HTLCAttempt. This object is used
+        to store the resolve information in the database.
+        """
+
+        # If htlc attempt is in flight the htlc is not resolved and we return None.
+        if attempt.status == 0:
+            return None
+
+        if attempt.resolve_time_ns > 0:
+            resolve_time = _ns_to_datetime(attempt.resolve_time_ns)
+        else:
+            resolve_time = None
+
+        # If the attempt failed we store the failure information. For succeeded
+        # attempts we don't need to store this information.
+        if attempt.status == 2 and attempt.failure is not None:
+            try:
+                source_hop = hops[attempt.failure.failure_source_index]
+            except IndexError:
+                source_hop = None
+                logging.warning(
+                    f"Failure source index out of bounds: {attempt.failure.failure_source_index=}, ",
+                    f"{attempt.attempt_id=}",
+                )
+            failure = _create_failure(attempt.failure, source_hop)
+        else:
+            failure = None
+
         if last_used_hop_index is not None and last_used_hop_index >= 0:
             path_success = path[:last_used_hop_index]
             path_success_id = self._get_graph_path_id(path_success)
         else:
             path_success_id = None
 
-        return Route(
-            total_time_lock=route.total_time_lock,
-            total_amt_msat=route.total_amt_msat,
-            total_fees_msat=route.total_fees_msat,
-            hops=hops,
-            path_id=path_id,
+        return HTLCResolveInfo(
+            resolve_time=resolve_time,
+            status=HTLCStatus(attempt.status),
+            failure=failure,
             path_success_id=path_success_id,
             num_hops_successful=last_used_hop_index,
         )

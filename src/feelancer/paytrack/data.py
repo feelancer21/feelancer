@@ -81,7 +81,7 @@ def query_average_node_speed(
         "epoch", HTLCResolveInfo.resolve_time - HTLCAttempt.attempt_time
     )
 
-    n = Route.num_hops_successful
+    n = HTLCResolveInfo.num_hops_successful
 
     # Calculate the average time per route
     time_per_route = time_diff / n
@@ -141,9 +141,9 @@ def query_average_node_speed(
         .join(GraphNode, GraphNode.id == Hop.node_id)
         .filter(
             HTLCResolveInfo.resolve_time.between(start_time, end_time),
-            Route.num_hops_successful > 0,
+            HTLCResolveInfo.num_hops_successful > 0,
             Hop.position_id >= 1,
-            Hop.position_id <= Route.num_hops_successful,
+            Hop.position_id <= HTLCResolveInfo.num_hops_successful,
         )
         .group_by(GraphNode.pub_key)
         # First percentile of the list is used for ordering. Hence user can
@@ -190,7 +190,7 @@ def query_liquidity_locked_per_htlc(
         .join(Route, HTLCAttempt.attempt_id == Route.htlc_attempt_id)
         .filter(
             HTLCResolveInfo.resolve_time.between(start_time, end_time),
-            Route.num_hops_successful > 0,
+            HTLCResolveInfo.num_hops_successful > 0,
         )
         .order_by(desc("liquidity_locked_sat"))
     )
