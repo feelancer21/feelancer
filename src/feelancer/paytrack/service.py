@@ -32,6 +32,7 @@ DEFAULT_HTLC_LIQUIDITY_LOCKED_CSV_FILE = "~/.feelancer/htlc_liquidity_locked.csv
 
 DEFAULT_DELETE_FAILED = False
 DEFAULT_DELETE_FAILED_HOURS = 168
+logger = logging.getLogger(__name__)
 
 
 def _validate_percentiles(percentiles: list[int]) -> None:
@@ -142,8 +143,8 @@ class PaytrackService(BaseServer):
         if config is None:
             return RunnerResult()
 
-        logging.info(f"{self._name} running...")
-        logging.debug(f"{self._name} {config.__dict__=}")
+        logger.info(f"{self._name} running...")
+        logger.debug(f"{self._name} {config.__dict__=}")
 
         if config.node_speed_write_csv:
             qry, header = query_average_node_speed(
@@ -188,7 +189,7 @@ class PaytrackService(BaseServer):
 
             self._delete_data(queries)
 
-        logging.info(f"{self._name} finished...")
+        logger.info(f"{self._name} finished...")
 
         return RunnerResult()
 

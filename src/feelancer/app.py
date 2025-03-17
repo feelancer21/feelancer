@@ -11,6 +11,8 @@ from .server import MainConfig, MainServer
 DEFAULT_CONFIG = "~/.feelancer/feelancer.toml"
 # If the stop signal is received, the server has 180 seconds to stop.
 
+logger = logging.getLogger(__name__)
+
 
 def _get_args():
     parser = argparse.ArgumentParser(
@@ -50,20 +52,20 @@ def app():
         config = MainConfig.from_config_file(config_file)
 
         set_logger(config.log_file, config.log_level)
-        logging.info(f"Feelancer {__version__=} starting...")
+        logger.info(f"Feelancer {__version__=} starting...")
 
         server = MainServer(cfg=config)
 
         if not args.no_server:
             server.start()
         else:
-            logging.info(f"Not starting server: {args.no_server=}")
+            logger.info(f"Not starting server: {args.no_server=}")
 
-        logging.info("Feelancer shutdown completed.\n")
+        logger.info("Feelancer shutdown completed.\n")
 
     except Exception:
         # Hard exit with killing of all threads if there is an unknown error.
-        logging.exception("An unexpected error occurred.")
+        logger.exception("An unexpected error occurred.")
 
         if server is not None:
             server.kill()

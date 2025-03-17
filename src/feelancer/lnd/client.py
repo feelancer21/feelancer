@@ -87,7 +87,7 @@ def set_chan_point(chan_point_str: str, chan_point: ln.ChannelPoint) -> None:
     chan_point.output_index = int(out_index)
 
 
-# Dispatcher for tracking payments. New class for logging purposes.
+# Dispatcher for tracking payments. New class for logger.purposes.
 class LndPaymentDispatcher(StreamDispatcher[ln.Payment]): ...
 
 

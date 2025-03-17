@@ -14,6 +14,8 @@ from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from feelancer.base import create_retry_handler
 
+if TYPE_CHECKING:
+    from sqlalchemy import Delete, Select
 T = TypeVar("T")
 V = TypeVar("V")
 W = TypeVar("W")
@@ -24,8 +26,8 @@ MAX_RETRIES = 5
 DELAY = 5
 MIN_TOLERANCE_DELTA = 60
 
-if TYPE_CHECKING:
-    from sqlalchemy import Delete, Select
+
+logger = logging.getLogger(__name__)
 
 
 def _fields_to_dict(result, relations: dict[str, dict]) -> dict:
@@ -266,7 +268,7 @@ class FeelancerDB:
         try:
             self.execute(lambda session: session.add(data))
         except Exception as e:
-            logging.error(f"Error while adding data to db: {e}")
+            logger.error(f"Error while adding data to db: {e}")
 
             if accept_integrity_err and isinstance(e, IntegrityError):
                 return

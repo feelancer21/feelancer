@@ -15,6 +15,8 @@ if TYPE_CHECKING:
 
     from .data import PidConfig
 
+logger = logging.getLogger(__name__)
+
 
 class PidService:
 
@@ -39,7 +41,7 @@ class PidService:
         if pid_config is None:
             return RunnerResult(None, None)
 
-        logging.info("Running pid controller...")
+        logger.info("Running pid controller...")
 
         if not self.pid_controller:
             self.pid_controller = PidController(
@@ -52,7 +54,7 @@ class PidService:
             self.pid_controller.store_data, self.pid_controller.policy_proposals()
         )
 
-        logging.info("Finished pid controller")
+        logger.info("Finished pid controller")
         return res
 
     def reset(self) -> None:
@@ -61,4 +63,4 @@ class PidService:
         """
 
         self.pid_controller = None
-        logging.debug("Finished reset of pid controller")
+        logger.debug("Finished reset of pid controller")

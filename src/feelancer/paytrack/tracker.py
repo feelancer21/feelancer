@@ -38,6 +38,8 @@ from .models import (
 
 RECON_TIME_INTERVAL = 30 * 24 * 3600  # 30 days in seconds
 
+logger = logging.getLogger(__name__)
+
 
 # Helper function for converting nanoseconds to a datetime object.
 def _ns_to_datetime(ns: int) -> datetime.datetime:
@@ -94,11 +96,11 @@ def _create_yield_logger(
             for item in generator_func(*args, **kwargs):
                 count += 1
                 if count == interval:
-                    logging.info(f"Processed {count} payments")
+                    logger.info(f"Processed {count} payments")
                     count = 0
                 yield item
 
-            logging.info(f"Processed {count} payments")
+            logger.error(f"Processed {count} payments")
 
         return wrapper
 
@@ -124,14 +126,14 @@ class LNDPaymentTracker:
         made while the subscription was not running.
         """
 
-        logging.info(f"Presync payments for {self._pub_key}...")
+        logger.info(f"Presync payments for {self._pub_key}...")
 
         # Delete orphaned objects in sync mode. This is necessary here to avoid
         # foreign key constraints violations when adding new objects.
         self._store.delete_orphaned()
         self._pre_sync_start()
 
-        logging.info(f"Presync payments for {self._pub_key} finished")
+        logger.info(f"Presync payments for {self._pub_key} finished")
 
     def pre_sync_stop(self) -> None:
         """
@@ -153,7 +155,7 @@ class LNDPaymentTracker:
     def _attempts_from_paginator(self) -> Generator[HTLCAttempt]:
 
         index_offset = self._store.get_max_payment_index()
-        logging.debug(f"Starting from index {index_offset} for {self._pub_key}")
+        logger.debug(f"Starting from index {index_offset} for {self._pub_key}")
 
         generator = self._lnd.lnd.paginate_payments(
             index_offset=index_offset, include_incomplete=True
@@ -191,7 +193,7 @@ class LNDPaymentTracker:
         to an Iterable of HTLCAttempt objects.
         """
 
-        # logging.debug(f"Processing payment: {recon_running=} {MessageToDict(p)=}")
+        # logger.debug(f"Processing payment: {recon_running=} {MessageToDict(p)=}")
 
         # only process status SUCCEEDED or FAILED
         if p.status not in [2, 3]:
@@ -206,7 +208,7 @@ class LNDPaymentTracker:
                 self._store.get_payment_id(p.payment_index)
                 return
             except PaymentNotFound:
-                logging.debug(f"Payment reconciliation: {p.payment_index=} not found.")
+                logger.debug(f"Payment reconciliation: {p.payment_index=} not found.")
                 pass
 
         payment = self._convert_payment(p)
@@ -354,7 +356,7 @@ class LNDPaymentTracker:
                 source_hop = hops[attempt.failure.failure_source_index]
             except IndexError:
                 source_hop = None
-                logging.warning(
+                logger.warning(
                     f"Failure source index out of bounds: {attempt.failure.failure_source_index=}, ",
                     f"{attempt.attempt_id=}",
                 )

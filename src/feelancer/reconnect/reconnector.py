@@ -7,6 +7,8 @@ from feelancer.lightning.lnd import LNDClient
 if TYPE_CHECKING:
     from feelancer.lnd.grpc_generated import lightning_pb2 as ln
 
+logger = logging.getLogger(__name__)
+
 
 class Reconnector(Protocol):
     """
@@ -75,8 +77,8 @@ class LNDReconnector(LNDClient):
         # Reconnecting all pub key.
         for pub_key in pub_keys:
 
-            # TODO: logging status when 0.19.0 is released.
-            logging.info(f"Reconnecting {pub_key=}")
+            # TODO: logger.status when 0.19.0 is released.
+            logger.info(f"Reconnecting {pub_key=}")
             self.disconnect_peer(pub_key)
 
             # sleep a second to ensure that the peer is disconnected by the

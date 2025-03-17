@@ -26,6 +26,8 @@ if TYPE_CHECKING:
     from feelancer.lightning.chan_updates import PolicyProposal
     from feelancer.lightning.client import LightningClient
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass
 class RunnerResult:
@@ -110,10 +112,10 @@ class TaskRunner(BaseServer):
                 if task_result.proposals is not None:
                     policy_updates += task_result.proposals
 
-            logging.info("Finished task execution")
+            logger.info("Finished task execution")
 
         except Exception as e:
-            logging.error("Could not run all tasks")
+            logger.error("Could not run all tasks")
             raise e
 
         timestamp_end = datetime.now(pytz.utc)
@@ -129,7 +131,7 @@ class TaskRunner(BaseServer):
             )
         except Exception:
             # We log the exception but don't raise it.
-            logging.exception("Unexpected error during policy updates occurred")
+            logger.exception("Unexpected error during policy updates occurred")
 
         # Storing the relevant data in the database by calling the store_funcs
         # with the cached data. We can return early if there is nothing to store.
@@ -151,11 +153,11 @@ class TaskRunner(BaseServer):
             return db_run
 
         # Execute the callable. The lambda function returns the run id
-        # for logging.
+        # for logger.
         run_id = self.db.execute_post(store_data, lambda db_run: db_run.id)
 
         run_time = timestamp_end - timestamp_start
-        logging.info(
+        logger.info(
             f"Run {run_id} successfully finished; start "
             f"{timestamp_start}; end {timestamp_end}; runtime {run_time}."
         )
@@ -163,7 +165,7 @@ class TaskRunner(BaseServer):
         # If config.seconds had changed we modify the trigger of the job.
         if config.seconds != self.seconds:
             self.seconds = config.seconds
-            logging.info(f"Interval changed; executing tasks every {self.seconds}s now")
+            logger.info(f"Interval changed; executing tasks every {self.seconds}s now")
             self.job.modify(trigger=IntervalTrigger(seconds=self.seconds))
 
     def register_task(self, task: Callable[[RunnerRequest], RunnerResult]) -> None:
@@ -188,7 +190,7 @@ class TaskRunner(BaseServer):
         for r in self.resets:
             r()
 
-        logging.debug("Reset of internal objects completed.")
+        logger.debug("Reset of internal objects completed.")
 
     def _start(self) -> None:
         """
@@ -201,7 +203,7 @@ class TaskRunner(BaseServer):
         if self.scheduler.running:
             return None
 
-        logging.info(f"Starting runner and executing tasks every {self.seconds}s")
+        logger.info(f"Starting runner and executing tasks every {self.seconds}s")
 
         # Starts the run and resets objects in the case of an unexpected error,
         # e.g. db loss.
@@ -214,12 +216,12 @@ class TaskRunner(BaseServer):
 
             self.listener_attempts += 1
             if is_running:
-                logging.warning(
+                logger.warning(
                     "There is a running listener which prevents the start of a new one."
                 )
                 # It acts like a timeout for pending listener jobs.
                 if self.listener_attempts > self.max_listener_attempts:
-                    logging.error(
+                    logger.error(
                         f"{self.max_listener_attempts=} exceeded. Killing the scheduler..."
                     )
                     self.scheduler.shutdown(wait=False)
@@ -233,7 +235,7 @@ class TaskRunner(BaseServer):
                 # Rpc Errors are logged before, but the objects has to be reset.
                 self._reset()
             except Exception:
-                logging.exception("An unexpected error occurred")
+                logger.exception("An unexpected error occurred")
                 self._reset()
             finally:
                 self.listener_running = False
@@ -253,11 +255,11 @@ class TaskRunner(BaseServer):
         # is started.
         def scheduler_started(event) -> None:
             self.lock.release()
-            logging.debug("Scheduler started and lock released.")
+            logger.debug("Scheduler started and lock released.")
 
         self.scheduler.add_listener(scheduler_started, EVENT_SCHEDULER_STARTED)
 
-        logging.info("Scheduler starting...")
+        logger.info("Scheduler starting...")
         self.scheduler.start()
 
         # Signal to the caller that the end of the scheduler was not gracefully.
@@ -275,7 +277,7 @@ class TaskRunner(BaseServer):
             if not self.scheduler.running:
                 return None
 
-            logging.info("Shutting down the scheduler...")
+            logger.info("Shutting down the scheduler...")
             self.scheduler.shutdown(wait=True)
 
-            logging.info("Scheduler shutdown completed.")
+            logger.info("Scheduler shutdown completed.")

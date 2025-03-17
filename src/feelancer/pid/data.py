@@ -46,6 +46,8 @@ DEFAULT_MAX_AGE_SPREAD_HOURS = 0
 DEFAULT_DB_ONLY = True
 DEFAULT_SET_INBOUND = False
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass
 class EwmaControllerParams:
@@ -421,7 +423,7 @@ class PidConfig:
                 self.spread_level_target_ppm = float(spread_level_conf["target_ppm"])
 
                 if self.pin_peer is not None:
-                    logging.warning(
+                    logger.warning(
                         "Not possible to pin a peer when spread_level is set"
                     )
                     self.pin_peer = None

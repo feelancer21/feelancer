@@ -35,6 +35,7 @@ if TYPE_CHECKING:
 DEFAULT_TIMEOUT = 180
 TRACEBACK_DUMP_FILE = "traceback_dump.txt"
 FAULTHANDLER_DUMP_FILE = "faulthandler_dump.txt"
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -137,28 +138,28 @@ class SignalHandler:
                 return
             self._sig_received = True
 
-        logging.debug(f"Received {signal.Signals(signum).name}")
+        logger.debug(f"Received {signal.Signals(signum).name}")
 
         # Activate the timeout signal if it is set.
         if self._timeout is not None:
-            logging.debug(f"Setting {self._timeout=}")
+            logger.debug(f"Setting {self._timeout=}")
             signal.alarm(self._timeout)
             signal.signal(signal.SIGALRM, self._receive_alarm)
 
         self._sig_handler()
-        logging.debug("Signal handler called.")
+        logger.debug("Signal handler called.")
 
     def _receive_alarm(self, signum, frame) -> None:
         """Action if SIGALARM is received."""
 
-        logging.debug(f"Received {signal.Signals(signum).name}")
+        logger.debug(f"Received {signal.Signals(signum).name}")
 
         self._alarm_handler()
 
     def _receive_sigusr1(self, signum, frame):
         """Dump all thread stack traces using faulthandler to a file."""
 
-        logging.debug(f"Received {signal.Signals(signum).name}")
+        logger.debug(f"Received {signal.Signals(signum).name}")
 
         dump_file = (
             f"{datetime.now().strftime("%Y%m%d_%H%M%S")}_{FAULTHANDLER_DUMP_FILE}"
@@ -166,12 +167,12 @@ class SignalHandler:
         with open(dump_file, "w") as f:
             # Dump stack traces of all threads into the file
             faulthandler.dump_traceback(file=f, all_threads=True)
-        logging.debug(f"Faulthandler dump written to {dump_file=}.")
+        logger.debug(f"Faulthandler dump written to {dump_file=}.")
 
     def _receive_sigusr2(self, signum, frame):
         """Dump all thread stack traces using the traceback module to another file."""
 
-        logging.debug(f"Received {signal.Signals(signum).name}")
+        logger.debug(f"Received {signal.Signals(signum).name}")
 
         dump_file = f"{datetime.now().strftime("%Y%m%d_%H%M%S")}_{TRACEBACK_DUMP_FILE}"
         with open(dump_file, "w") as f:
@@ -193,7 +194,7 @@ class SignalHandler:
                     f.write("\n")
                     current_frame = current_frame.f_back
 
-        logging.debug(f"Traceback dump written to {dump_file=}.")
+        logger.debug(f"Traceback dump written to {dump_file=}.")
 
 
 class MainServer(BaseServer):
@@ -261,7 +262,7 @@ class MainServer(BaseServer):
                 read_config_file(self.cfg.config_file)
             )
         except Exception as e:
-            logging.error("An error occurred during the update of the config: %s", e)
+            logger.error("An error occurred during the update of the config: %s", e)
             # Using the current config as fallback
 
         return self.cfg.feelancer_cfg
@@ -292,5 +293,5 @@ class MainServer(BaseServer):
         Kills the server.
         """
 
-        logging.info(f"{self._name} killing...\n")
+        logger.info(f"{self._name} killing...\n")
         os._exit(1)

@@ -29,12 +29,14 @@ W = TypeVar("W", bound=Message)
 
 os.environ["GRPC_SSL_CIPHER_SUITES"] = "HIGH+ECDSA"
 
+logger = logging.getLogger(__name__)
+
 
 class LocallyCancelled(Exception): ...
 
 
 def _create_rpc_error_handler(
-    eval_status: Callable[[grpc.StatusCode, str], bool] | None = None
+    eval_status: Callable[[grpc.StatusCode, str], bool] | None = None,
 ) -> Callable[[grpc.RpcError], None]:
     """
     Creates an RPC error handler that logs the error and optionally calls a
@@ -50,7 +52,7 @@ def _create_rpc_error_handler(
 
             # If the eval function returns True, we raise the original grpc error
             if eval_status(code, details) is True:
-                logging.error(msg)
+                logger.error(msg)
                 raise e
 
         # Can occur during rpc streams, when the user cancels the stream.
@@ -59,13 +61,13 @@ def _create_rpc_error_handler(
                 raise LocallyCancelled(details)
 
         # We raise the exception if the server is not available.
-        logging.error(msg)
+        logger.error(msg)
         if code == grpc.StatusCode.UNAVAILABLE:
             raise e
 
         # For unknown errors we log the exception, hence it must not be done
         # by the caller.
-        logging.exception(e)
+        logger.exception(e)
         raise e
 
     return rpc_error_handler
@@ -77,7 +79,7 @@ def default_error_handler(e: Exception) -> None:
     """
 
     msg = f"unexpected error during rpc call: {e}"
-    logging.error(msg)
+    logger.error(msg)
     raise e
 
 
@@ -250,7 +252,7 @@ class StreamDispatcher(Generic[T], BaseServer):
             # If there are messages from the reconciliation source, we yield them
             # first.
             if get_recon_source is not None:
-                logging.info(f"{self._name} reconciliation started")
+                logger.info(f"{self._name} reconciliation started")
                 in_recon = True
 
                 # Sleeping a little bit before fetching from the reconciliation
@@ -263,7 +265,7 @@ class StreamDispatcher(Generic[T], BaseServer):
                     if self._is_stopped:
                         return
 
-                logging.info(f"{self._name} reconciliation stage 1 finished")
+                logger.info(f"{self._name} reconciliation stage 1 finished")
 
             # We yield the messages from the stream until we got an exception.
             while True:
@@ -283,7 +285,7 @@ class StreamDispatcher(Generic[T], BaseServer):
                 # From the first time the queue is empty, the caller will only
                 # receive messages from the stream.
                 if q.qsize() == 0 and in_recon is True:
-                    logging.info(f"{self._name} reconciliation finished")
+                    logger.info(f"{self._name} reconciliation finished")
                     in_recon = False
 
     @default_retry_handler
@@ -317,7 +319,7 @@ class StreamDispatcher(Generic[T], BaseServer):
 
             if isinstance(e, LocallyCancelled):
                 # User ended the stream.
-                logging.debug(f"{self._name} cancelled: {e}")
+                logger.debug(f"{self._name} cancelled: {e}")
 
                 return None
 
@@ -328,7 +330,7 @@ class StreamDispatcher(Generic[T], BaseServer):
 
         # Creating a new stream in the grpc channel
         self._stream = stream_initializer(self._request)
-        logging.debug(f"{self._name} stream started")
+        logger.debug(f"{self._name} stream started")
 
         try:
             self._is_receiving = True

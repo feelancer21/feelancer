@@ -18,6 +18,8 @@ DEFAULT_MIN_TOLERANCE_DELTA = 900  # 15 minutes
 
 T = TypeVar("T")
 
+logger = logging.getLogger(__name__)
+
 
 class Server(Protocol):
     """
@@ -91,11 +93,11 @@ def create_retry_handler(
                     return func(*args, **kwargs)
 
                 except exceptions_raise as e:
-                    logging.error(f"An error occurred: {e}")
+                    logger.error(f"An error occurred: {e}")
                     raise e
 
                 except exceptions_retry as e:
-                    logging.error(f"An error occurred: {e}")
+                    logger.error(f"An error occurred: {e}")
                     if (
                         min_tolerence_time is not None
                         and datetime.now(pytz.utc) > min_tolerence_time
@@ -105,10 +107,10 @@ def create_retry_handler(
                     if retries_left == 0:
                         raise e
 
-                    logging.debug(f"{retries_left=}")
+                    logger.debug(f"{retries_left=}")
                     retries_left -= 1
                     if delay > 0:
-                        logging.debug(f"Waiting {delay}s before retrying...")
+                        logger.debug(f"Waiting {delay}s before retrying...")
                         time.sleep(delay)
 
         return wrapper
@@ -182,15 +184,15 @@ class BaseServer:
 
         err_signal = signal.SIGTERM
         try:
-            logging.info(f"{self._name} starting...")
+            logger.info(f"{self._name} starting...")
             _run_sync(self._sync_start)
 
             if not self._is_stopped:
                 _run_concurrent(self._concurrent_start, err_signal)
-            logging.info(f"{self._name} finished")
+            logger.info(f"{self._name} finished")
         except Exception as e:
-            logging.error(f"{self._name} start: an unexpected error occurred: {e}")
-            logging.exception(f"{self._name} start exception")
+            logger.error(f"{self._name} start: an unexpected error occurred: {e}")
+            logger.exception(f"{self._name} start exception")
 
             # Sending a SIGTERM signal to delegate the graceful shutdown to the
             # signal handler.
@@ -204,12 +206,12 @@ class BaseServer:
         self._is_stopped = True
 
         try:
-            logging.info(f"{self._name} stopping...")
+            logger.info(f"{self._name} stopping...")
             _run_sync(self._sync_stop)
             _run_concurrent(self._concurrent_stop, None)
-            logging.info(f"{self._name} stopped.")
+            logger.info(f"{self._name} stopped.")
         except Exception as e:
-            logging.error(f"{self._name} stop: an unexpected error occurred: {e}")
-            logging.exception(f"{self._name} stop exception")
+            logger.error(f"{self._name} stop: an unexpected error occurred: {e}")
+            logger.exception(f"{self._name} stop exception")
 
             # Waiting for timeout of the signal handler now

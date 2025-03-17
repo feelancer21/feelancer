@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import functools
 import logging
 
 DEFAULT_LOG_FILE = "feelancer.log"
 DEFAULT_LOG_LEVEL = logging.INFO
-DEFAULT_LOG_FORMAT = "%(asctime)s [%(levelname)s]: %(message)s"
+DEFAULT_LOG_FORMAT = "%(asctime)s [%(levelname)s] [%(name)s]: %(message)s"
 
 
 def _eval_log_level(level: str | None):
@@ -34,3 +35,13 @@ def set_logger(logfile: str | None, loglevel: str | None):
         format=DEFAULT_LOG_FORMAT,
         handlers=[logging.FileHandler(logfile)],
     )
+
+
+def log_func_call(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        logger = logging.getLogger(func.__module__)
+        logger.debug(f"Calling {func.__name__}, args: {args=}, kwargs: {kwargs=}")
+        return func(*args, **kwargs)
+
+    return wrapper
