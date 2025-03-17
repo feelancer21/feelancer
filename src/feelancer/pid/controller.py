@@ -41,7 +41,7 @@ LOG_THRESHOLD = 10
 
 
 def _calc_error(
-    liquidity_in: float, liquidity_out: float, target: float, pub_key: str = ""
+    liquidity_in: float, liquidity_out: float, target: float, name: str = ""
 ) -> float:
     """
     Calculates the error for EwmaController.
@@ -56,7 +56,7 @@ def _calc_error(
     try:
         ratio_in = liquidity_in / liquidity_total
         set_point = target / PEER_TARGET_UNIT
-        logging.debug(f"Set point calculated for {pub_key}; {ratio_in=}; {set_point=}")
+        logging.debug(f"Set point calculated for {name}; {ratio_in=}; {set_point=}")
 
         # Interpolate with piecewise linear functions between [-0.5; 0.5]
         if ratio_in >= set_point:
@@ -64,10 +64,10 @@ def _calc_error(
         else:
             error = 0.5 / set_point * (ratio_in - set_point)
 
-        logging.debug(f"Error calculated for {pub_key}; {error=}")
+        logging.debug(f"Error calculated for {name}; {error=}")
     except ZeroDivisionError:
         error = 0
-        logging.debug(f"Error calculated for {pub_key}; {error=}")
+        logging.debug(f"Error calculated for {name}; {error=}")
 
     return error
 
@@ -133,6 +133,7 @@ class SpreadController:
         self,
         ewma_params: EwmaControllerParams,
         timestamp_last: datetime | None,
+        name: str,
     ):
         self.target = 0
         self._channel_collection: ChannelCollection | None = None
@@ -141,6 +142,9 @@ class SpreadController:
             ewma_params,
             timestamp_last,
         )
+
+        # name is used for logging
+        self._name = name
 
     def __call__(
         self,
@@ -179,6 +183,7 @@ class SpreadController:
             liquidity_in=channel_collection.liquidity_in,
             liquidity_out=channel_collection.liquidity_out,
             target=target,
+            name=self._name,
         )
 
         # Set a new spread if recalibration was needed.
@@ -213,16 +218,17 @@ class SpreadController:
         cls,
         ewma_params: EwmaControllerParams,
         history: list[tuple[datetime, EwmaControllerParams, float]],
+        name: str,
     ):
         """
         Initializes a new controller with the provided ewma params and calls
         it for the whole history.
         """
         if len(history) == 0:
-            return cls(ewma_params, None)
+            return cls(ewma_params, None, name)
 
         timestamp_init = history[0][0] - timedelta(seconds=history[0][2])
-        controller = cls(ewma_params, timestamp_init)
+        controller = cls(ewma_params, timestamp_init, name)
 
         for timestamp, params, _ in history:
             controller.ewma_controller(params.error, timestamp)
@@ -327,7 +333,7 @@ class PidController:
         self.spread_controller_map: dict[str, SpreadController] = {}
         for pub_key, params in last_ewma_params.items():
             self.spread_controller_map[pub_key] = SpreadController(
-                params, self.last_timestamp
+                params, self.last_timestamp, pub_key
             )
 
         self.spread_level_controller: EwmaController | None = None
@@ -442,7 +448,7 @@ class PidController:
                         spread_new = None
 
                 spread_controller = self.spread_controller_map[pub_key] = (
-                    SpreadController(params, self.last_timestamp)
+                    SpreadController(params, self.last_timestamp, pub_key)
                 )
 
             # Now we have a spread controller for each peer and we can prepare
@@ -465,7 +471,9 @@ class PidController:
                 logging.info(f"Reinit required for {pub_key}")
                 history = self.pid_store.ewma_params_by_pub_key(pub_key)
                 spread_controller = self.spread_controller_map[pub_key] = (
-                    SpreadController.from_history(peer_config.ewma_controller, history)
+                    SpreadController.from_history(
+                        peer_config.ewma_controller, history, pub_key
+                    )
                 )
                 spread_controller(*call_args)
 
