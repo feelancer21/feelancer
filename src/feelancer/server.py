@@ -293,5 +293,5 @@ class MainServer(BaseServer):
         Kills the server.
         """
 
-        logger.info(f"{self._name} killing...\n")
+        self._logger.info("{Killing...\n")
         os._exit(1)

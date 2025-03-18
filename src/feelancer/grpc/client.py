@@ -204,6 +204,11 @@ class StreamDispatcher(Generic[T], BaseServer):
 
         BaseServer.__init__(self, **kwargs)
 
+        # Want to have the class name in the logger name
+        self._logger: logging.Logger = logging.getLogger(
+            self.__module__ + "." + self.__class__.__name__
+        )
+
         self._new_stream_initializer = new_stream_initializer
         self._request: Message = request
 
@@ -252,7 +257,7 @@ class StreamDispatcher(Generic[T], BaseServer):
             # If there are messages from the reconciliation source, we yield them
             # first.
             if get_recon_source is not None:
-                logger.info(f"{self._name} reconciliation started")
+                self._logger.info("Reconciliation started")
                 in_recon = True
 
                 # Sleeping a little bit before fetching from the reconciliation
@@ -265,7 +270,7 @@ class StreamDispatcher(Generic[T], BaseServer):
                     if self._is_stopped:
                         return
 
-                logger.info(f"{self._name} reconciliation stage 1 finished")
+                self._logger.info("Reconciliation stage 1 finished")
 
             # We yield the messages from the stream until we got an exception.
             while True:
@@ -285,7 +290,7 @@ class StreamDispatcher(Generic[T], BaseServer):
                 # From the first time the queue is empty, the caller will only
                 # receive messages from the stream.
                 if q.qsize() == 0 and in_recon is True:
-                    logger.info(f"{self._name} reconciliation finished")
+                    self._logger.info("Reconciliation finished")
                     in_recon = False
 
     @default_retry_handler
@@ -319,7 +324,7 @@ class StreamDispatcher(Generic[T], BaseServer):
 
             if isinstance(e, LocallyCancelled):
                 # User ended the stream.
-                logger.debug(f"{self._name} cancelled: {e}")
+                self._logger.debug(f"Stream cancelled: {e}")
 
                 return None
 
@@ -330,7 +335,7 @@ class StreamDispatcher(Generic[T], BaseServer):
 
         # Creating a new stream in the grpc channel
         self._stream = stream_initializer(self._request)
-        logger.debug(f"{self._name} stream started")
+        self._logger.debug("Stream started")
 
         try:
             self._is_receiving = True
