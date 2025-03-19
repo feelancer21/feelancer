@@ -29,104 +29,97 @@ W = TypeVar("W", bound=Message)
 
 os.environ["GRPC_SSL_CIPHER_SUITES"] = "HIGH+ECDSA"
 
-logger = logging.getLogger(__name__)
-
 
 class LocallyCancelled(Exception): ...
 
 
-def _create_rpc_error_handler(
-    eval_status: Callable[[grpc.StatusCode, str], bool] | None = None,
-) -> Callable[[grpc.RpcError], None]:
-    """
-    Creates an RPC error handler that logs the error and optionally calls a
-    service specific evaluation function.
-    """
-
-    def rpc_error_handler(e: grpc.RpcError) -> None:
-        code: grpc.StatusCode = e.code()  # type: ignore
-        details: str = e.details()  # type: ignore
-
-        msg = f"RpcError code: {code}; details: {details}"
-        if eval_status is not None:
-
-            # If the eval function returns True, we raise the original grpc error
-            if eval_status(code, details) is True:
-                logger.error(msg)
-                raise e
-
-        # Can occur during rpc streams, when the user cancels the stream.
-        if code == grpc.StatusCode.CANCELLED:
-            if details == "Locally cancelled by application!":
-                raise LocallyCancelled(details)
-
-        # We raise the exception if the server is not available.
-        logger.error(msg)
-        if code == grpc.StatusCode.UNAVAILABLE:
-            raise e
-
-        # For unknown errors we log the exception, hence it must not be done
-        # by the caller.
-        logger.exception(e)
-        raise e
-
-    return rpc_error_handler
-
-
-def default_error_handler(e: Exception) -> None:
-    """
-    Default error handling for exceptions which are not RPC related.
-    """
-
-    msg = f"unexpected error during rpc call: {e}"
-    logger.error(msg)
-    raise e
-
-
-def handle_rpc_stream(stream: Iterable[T]) -> Generator[T]:
-    """
-    Decorator for handling errors during a rpc stream.
-    """
-    rpc_handler = _create_rpc_error_handler()
-    try:
-        yield from stream
-    except grpc.RpcError as e:
-        rpc_handler(e)
-
-
 class RpcResponseHandler:
-    def __init__(
-        self,
-        rpc_error_handler: Callable[[grpc.RpcError], None],
-        error_handler: Callable[[Exception], None],
-    ):
+    def __init__(self, eval_status: Callable[[grpc.StatusCode, str], None]):
 
-        self.rpc_error_handler = rpc_error_handler
-        self.error_handler = error_handler
+        self._eval_status = eval_status
+        self._logger = logging.getLogger(self.__module__)
 
-    def handle_rpc_errors(self, fnc):
-        """Decorator to add more context to RPC errors"""
+    def decorator_rpc_unary(self, fnc):
+        """
+        Decorator for handling error for an unary rpc.
+        """
 
         @wraps(fnc)
         def wrapper(*args, **kwargs):
             try:
                 return fnc(*args, **kwargs)
             except grpc.RpcError as e:
-                self.rpc_error_handler(e)
+                self.rpc_error_handler(e, self._msg_body(fnc, *args, **kwargs))
             except Exception as e:
-                self.error_handler(e)
+                self.exception_handler(e, self._msg_body(fnc, *args, **kwargs))
 
         return wrapper
 
-    @classmethod
-    def with_eval_status(
-        cls, eval_status: Callable[[grpc.StatusCode, str], bool]
-    ) -> RpcResponseHandler:
-        """Creates an RpcResponseHandler that utilizes a specific evaluation
-        function to handle service specific RPC errors.
+    def decorator_rpc_stream(self, fnc):
+        """
+        Decorator for handling errors for a stream rpc.
         """
 
-        return cls(_create_rpc_error_handler(eval_status), default_error_handler)
+        @wraps(fnc)
+        def wrapper(*args, **kwargs):
+            try:
+                stream = fnc(*args, **kwargs)
+                yield from stream
+            except grpc.RpcError as e:
+                self.rpc_error_handler(e, self._msg_body(fnc, *args, **kwargs))
+            except Exception as e:
+                self.exception_handler(e, self._msg_body(fnc, *args, **kwargs))
+
+        return wrapper
+
+    def create_handle_rpc_stream(self, name) -> Callable[[Iterable[T]], Generator[T]]:
+        """
+        Creates a callable which handles the errors during a stream rpc.
+        """
+
+        def handle_rpc_stream(stream: Iterable[T]) -> Generator[T]:
+            msg = f"Error during '{name}'"
+            try:
+                yield from stream
+            except grpc.RpcError as e:
+                self.rpc_error_handler(e, msg)
+            except Exception as e:
+                self.exception_handler(e, msg)
+
+        return handle_rpc_stream
+
+    def _msg_body(self, fnc: Callable, *args, **kwargs) -> str:
+        """
+        Creates more context for the error message with the function name and
+        the arguments.
+        """
+
+        return f"Error during '{fnc.__name__}'; args: {args=}; kwargs: {kwargs=}"
+
+    def exception_handler(self, e: Exception, msg_body: str) -> None:
+        """
+        Default error handling for exceptions which are not RPC related.
+        """
+        raise e
+
+    def rpc_error_handler(self, e: grpc.RpcError, msg_body: str) -> None:
+        code: grpc.StatusCode = e.code()  # type: ignore
+        details: str = e.details()  # type: ignore
+
+        msg = f"{msg_body}; RpcError code: {code}; details: {details}"
+        if self._eval_status is not None:
+
+            # Evaluating the status code and details
+            self._eval_status(code, details)
+
+        # Can occur during rpc streams, when the user cancels the stream.
+        if code == grpc.StatusCode.CANCELLED:
+            if details == "Locally cancelled by application!":
+                raise LocallyCancelled(details)
+
+        # In other cases we raise the exception.
+        self._logger.error(msg)
+        raise e
 
 
 class MacaroonMetadataPlugin(grpc.AuthMetadataPlugin):
@@ -199,6 +192,7 @@ class StreamDispatcher(Generic[T], BaseServer):
         self,
         new_stream_initializer: Callable[..., grpc.UnaryStreamMultiCallable],
         request: Message,
+        handle_rpc_stream: Callable[[Iterable[T]], Generator[T]],
         **kwargs,
     ) -> None:
 
@@ -214,6 +208,7 @@ class StreamDispatcher(Generic[T], BaseServer):
 
         self._message_queues: list[queue.Queue[T | Exception]] = []
         self._stream: Iterable[T] | None = None
+        self._handle_rpc_stream = handle_rpc_stream
 
         # Indicates whether there is a subscriber for the messages.
         self._is_subscribed: bool = False
@@ -333,14 +328,14 @@ class StreamDispatcher(Generic[T], BaseServer):
     @_channel_retry_handler
     def _start_stream(self, stream_initializer: grpc.UnaryStreamMultiCallable) -> None:
 
-        # Creating a new stream in the grpc channel
+        # Creating a new stream in the grpc channel, decorates with an error handler
         self._stream = stream_initializer(self._request)
-        self._logger.debug("Stream started")
 
+        self._logger.debug("Starting stream...")
         try:
             self._is_receiving = True
             # Receiving of the grp messages
-            for m in handle_rpc_stream(self._stream):  # type: ignore
+            for m in self._handle_rpc_stream(self._stream):  # type: ignore
                 self._put_to_queues(m)
 
         except Exception as e:

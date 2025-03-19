@@ -37,19 +37,15 @@ class DialProxFailed(Exception): ...
 class EOF(Exception): ...
 
 
-def _eval_lnd_rpc_status(code: grpc.StatusCode, details: str) -> bool:
+def _eval_lnd_rpc_status(code: grpc.StatusCode, details: str) -> None:
     """
     Callable which evaluates lnd specific grpc error based on StatusCode and
     details. If a criteria is matched, a specific exception is raised or True
     is returned. If no criteria is matched False is returned.
     """
 
-    edge_not_found = "edge not found"
-    wallet_unlocked = "wallet locked, unlock it to enable full RPC access"
-    wrong_macaroon = "verification failed: signature mismatch after caveat verification"
-
     if code == grpc.StatusCode.UNKNOWN:
-        if details == edge_not_found:
+        if details == "edge not found":
             raise EdgeNotFound(details)
 
         if details == "EOF":
@@ -67,16 +63,13 @@ def _eval_lnd_rpc_status(code: grpc.StatusCode, details: str) -> bool:
         ):
             raise DialProxFailed(details)
 
-        # Caller should raise the original exception if the wallet is unlocked
-        # or the macaroon is wrong.
-        if details in [wallet_unlocked, wrong_macaroon]:
-            return True
 
-    return False
+class LndResponseHandler(RpcResponseHandler): ...
 
 
-lnd_resp_handler = RpcResponseHandler.with_eval_status(_eval_lnd_rpc_status)
-lnd_handle_rpc_errors = lnd_resp_handler.handle_rpc_errors
+lnd_resp_handler = LndResponseHandler(_eval_lnd_rpc_status)
+lnd_handle_rpc_unary = lnd_resp_handler.decorator_rpc_unary
+lnd_handle_rpc_stream = lnd_resp_handler.decorator_rpc_stream
 
 
 def set_chan_point(chan_point_str: str, chan_point: ln.ChannelPoint) -> None:
@@ -130,7 +123,7 @@ class LndGrpc(SecureGrpcClient, BaseServer):
 
         return rtrpc.RouterStub(self._channel)
 
-    @lnd_handle_rpc_errors
+    @lnd_handle_rpc_unary
     def connect_peer(
         self,
         pub_key: str,
@@ -161,7 +154,7 @@ class LndGrpc(SecureGrpcClient, BaseServer):
 
         return self._ln_stub.ConnectPeer(req)
 
-    @lnd_handle_rpc_errors
+    @lnd_handle_rpc_unary
     def disconnect_peer(self, pub_key: str) -> ln.DisconnectPeerResponse:
         """
         Calls lnrp.DisconnectPeer
@@ -175,7 +168,7 @@ class LndGrpc(SecureGrpcClient, BaseServer):
 
         return self._ln_stub.DisconnectPeer(ln.DisconnectPeerRequest(pub_key=pub_key))
 
-    @lnd_handle_rpc_errors
+    @lnd_handle_rpc_unary
     def get_chan_info(self, chan_id: int) -> ln.ChannelEdge:
         """
         Calls lnrpc.GetChanInfo
@@ -187,7 +180,7 @@ class LndGrpc(SecureGrpcClient, BaseServer):
         """
         return self._ln_stub.GetChanInfo(ln.ChanInfoRequest(chan_id=chan_id))
 
-    @lnd_handle_rpc_errors
+    @lnd_handle_rpc_unary
     def get_info(self) -> ln.GetInfoResponse:
         """
         Calls lnrpc.GetInfo
@@ -199,7 +192,7 @@ class LndGrpc(SecureGrpcClient, BaseServer):
 
         return self._ln_stub.GetInfo(ln.GetInfoRequest())
 
-    @lnd_handle_rpc_errors
+    @lnd_handle_rpc_unary
     def get_node_info(
         self, pub_key: str, include_channels: bool = False
     ) -> ln.NodeInfo:
@@ -213,7 +206,7 @@ class LndGrpc(SecureGrpcClient, BaseServer):
         req = ln.NodeInfoRequest(pub_key=pub_key, include_channels=include_channels)
         return self._ln_stub.GetNodeInfo(req)
 
-    @lnd_handle_rpc_errors
+    @lnd_handle_rpc_unary
     def list_channels(self) -> ln.ListChannelsResponse:
         """
         Calls lnrpc.ListChannels
@@ -224,7 +217,7 @@ class LndGrpc(SecureGrpcClient, BaseServer):
 
         return self._ln_stub.ListChannels(ln.ListChannelsRequest())
 
-    @lnd_handle_rpc_errors
+    @lnd_handle_rpc_unary
     def update_channel_policy(
         self,
         base_fee_msat: int,
@@ -272,7 +265,7 @@ class LndGrpc(SecureGrpcClient, BaseServer):
 
         return self._ln_stub.UpdateChannelPolicy(req)
 
-    @lnd_handle_rpc_errors
+    @lnd_handle_rpc_stream
     def track_payments(self, no_inflight_updates: bool = False) -> Iterable[ln.Payment]:
 
         req = rt.TrackPaymentsRequest()
@@ -343,8 +336,12 @@ class LndGrpc(SecureGrpcClient, BaseServer):
         req = rt.TrackPaymentsRequest()
         req.no_inflight_updates = no_inflight_updates
 
+        rpc_handler = lnd_resp_handler.create_handle_rpc_stream("TrackPayments")
+
         return LndPaymentDispatcher(
-            new_stream_initializer=lambda: self._router_stub.TrackPayments, request=req
+            new_stream_initializer=lambda: self._router_stub.TrackPayments,
+            request=req,
+            handle_rpc_stream=rpc_handler,
         )
 
 

@@ -100,7 +100,7 @@ def _create_yield_logger(
                     count = 0
                 yield item
 
-            logger.error(f"Processed {count} payments")
+            logger.info(f"Processed {count} payments")
 
         return wrapper
 
