@@ -101,6 +101,27 @@ def _create_yield_logger(
     return decorator
 
 
+class LNDPaymentReconSource:
+    def __init__(
+        self,
+        lnd: LndGrpc,
+        process_payment: Callable[[ln.Payment, bool], Generator[HTLCAttempt]],
+    ):
+        self._process_payment = process_payment
+
+        recon_start = datetime.datetime.now(tz=pytz.utc) - datetime.timedelta(
+            seconds=RECON_TIME_INTERVAL
+        )
+        self._paginator = lnd.paginate_payments(
+            include_incomplete=True,
+            creation_date_start=int(recon_start.timestamp()),
+        )
+
+    def items(self) -> Generator[Generator[HTLCAttempt]]:
+        for p in self._paginator:
+            yield self._process_payment(p, True)
+
+
 class LNDPaymentTracker:
 
     def __init__(self, lnd: LndGrpc, db: FeelancerDB):
@@ -114,14 +135,8 @@ class LNDPaymentTracker:
 
         # get_recon_source returns a new paginator for ListPayments over
         # the last 30 days.
-        def get_recon_source() -> Generator[ln.Payment]:
-            recon_start = datetime.datetime.now(tz=pytz.utc) - datetime.timedelta(
-                seconds=RECON_TIME_INTERVAL
-            )
-            return self._lnd.lnd.paginate_payments(
-                include_incomplete=True,
-                creation_date_start=int(recon_start.timestamp()),
-            )
+        def get_recon_source() -> LNDPaymentReconSource:
+            return LNDPaymentReconSource(self._lnd.lnd, self._process_payment)
 
         dispatcher = self._lnd.lnd.track_payments_dispatcher
         stream = dispatcher.subscribe(self._process_payment, get_recon_source)

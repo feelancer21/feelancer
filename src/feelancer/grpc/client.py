@@ -7,7 +7,7 @@ import queue
 import time
 from collections.abc import Callable, Generator, Iterable, Sequence
 from functools import wraps
-from typing import Generic, TypeVar
+from typing import Generic, Protocol, TypeVar
 
 import grpc
 from google.protobuf.message import Message
@@ -182,6 +182,11 @@ _channel_retry_handler = create_retry_handler(
 )
 
 
+class ReconSource(Generic[V], Protocol):
+
+    def items(self) -> Generator[V]: ...
+
+
 class StreamDispatcher(Generic[T], BaseServer):
     """
     Receives grpc messages of Type T from an stream and handles the errors.
@@ -222,7 +227,7 @@ class StreamDispatcher(Generic[T], BaseServer):
     def subscribe(
         self,
         convert: Callable[[T, bool], V],
-        get_recon_source: Callable[..., Generator[T]] | None = None,
+        get_recon_source: Callable[..., ReconSource[V]] | None = None,
     ) -> Generator[V]:
         """Returns a generator for all new incoming messages."""
 
@@ -258,8 +263,9 @@ class StreamDispatcher(Generic[T], BaseServer):
                 # Sleeping a little bit before fetching from the reconciliation
                 # source.
                 time.sleep(SLEEP_RECON)
-                for m in get_recon_source():
-                    yield convert(m, in_recon)
+                recon_source = get_recon_source()
+                for m in recon_source.items():
+                    yield m
 
                     # Safety check for big reconciliation sources.
                     if self._is_stopped:
