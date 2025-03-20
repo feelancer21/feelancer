@@ -4,7 +4,7 @@ from datetime import timedelta
 
 from sqlalchemy import Delete, Select
 
-from feelancer.base import BaseServer, default_retry_handler
+from feelancer.base import BaseServer
 from feelancer.tasks.runner import RunnerRequest, RunnerResult
 
 from .data import (
@@ -193,11 +193,10 @@ class PaytrackService(BaseServer):
 
         return RunnerResult()
 
-    @default_retry_handler
     def _start_server(self) -> None:
         """Start storing new payments."""
 
-        self._payment_tracker.store_payments()
+        self._payment_tracker.start()
 
     def _stop_server(self) -> None:
         # Service ends when the incoming payment stream has exhausted.

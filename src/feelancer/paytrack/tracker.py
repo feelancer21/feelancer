@@ -62,7 +62,7 @@ def _sha256_payment(payment: ln.Payment | ln.HTLCAttempt) -> str:
 
 class PaymentTracker(Protocol):
 
-    def store_payments(self) -> None: ...
+    def start(self) -> None: ...
 
     """
     Stores the payments in the database.
@@ -85,14 +85,16 @@ def _create_yield_logger(
         @functools.wraps(generator_func)
         def wrapper(*args: Any, **kwargs: Any):
             count: int = 0
-            for item in generator_func(*args, **kwargs):
-                count += 1
-                if count == interval:
-                    logger.info(f"Processed {count} payments")
-                    count = 0
-                yield item
+            try:
+                for item in generator_func(*args, **kwargs):
+                    count += 1
+                    if count == interval:
+                        logger.info(f"Processed {count} payments")
+                        count = 0
+                    yield item
 
-            logger.info(f"Processed {count} payments")
+            finally:
+                logger.info(f"Processed {count} payments")
 
         return wrapper
 
@@ -108,8 +110,23 @@ class LNDPaymentTracker:
         self._store = PaymentTrackerStore(db, self._pub_key)
         self._is_stopped = False
 
-    def store_payments(self) -> None:
-        self._store.add_attempts(self._attempts_from_stream())
+    def start(self) -> None:
+
+        # get_recon_source returns a new paginator for ListPayments over
+        # the last 30 days.
+        def get_recon_source() -> Generator[ln.Payment]:
+            recon_start = datetime.datetime.now(tz=pytz.utc) - datetime.timedelta(
+                seconds=RECON_TIME_INTERVAL
+            )
+            return self._lnd.lnd.paginate_payments(
+                include_incomplete=True,
+                creation_date_start=int(recon_start.timestamp()),
+            )
+
+        dispatcher = self._lnd.lnd.track_payments_dispatcher
+        stream = dispatcher.subscribe(self._process_payment, get_recon_source)
+
+        self._store_payments(stream)
 
     def pre_sync_start(self) -> None:
         """
@@ -158,24 +175,16 @@ class LNDPaymentTracker:
 
             yield from self._process_payment(payment, False)
 
-    @_create_yield_logger(interval=100)
-    def _attempts_from_stream(self) -> Generator[HTLCAttempt]:
+    @default_retry_handler
+    def _store_payments(self, stream: Generator[Generator[HTLCAttempt]]) -> None:
 
-        # get_recon_source returns a new paginator for ListPayments over
-        # the last 30 days.
-        def get_recon_source() -> Generator[ln.Payment]:
-            recon_start = datetime.datetime.now(tz=pytz.utc) - datetime.timedelta(
-                seconds=RECON_TIME_INTERVAL
-            )
-            return self._lnd.lnd.paginate_payments(
-                include_incomplete=True,
-                creation_date_start=int(recon_start.timestamp()),
-            )
+        @_create_yield_logger(interval=100)
+        def attempts_from_stream() -> Generator[HTLCAttempt]:
+            for s in stream:
+                # each s is a generator of the htlc attempt for one payment
+                yield from s
 
-        dispatcher = self._lnd.lnd.track_payments_dispatcher
-        for s in dispatcher.subscribe(self._process_payment, get_recon_source):
-            # each s is a generator of the htlc attempt for one payment
-            yield from s
+        self._store.add_attempts(attempts_from_stream())
 
     def _process_payment(
         self, p: ln.Payment, recon_running: bool
