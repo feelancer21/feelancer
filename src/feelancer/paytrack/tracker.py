@@ -60,14 +60,6 @@ def _sha256_payment(payment: ln.Payment | ln.HTLCAttempt) -> str:
     return hashlib.sha256(payment.SerializeToString(deterministic=True)).hexdigest()
 
 
-def _create_failure(failure: ln.Failure, source_hop: Hop | None) -> Failure:
-    return Failure(
-        code=FailureCode(failure.code),
-        source_index=failure.failure_source_index,
-        source_hop=source_hop,
-    )
-
-
 class PaymentTracker(Protocol):
 
     def store_payments(self) -> None: ...
@@ -211,7 +203,7 @@ class LNDPaymentTracker:
                 logger.debug(f"Payment reconciliation: {p.payment_index=} not found.")
                 pass
 
-        payment = self._convert_payment(p)
+        payment = self._create_payment(p)
 
         # Check if we have already stored the payment request in the database.
         # Maybe from the last run.
@@ -227,9 +219,9 @@ class LNDPaymentTracker:
             )
 
         for h in p.htlcs:
-            yield self._convert_htlc_attempt(h, payment)
+            yield self._create_htlc_attempt(h, payment)
 
-    def _convert_payment(self, payment: ln.Payment) -> Payment:
+    def _create_payment(self, payment: ln.Payment) -> Payment:
         """
         Converts a payment object from the LND gRPC API to a Payment
         """
@@ -251,7 +243,7 @@ class LNDPaymentTracker:
             resolve_info=resolve_info,
         )
 
-    def _convert_htlc_attempt(
+    def _create_htlc_attempt(
         self, attempt: ln.HTLCAttempt, payment: Payment
     ) -> HTLCAttempt:
 
@@ -265,9 +257,9 @@ class LNDPaymentTracker:
         else:
             last_used_hop_index = None
 
-        route, path = self._convert_route(attempt.route)
+        route, path = self._create_route(attempt.route)
 
-        resolve_info = self._convert_htlc_resolve_info(
+        resolve_info = self._create_htlc_resolve_info(
             attempt, route.hops, last_used_hop_index, path
         )
 
@@ -281,7 +273,7 @@ class LNDPaymentTracker:
 
         return htlc_attempt
 
-    def _convert_route(self, route: ln.Route) -> tuple[Route, list[int]]:
+    def _create_route(self, route: ln.Route) -> tuple[Route, list[int]]:
 
         hops: list[Hop] = []
         path: list[int] = []
@@ -328,7 +320,7 @@ class LNDPaymentTracker:
 
         return res_route, path
 
-    def _convert_htlc_resolve_info(
+    def _create_htlc_resolve_info(
         self,
         attempt: ln.HTLCAttempt,
         hops: list[Hop],
@@ -360,7 +352,7 @@ class LNDPaymentTracker:
                     f"Failure source index out of bounds: {attempt.failure.failure_source_index=}, ",
                     f"{attempt.attempt_id=}",
                 )
-            failure = _create_failure(attempt.failure, source_hop)
+            failure = self._create_failure(attempt.failure, source_hop)
         else:
             failure = None
 
@@ -376,6 +368,13 @@ class LNDPaymentTracker:
             failure=failure,
             path_success_id=path_success_id,
             num_hops_successful=last_used_hop_index,
+        )
+
+    def _create_failure(self, failure: ln.Failure, source_hop: Hop | None) -> Failure:
+        return Failure(
+            code=FailureCode(failure.code),
+            source_index=failure.failure_source_index,
+            source_hop=source_hop,
         )
 
     def _get_graph_node_id(self, pub_key: str) -> int:
