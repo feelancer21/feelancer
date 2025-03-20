@@ -117,9 +117,9 @@ class LNDPaymentReconSource:
             creation_date_start=int(recon_start.timestamp()),
         )
 
-    def items(self) -> Generator[Generator[HTLCAttempt]]:
+    def items(self) -> Generator[HTLCAttempt]:
         for p in self._paginator:
-            yield self._process_payment(p, True)
+            yield from self._process_payment(p, True)
 
 
 class LNDPaymentTracker:
@@ -191,13 +191,14 @@ class LNDPaymentTracker:
             yield from self._process_payment(payment, False)
 
     @default_retry_handler
-    def _store_payments(self, stream: Generator[Generator[HTLCAttempt]]) -> None:
+    def _store_payments(self, stream: Generator[HTLCAttempt]) -> None:
+        """
+        Fetches the payments from the subscription and stores them in the database.
+        """
 
         @_create_yield_logger(interval=100)
         def attempts_from_stream() -> Generator[HTLCAttempt]:
-            for s in stream:
-                # each s is a generator of the htlc attempt for one payment
-                yield from s
+            yield from stream
 
         self._store.add_attempts(attempts_from_stream())
 

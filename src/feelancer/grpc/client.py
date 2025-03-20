@@ -226,7 +226,7 @@ class StreamDispatcher(Generic[T], BaseServer):
 
     def subscribe(
         self,
-        convert: Callable[[T, bool], V],
+        convert: Callable[[T, bool], Generator[V]],
         get_recon_source: Callable[..., ReconSource[V]] | None = None,
     ) -> Generator[V]:
         """Returns a generator for all new incoming messages."""
@@ -261,7 +261,7 @@ class StreamDispatcher(Generic[T], BaseServer):
                 in_recon = True
 
                 # Sleeping a little bit before fetching from the reconciliation
-                # source.
+                # source. This is to fill up the queue with messages from the stream.
                 time.sleep(SLEEP_RECON)
                 recon_source = get_recon_source()
                 for m in recon_source.items():
@@ -286,7 +286,7 @@ class StreamDispatcher(Generic[T], BaseServer):
                 if isinstance(m, Exception):
                     break
 
-                yield convert(m, in_recon)
+                yield from convert(m, in_recon)
 
                 # From the first time the queue is empty, the caller will only
                 # receive messages from the stream.
