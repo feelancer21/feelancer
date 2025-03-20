@@ -23,7 +23,7 @@ SLEEP_RECON = 5
 
 T = TypeVar("T", bound=Message)
 U = TypeVar("U", bound=Message)
-V = TypeVar("V")
+V = TypeVar("V", covariant=True)
 W = TypeVar("W", bound=Message)
 
 
