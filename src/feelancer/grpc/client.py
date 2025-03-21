@@ -185,7 +185,17 @@ _channel_retry_handler = create_retry_handler(
 
 class ReconSource(Generic[V], Protocol):
 
-    def items(self) -> Generator[V]: ...
+    def items(self) -> Generator[V]:
+        """
+        Generates the messages for the reconciliation.
+        """
+        ...
+
+    def stop(self) -> None:
+        """
+        Stops the generation of items.
+        """
+        ...
 
 
 class StreamDispatcher(Generic[T], BaseServer):
@@ -265,12 +275,14 @@ class StreamDispatcher(Generic[T], BaseServer):
                 # source. This is to fill up the queue with messages from the stream.
                 time.sleep(SLEEP_RECON)
                 recon_source = get_recon_source()
+
+                self._register_sync_stopper(recon_source.stop)
+
+                if self._is_stopped:
+                    return None
+
                 for m in recon_source.items():
                     yield m
-
-                    # Safety check for big reconciliation sources.
-                    if self._is_stopped:
-                        return
 
                 self._logger.info("Reconciliation stage 1 finished")
 

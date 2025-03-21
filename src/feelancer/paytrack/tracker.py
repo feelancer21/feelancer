@@ -116,10 +116,17 @@ class LNDPaymentReconSource:
             include_incomplete=True,
             creation_date_start=int(recon_start.timestamp()),
         )
+        self._is_stopped = False
 
     def items(self) -> Generator[HTLCAttempt]:
         for p in self._paginator:
             yield from self._process_payment(p, True)
+
+            if self._is_stopped:
+                self._paginator.close()
+
+    def stop(self) -> None:
+        self._is_stopped = True
 
 
 class LNDPaymentTracker:
