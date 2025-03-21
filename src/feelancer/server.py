@@ -24,6 +24,7 @@ from .pid.data import PidConfig
 from .pid.service import PidService
 from .reconnect.reconnector import LNDReconnector
 from .reconnect.service import ReconnectConfig, ReconnectService
+from .retry import stop_retry
 from .tasks.runner import TaskRunner
 from .utils import read_config_file
 
@@ -201,6 +202,9 @@ class MainServer(BaseServer):
     def __init__(self, cfg: MainConfig) -> None:
         super().__init__()
         self.cfg = cfg
+
+        # Stopping all retry handlers if the server is stopped.
+        self._register_sync_stopper(stop_retry)
 
         # Setting up the signal handler for SIGTERM and SIGINT.
         SignalHandler(self.stop, self.kill, self.cfg.timeout)

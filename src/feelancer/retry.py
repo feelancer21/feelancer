@@ -1,5 +1,5 @@
 import logging
-import time
+import threading
 from collections.abc import Callable
 from datetime import datetime, timedelta
 from functools import wraps
@@ -11,6 +11,13 @@ DEFAULT_EXCEPTIONS_RAISE = ()
 DEFAULT_MAX_RETRIES = 5
 DEFAULT_DELAY = 300  # 5 minutes
 DEFAULT_MIN_TOLERANCE_DELTA = 900  # 15 minutes
+
+
+stop_event = threading.Event()
+
+
+def stop_retry():
+    stop_event.set()
 
 
 def create_retry_handler(
@@ -63,7 +70,13 @@ def create_retry_handler(
                     retries_left -= 1
                     if delay > 0:
                         logger.debug(f"Waiting {delay}s before retrying...")
-                        time.sleep(delay)
+
+                        # Wait for the delay seconds before retrying.
+                        stop_event.wait(delay)
+
+                        # If the server was stopped we stop retrying.
+                        if stop_event.is_set():
+                            return None
 
         return wrapper
 
