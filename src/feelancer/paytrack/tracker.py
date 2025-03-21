@@ -7,11 +7,11 @@ from typing import Any, Protocol
 
 import pytz
 
-from feelancer.base import default_retry_handler
 from feelancer.data.db import FeelancerDB
 from feelancer.lightning.lnd import LNDClient
 from feelancer.lnd.client import LndGrpc
 from feelancer.lnd.grpc_generated import lightning_pb2 as ln
+from feelancer.retry import default_retry_handler
 
 from .data import (
     GraphNodeNotFound,

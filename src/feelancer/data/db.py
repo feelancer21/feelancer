@@ -12,7 +12,7 @@ from sqlalchemy import URL, Row, create_engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
-from feelancer.base import create_retry_handler
+from feelancer.retry import create_retry_handler
 
 if TYPE_CHECKING:
     from sqlalchemy import Delete, Select

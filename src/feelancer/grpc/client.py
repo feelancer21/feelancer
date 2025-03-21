@@ -12,7 +12,8 @@ from typing import Generic, Protocol, TypeVar
 import grpc
 from google.protobuf.message import Message
 
-from feelancer.base import BaseServer, create_retry_handler, default_retry_handler
+from feelancer.base import BaseServer
+from feelancer.retry import create_retry_handler, default_retry_handler
 
 DEFAULT_MESSAGE_SIZE_MB = 50 * 1024 * 1024
 DEFAULT_MAX_CONNECTION_IDLE_MS = 30000
