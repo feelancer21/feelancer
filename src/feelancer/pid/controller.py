@@ -58,7 +58,9 @@ def _calc_error(
     try:
         ratio_in = liquidity_in / liquidity_total
         set_point = target / PEER_TARGET_UNIT
-        logger.debug(f"Set point calculated for {name}; {ratio_in=}; {set_point=}")
+        logger.debug(
+            f"Set point calculated for {name}; {ratio_in:=.6f}; {set_point=:.6f}"
+        )
 
         # Interpolate with piecewise linear functions between [-0.5; 0.5]
         if ratio_in >= set_point:
@@ -66,10 +68,10 @@ def _calc_error(
         else:
             error = 0.5 / set_point * (ratio_in - set_point)
 
-        logger.debug(f"Error calculated for {name}; {error=}")
+        logger.debug(f"Error calculated for {name}; {error=:.6f}")
     except ZeroDivisionError:
         error = 0
-        logger.debug(f"Error calculated for {name}; {error=}")
+        logger.debug(f"Error calculated for {name}; {error=:.6f}")
 
     return error
 
@@ -190,7 +192,7 @@ class SpreadController:
 
         # Set a new spread if recalibration was needed.
         if spread_new is not None:
-            logger.debug(f"Set {spread_new=}")
+            logger.debug(f"Set {spread_new=:,.2f}")
             self.ewma_controller.control_variable = spread_new
 
         # Now we are able to call the actual ewma controller
@@ -367,7 +369,7 @@ class PidController:
         logger.debug(
             f"Called margin controller with args: timestamp {timestamp_start}; "
             f"params {self.config.margin.mr_controller}; result margin: "
-            f"{self.margin_controller.margin}"
+            f"{self.margin_controller.margin:,.2f}"
         )
 
         # Setup of the channel aggregator. It needs the current block height to
@@ -390,7 +392,7 @@ class PidController:
 
         # The default which is used if there is no target specified.
         target_default = aggregator.target_default
-        logger.debug(f"{target_default=}")
+        logger.debug(f"Calculated {target_default=:,.2f}")
 
         # We want to remove unused spread controllers at the end. That's why
         # we store current pub keys.
@@ -420,9 +422,9 @@ class PidController:
                 spread_new = channel_collection.ref_fee_rate - margin_peer
                 logger.debug(
                     f"Reference fee rate changed for {pub_key=}; "
-                    f"calculated {spread_new=}; "
+                    f"calculated {spread_new=:,.2f}; "
                     f"{channel_collection.ref_fee_rate_last=}; "
-                    f"{channel_collection.ref_fee_rate=}; {margin_peer=}"
+                    f"{channel_collection.ref_fee_rate=}; {margin_peer=:,.2f}"
                 )
 
                 # Make sure that the other channels have the same fee rate after
@@ -481,9 +483,9 @@ class PidController:
 
             logger.debug(
                 f"Called spread controller for {pub_key} with args: "
-                f"timestamp {timestamp_start}; params {peer_config.ewma_controller}; "
-                f"target {target}; margin peer {margin_peer}; result spread: "
-                f"{spread_controller.spread}"
+                f"{timestamp_start=}; params {peer_config.ewma_controller}; "
+                f"{target=:,.2f}; {margin_peer=:,.2f}; "
+                f"{spread_controller.spread=:,.2f}"
             )
 
             # Force update to make sure that the new fee rate is broadcasted or
@@ -575,8 +577,9 @@ class PidController:
                 error = spread_diff_bounded / (2 * max_dev)
                 logger.debug(
                     f"Error calculated for spread level controller: "
-                    f"{avg_spread_target=}, {avg_spread_remote=}, {target_ppm=}, "
-                    f"{spread_diff=}, {max_dev=}, {spread_diff_bounded=}, {error=}"
+                    f"{avg_spread_target=:.2f}, {avg_spread_remote=:.2f}, "
+                    f"{target_ppm=:.2f}, {spread_diff=:.2f}, {max_dev=}, "
+                    f"{spread_diff_bounded=:.2f}, {error=:.6f}"
                 )
             except ZeroDivisionError:
                 logger.error(
@@ -607,8 +610,8 @@ class PidController:
             self.spread_level_controller(error=error, timestamp=timestamp_start)
             shift = self.spread_level_controller.gain
             logger.debug(
-                f"Called spread level controller: {timestamp_start=}, {error=}, "
-                f"spread level controller: {config.spread_level_params}, {shift=}"
+                f"Called spread level controller: {timestamp_start=}, {error=:.6f}, "
+                f"spread level controller: {config.spread_level_params}, {shift=:.6f}"
             )
 
         else:
@@ -616,7 +619,7 @@ class PidController:
             self.spread_level_controller = None
 
         if shift != 0:
-            logger.debug(f"Shifting spread controllers by {shift}")
+            logger.debug(f"Shifting spread controllers by {shift=:.6f}")
             for c in self.spread_controller_map.values():
                 c.ewma_controller.apply_shift(shift)
 
