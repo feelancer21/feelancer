@@ -239,15 +239,34 @@ class StreamDispatcher(Generic[T], BaseServer):
         self,
         convert: Callable[[T, bool], Generator[V]],
         get_recon_source: Callable[..., ReconSource[V]] | None = None,
-    ) -> Generator[V]:
-        """Returns a generator for all new incoming messages."""
+    ) -> Callable[..., Generator[V]]:
+        """
+        Returns a callable which starts a stream of all received messages
+        converted to the type V.
+        """
 
         # Creates a mew queue and makes it available for the subscriber of the
         # grpc stream.
-        q = queue.Queue()
+        q: queue.Queue[T | Exception] = queue.Queue()
         self._message_queues.append(q)
 
         self._is_subscribed = True
+
+        # We return a callable which enables the subscriber to start a stream.
+        # It gives the caller the possibility to restart the stream with a
+        # new reconciliation when necessary.
+        def start_stream():
+            return self._start_subscriber_stream(q, convert, get_recon_source)
+
+        return start_stream
+
+    def _start_subscriber_stream(
+        self,
+        q: queue.Queue[T | Exception],
+        convert: Callable[[T, bool], Generator[V]],
+        get_recon_source: Callable[..., ReconSource[V]] | None = None,
+    ) -> Generator[V]:
+        """Returns a generator for all new incoming messages converted to V."""
 
         while True:
 
@@ -281,8 +300,7 @@ class StreamDispatcher(Generic[T], BaseServer):
                 if self._is_stopped:
                     return None
 
-                for m in recon_source.items():
-                    yield m
+                yield from recon_source.items()
 
                 self._logger.info("Reconciliation stage 1 finished")
 

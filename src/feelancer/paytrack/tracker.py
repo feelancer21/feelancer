@@ -146,9 +146,9 @@ class LNDPaymentTracker:
             return LNDPaymentReconSource(self._lnd.lnd, self._process_payment)
 
         dispatcher = self._lnd.lnd.track_payments_dispatcher
-        stream = dispatcher.subscribe(self._process_payment, get_recon_source)
+        start_stream = dispatcher.subscribe(self._process_payment, get_recon_source)
 
-        self._store_payments(stream)
+        self._store_payments(start_stream)
 
     def pre_sync_start(self) -> None:
         """
@@ -198,14 +198,19 @@ class LNDPaymentTracker:
             yield from self._process_payment(payment, False)
 
     @default_retry_handler
-    def _store_payments(self, stream: Generator[HTLCAttempt]) -> None:
+    def _store_payments(
+        self, start_stream: Callable[..., Generator[HTLCAttempt]]
+    ) -> None:
         """
         Fetches the payments from the subscription and stores them in the database.
         """
 
+        # In every retry we initialize a new generator. This is necessary because
+        # the generator is closed after the first iteration. Moreover we need
+        # need, e.g. in the case an exception when storing the data.
         @_create_yield_logger(interval=100)
         def attempts_from_stream() -> Generator[HTLCAttempt]:
-            yield from stream
+            yield from start_stream()
 
         self._store.add_attempts(attempts_from_stream())
 
