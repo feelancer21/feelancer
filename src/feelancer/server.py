@@ -24,14 +24,14 @@ from .reconnect.reconnector import LNDReconnector
 from .reconnect.service import ReconnectConfig, ReconnectService
 from .retry import stop_retry
 from .tasks.runner import TaskRunner
+from .tracker.payments.lnd import LNDPaymentTracker
 from .tracker.payments.service import PaytrackConfig, PaytrackService
-from .tracker.payments.tracker import LNDPaymentTracker
 from .utils import read_config_file
 
 if TYPE_CHECKING:
     from feelancer.lightning.client import LightningClient
     from feelancer.reconnect.reconnector import Reconnector
-    from feelancer.tracker.payments.tracker import PaymentTracker
+    from feelancer.tracker.tracker import Tracker
 
 DEFAULT_TIMEOUT = 180
 TRACEBACK_DUMP_FILE = "traceback_dump.txt"
@@ -48,7 +48,7 @@ class MainConfig:
     log_level: str | None
     feelancer_cfg: FeelancerConfig
     reconnector: Reconnector
-    payment_tracker: PaymentTracker
+    payment_tracker: Tracker
     timeout: int
 
     @classmethod
@@ -66,7 +66,7 @@ class MainConfig:
             lndgrpc = LndGrpc.from_file(**config_dict["lnd"])
             lnclient: LightningClient = LNDClient(lndgrpc)
             reconnector: Reconnector = LNDReconnector(lndgrpc)
-            payment_tracker: PaymentTracker = LNDPaymentTracker(lndgrpc, db)
+            payment_tracker: Tracker = LNDPaymentTracker(lndgrpc, db)
         else:
             raise ValueError("'lnd' section is not included in config-file")
 
