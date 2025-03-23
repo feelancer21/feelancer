@@ -1,11 +1,8 @@
 import logging
-from collections.abc import Callable, Iterable
 from datetime import timedelta
 
-from sqlalchemy import Delete, Select
-
 from feelancer.tasks.runner import RunnerRequest, RunnerResult
-from feelancer.tracker.service import TrackerBaseService
+from feelancer.tracker.proto import TrackerBaseService
 
 from .data import (
     delete_failed_htlc_attempts,
@@ -111,22 +108,10 @@ class PaytrackConfig:
             raise ValueError(f"Invalid config: {e}")
 
 
-class PaytrackService[PaytrackConfig](TrackerBaseService):
+class PaytrackService(TrackerBaseService[PaytrackConfig]):
     """
     Receiving of payment data from a stream and storing in the database.
     """
-
-    def __init__(
-        self,
-        get_paytrack_config: Callable[..., PaytrackConfig | None],
-        db_to_csv: Callable[[Select[tuple], str, list[str] | None], None],
-        db_delete_data: Callable[[Iterable[Delete[tuple]]], None],
-    ) -> None:
-        super().__init__(
-            get_config=get_paytrack_config,
-            db_to_csv=db_to_csv,
-            db_delete_data=db_delete_data,
-        )
 
     def run(self, request: RunnerRequest) -> RunnerResult:
         """
