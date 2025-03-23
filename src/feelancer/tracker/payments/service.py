@@ -6,7 +6,6 @@ from sqlalchemy import Delete, Select
 
 from feelancer.tasks.runner import RunnerRequest, RunnerResult
 from feelancer.tracker.service import TrackerBaseService
-from feelancer.tracker.tracker import Tracker
 
 from .data import (
     delete_failed_htlc_attempts,
@@ -119,18 +118,14 @@ class PaytrackService[PaytrackConfig](TrackerBaseService):
 
     def __init__(
         self,
-        payment_tracker: Tracker,
         get_paytrack_config: Callable[..., PaytrackConfig | None],
         db_to_csv: Callable[[Select[tuple], str, list[str] | None], None],
         db_delete_data: Callable[[Iterable[Delete[tuple]]], None],
-        **kwargs,
     ) -> None:
         super().__init__(
-            tracker=payment_tracker,
             get_config=get_paytrack_config,
             db_to_csv=db_to_csv,
             db_delete_data=db_delete_data,
-            **kwargs,
         )
 
     def run(self, request: RunnerRequest) -> RunnerResult:
