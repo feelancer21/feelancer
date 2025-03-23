@@ -16,14 +16,16 @@ from typing import TYPE_CHECKING, TypeVar
 from .base import BaseServer
 from .config import DictInitializedConfig, FeelancerConfig
 from .data.db import FeelancerDB
+from .lightning.data import LightningStore
 from .lightning.lnd import LNDClient
 from .lnd.client import LndGrpc
-from .pid.data import PidConfig
+from .pid.data import PidConfig, PidStore
 from .pid.service import PidService
 from .reconnect.reconnector import LNDReconnector
 from .reconnect.service import ReconnectConfig, ReconnectService
 from .retry import stop_retry
 from .tasks.runner import TaskRunner
+from .tracker.data import TrackerStore
 from .tracker.payments.lnd import LNDPaymentTracker
 from .tracker.payments.service import PaytrackConfig, PaytrackService
 from .utils import read_config_file
@@ -46,12 +48,14 @@ logger = logging.getLogger(__name__)
 class MainConfig:
     db: FeelancerDB
     lnclient: LightningClient
+    ln_store: LightningStore
     config_file: str
     log_file: str | None
     log_level: str | None
     feelancer_cfg: FeelancerConfig
     reconnector: Reconnector
     payment_tracker: Tracker
+    tracker_store: TrackerStore
     timeout: int
 
     @classmethod
@@ -69,7 +73,11 @@ class MainConfig:
             lndgrpc = LndGrpc.from_file(**config_dict["lnd"])
             lnclient: LightningClient = LNDClient(lndgrpc)
             reconnector: Reconnector = LNDReconnector(lndgrpc)
-            payment_tracker: Tracker = LNDPaymentTracker(lndgrpc, db)
+
+            pub_key = lnclient.pubkey_local
+            ln_store = LightningStore(db, pub_key)
+            tracker_store = TrackerStore(db, ln_store.ln_node_id)
+            payment_tracker: Tracker = LNDPaymentTracker(lnclient, tracker_store)
         else:
             raise ValueError("'lnd' section is not included in config-file")
 
@@ -96,12 +104,14 @@ class MainConfig:
         return cls(
             db,
             lnclient,
+            ln_store,
             config_file,
             logfile,
             loglevel,
             feelancer_config,
             reconnector,
             payment_tracker,
+            tracker_store,
             timeout,
         )
 
@@ -224,9 +234,10 @@ class MainServer(BaseServer):
         self._register_sub_server(runner)
 
         # pid service is responsible for updating the fees with the pid model.
+        pid_store = PidStore(self.cfg.db, self.cfg.lnclient.pubkey_local)
         pid = PidService(
-            self.cfg.db,
-            self.cfg.lnclient.pubkey_local,
+            self.cfg.ln_store,
+            pid_store,
             self._get_config_reader("pid", PidConfig),
         )
         runner.register_task(pid.run)
