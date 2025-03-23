@@ -6,6 +6,7 @@ from sqlalchemy import Delete, Select
 
 from feelancer.base import BaseServer
 from feelancer.tasks.runner import RunnerRequest, RunnerResult
+from feelancer.tracker.tracker import Tracker
 
 from .data import (
     delete_failed_htlc_attempts,
@@ -14,7 +15,6 @@ from .data import (
     query_liquidity_locked_per_htlc,
     query_slow_nodes,
 )
-from .tracker import PaymentTracker
 
 DEFAULT_NODE_SPEED_WRITE_CSV = False
 DEFAULT_NODE_SPEED_CSV_FILE = "~/.feelancer/node_speed.csv"
@@ -119,7 +119,7 @@ class PaytrackService(BaseServer):
 
     def __init__(
         self,
-        payment_tracker: PaymentTracker,
+        payment_tracker: Tracker,
         get_paytrack_config: Callable[..., PaytrackConfig | None],
         to_csv: Callable[[Select[tuple], str, list[str] | None], None],
         delete_data: Callable[[Iterable[Delete[tuple]]], None],
