@@ -3,7 +3,7 @@ import functools
 import hashlib
 import logging
 from collections.abc import Callable, Generator, Iterable
-from typing import Any, Protocol
+from typing import Any
 
 import pytz
 
@@ -58,18 +58,6 @@ def _sha256_path(path: Iterable[int]) -> str:
 def _sha256_payment(payment: ln.Payment | ln.HTLCAttempt) -> str:
     """Creates the sha256sum of the payment object."""
     return hashlib.sha256(payment.SerializeToString(deterministic=True)).hexdigest()
-
-
-class PaymentTracker(Protocol):
-
-    def start(self) -> None: ...
-
-    """
-    Stores the payments in the database.
-    """
-
-    def pre_sync_start(self) -> None: ...
-    def pre_sync_stop(self) -> None: ...
 
 
 def _create_yield_logger(
