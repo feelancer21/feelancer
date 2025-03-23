@@ -33,6 +33,7 @@ if TYPE_CHECKING:
     from feelancer.reconnect.reconnector import Reconnector
     from feelancer.tracker.tracker import Tracker
 
+
 DEFAULT_TIMEOUT = 180
 TRACEBACK_DUMP_FILE = "traceback_dump.txt"
 FAULTHANDLER_DUMP_FILE = "faulthandler_dump.txt"
@@ -242,15 +243,13 @@ class MainServer(BaseServer):
             paytrack_service = PaytrackService(
                 payment_tracker=self.cfg.payment_tracker,
                 get_paytrack_config=self.get_paytrack_config,
-                to_csv=self.cfg.db.query_all_to_csv,
-                delete_data=self.cfg.db.core_delete,
+                db_to_csv=self.cfg.db.query_all_to_csv,
+                db_delete_data=self.cfg.db.core_delete,
             )
             self._register_sub_server(paytrack_service)
 
             # Pre sync before threadpool execution starts to sync faster
-            self._register_sync_starter(
-                paytrack_service._payment_tracker.pre_sync_start
-            )
+            self._register_sync_starter(paytrack_service.tracker.pre_sync_start)
 
             runner.register_task(paytrack_service.run)
 
