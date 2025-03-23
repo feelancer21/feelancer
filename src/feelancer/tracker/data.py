@@ -5,7 +5,6 @@ from datetime import datetime
 from sqlalchemy import Delete, Float, Select, cast, delete, desc, func, select
 
 from feelancer.data.db import FeelancerDB
-from feelancer.lightning.data import LightningStore
 
 from .models import (
     Base,
@@ -261,14 +260,13 @@ def delete_orphaned_payment_requests() -> Delete[tuple[int]]:
     return delete(PaymentRequest).where(~PaymentRequest.payments.any())
 
 
-class PaymentTrackerStore:
+class TrackerStore:
 
-    def __init__(self, db: FeelancerDB, pubkey_local: str) -> None:
+    def __init__(self, db: FeelancerDB, ln_node_id: int) -> None:
         self.db = db
         self.db.create_base(Base)
 
-        ln_store = LightningStore(db, pubkey_local)
-        self.ln_node_id = ln_store.ln_node_id
+        self.ln_node_id = ln_node_id
 
     def add_attempts(self, attempts: Iterable[HTLCAttempt]) -> None:
         """
