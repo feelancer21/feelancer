@@ -28,12 +28,13 @@ from .tracker.payments.lnd import LNDPaymentTracker
 from .tracker.payments.service import PaytrackConfig, PaytrackService
 from .utils import read_config_file
 
+T = TypeVar("T", bound=DictInitializedConfig)
+
 if TYPE_CHECKING:
     from feelancer.lightning.client import LightningClient
     from feelancer.reconnect.reconnector import Reconnector
-    from feelancer.tracker.tracker import Tracker
+    from feelancer.tracker.proto import Tracker, TrackerService
 
-T = TypeVar("T", bound=DictInitializedConfig)
 
 DEFAULT_TIMEOUT = 180
 TRACEBACK_DUMP_FILE = "traceback_dump.txt"
@@ -238,26 +239,36 @@ class MainServer(BaseServer):
         )
         runner.register_task(reconnect.run)
 
-        get_paytrack_config = self._get_config_reader("paytrack", PaytrackConfig)
-        paytrack_conf = get_paytrack_config()
-        paytrack_service: PaytrackService | None = None
-        if paytrack_conf is not None:
-            # Adding callables for starting and stopping internal services of the
-            # lnclient, e.g. dispatcher of streams.
-            self._register_sub_server(cfg.lnclient)
+        self._register_tracker_service(
+            cfg.payment_tracker, runner, "paytrack", PaytrackConfig, PaytrackService
+        )
 
-            paytrack_service = PaytrackService(
-                get_paytrack_config=get_paytrack_config,
+    def _register_tracker_service(
+        self,
+        tracker: Tracker,
+        runner: TaskRunner,
+        service_name: str,
+        conf_type: type[T],
+        service_type: type[TrackerService[T]],
+    ) -> None:
+
+        get_config = self._get_config_reader(service_name, conf_type)
+
+        # We only register the service and the tracker if we have a config for it.
+        conf = get_config()
+        if conf is not None:
+            service = service_type(
+                get_config=get_config,
                 db_to_csv=self.cfg.db.query_all_to_csv,
                 db_delete_data=self.cfg.db.core_delete,
             )
+            runner.register_task(service.run)
+            self._register_tracker(tracker)
 
-            # Pre sync before threadpool execution starts to sync faster
-            self._register_sync_starter(self.cfg.payment_tracker.pre_sync_start)
-
-            self._register_starter(self.cfg.payment_tracker.start)
-
-            runner.register_task(paytrack_service.run)
+    def _register_tracker(self, tracker: Tracker) -> None:
+        self._register_sync_starter(tracker.pre_sync_start)
+        self._register_starter(tracker.start)
+        self._register_stopper(tracker.pre_sync_stop)
 
     def read_feelancer_cfg(self) -> FeelancerConfig:
         """
