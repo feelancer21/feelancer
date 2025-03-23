@@ -11,10 +11,10 @@ import traceback
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeVar
 
 from .base import BaseServer
-from .config import FeelancerConfig
+from .config import DictInitializedConfig, FeelancerConfig
 from .data.db import FeelancerDB
 from .lightning.lnd import LNDClient
 from .lnd.client import LndGrpc
@@ -33,6 +33,7 @@ if TYPE_CHECKING:
     from feelancer.reconnect.reconnector import Reconnector
     from feelancer.tracker.tracker import Tracker
 
+T = TypeVar("T", bound=DictInitializedConfig)
 
 DEFAULT_TIMEOUT = 180
 TRACEBACK_DUMP_FILE = "traceback_dump.txt"
@@ -223,17 +224,22 @@ class MainServer(BaseServer):
 
         # pid service is responsible for updating the fees with the pid model.
         pid = PidService(
-            self.cfg.db, self.cfg.lnclient.pubkey_local, self.get_pid_config
+            self.cfg.db,
+            self.cfg.lnclient.pubkey_local,
+            self._get_config_reader("pid", PidConfig),
         )
         runner.register_task(pid.run)
         runner.register_reset(pid.reset)
 
         # reconnect service is responsible for reconnecting inactive channels
         # or channels with stuck htlcs.
-        reconnect = ReconnectService(cfg.reconnector, self.get_reconnect_config)
+        reconnect = ReconnectService(
+            cfg.reconnector, self._get_config_reader("reconnect", ReconnectConfig)
+        )
         runner.register_task(reconnect.run)
 
-        paytrack_conf = self.get_paytrack_config()
+        get_paytrack_config = self._get_config_reader("paytrack", PaytrackConfig)
+        paytrack_conf = get_paytrack_config()
         paytrack_service: PaytrackService | None = None
         if paytrack_conf is not None:
             # Adding callables for starting and stopping internal services of the
@@ -242,7 +248,7 @@ class MainServer(BaseServer):
 
             paytrack_service = PaytrackService(
                 payment_tracker=self.cfg.payment_tracker,
-                get_paytrack_config=self.get_paytrack_config,
+                get_paytrack_config=get_paytrack_config,
                 db_to_csv=self.cfg.db.query_all_to_csv,
                 db_delete_data=self.cfg.db.core_delete,
             )
@@ -270,26 +276,15 @@ class MainServer(BaseServer):
 
         return self.cfg.feelancer_cfg
 
-    def get_pid_config(self) -> PidConfig | None:
-        config_dict = self.cfg.feelancer_cfg.tasks_config.get("pid")
-        if config_dict is None:
-            return None
+    def _get_config_reader(self, name: str, type: type[T]) -> Callable[..., T | None]:
+        def get_config() -> T | None:
+            config_dict = self.cfg.feelancer_cfg.tasks_config.get(name)
+            if config_dict is None:
+                return None
 
-        return PidConfig(config_dict)
+            return type(config_dict)
 
-    def get_reconnect_config(self) -> ReconnectConfig | None:
-        config_dict = self.cfg.feelancer_cfg.tasks_config.get("reconnect")
-        if config_dict is None:
-            return None
-
-        return ReconnectConfig(config_dict)
-
-    def get_paytrack_config(self) -> PaytrackConfig | None:
-        config_dict = self.cfg.feelancer_cfg.tasks_config.get("paytrack")
-        if config_dict is None:
-            return None
-
-        return PaytrackConfig(config_dict)
+        return get_config
 
     def kill(self) -> None:
         """

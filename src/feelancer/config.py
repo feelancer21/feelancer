@@ -1,8 +1,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Protocol
 
 from .utils import GenericConf, get_peers_config
+
+
+class DictInitializedConfig(Protocol):
+    """
+    A protocol for a configuration class that is initialized with a dictionary.
+    """
+
+    def __init__(self, config_dict: dict) -> None: ...
 
 
 @dataclass
