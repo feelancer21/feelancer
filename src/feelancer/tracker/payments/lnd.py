@@ -7,20 +7,18 @@ from typing import Any
 
 import pytz
 
-from feelancer.data.db import FeelancerDB
 from feelancer.lightning.lnd import LNDClient
 from feelancer.lnd.client import LndGrpc
 from feelancer.lnd.grpc_generated import lightning_pb2 as ln
 from feelancer.retry import default_retry_handler
-
-from .data import (
+from feelancer.tracker.data import (
     GraphNodeNotFound,
     GraphPathNotFound,
     PaymentNotFound,
     PaymentRequestNotFound,
-    PaymentTrackerStore,
+    TrackerStore,
 )
-from .models import (
+from feelancer.tracker.models import (
     Failure,
     FailureCode,
     GraphPath,
@@ -119,11 +117,11 @@ class LNDPaymentReconSource:
 
 class LNDPaymentTracker:
 
-    def __init__(self, lnd: LndGrpc, db: FeelancerDB):
+    def __init__(self, lnd: LNDClient, store: TrackerStore):
 
-        self._lnd = LNDClient(lnd)
-        self._pub_key = self._lnd.pubkey_local
-        self._store = PaymentTrackerStore(db, self._pub_key)
+        self._lnd: LndGrpc = lnd.lnd
+        self._pub_key = lnd.pubkey_local
+        self._store = store
         self._is_stopped = False
 
     def start(self) -> None:
@@ -131,9 +129,9 @@ class LNDPaymentTracker:
         # get_recon_source returns a new paginator for ListPayments over
         # the last 30 days.
         def get_recon_source() -> LNDPaymentReconSource:
-            return LNDPaymentReconSource(self._lnd.lnd, self._process_payment)
+            return LNDPaymentReconSource(self._lnd, self._process_payment)
 
-        dispatcher = self._lnd.lnd.track_payments_dispatcher
+        dispatcher = self._lnd.track_payments_dispatcher
         start_stream = dispatcher.subscribe(self._process_payment, get_recon_source)
 
         self._store_payments(start_stream)
@@ -176,7 +174,7 @@ class LNDPaymentTracker:
         index_offset = self._store.get_max_payment_index()
         logger.debug(f"Starting from index {index_offset} for {self._pub_key}")
 
-        generator = self._lnd.lnd.paginate_payments(
+        generator = self._lnd.paginate_payments(
             index_offset=index_offset, include_incomplete=True
         )
         for payment in generator:

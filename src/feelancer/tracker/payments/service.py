@@ -4,7 +4,7 @@ from datetime import timedelta
 from feelancer.tasks.runner import RunnerRequest, RunnerResult
 from feelancer.tracker.proto import TrackerBaseService
 
-from .data import (
+from ..data import (
     delete_failed_htlc_attempts,
     delete_failed_payments,
     query_average_node_speed,
