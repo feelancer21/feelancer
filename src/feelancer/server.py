@@ -18,20 +18,20 @@ from .config import FeelancerConfig
 from .data.db import FeelancerDB
 from .lightning.lnd import LNDClient
 from .lnd.client import LndGrpc
-from .paytrack.service import PaytrackConfig, PaytrackService
-from .paytrack.tracker import LNDPaymentTracker
 from .pid.data import PidConfig
 from .pid.service import PidService
 from .reconnect.reconnector import LNDReconnector
 from .reconnect.service import ReconnectConfig, ReconnectService
 from .retry import stop_retry
 from .tasks.runner import TaskRunner
+from .tracker.payments.service import PaytrackConfig, PaytrackService
+from .tracker.payments.tracker import LNDPaymentTracker
 from .utils import read_config_file
 
 if TYPE_CHECKING:
     from feelancer.lightning.client import LightningClient
-    from feelancer.paytrack.tracker import PaymentTracker
     from feelancer.reconnect.reconnector import Reconnector
+    from feelancer.tracker.payments.tracker import PaymentTracker
 
 DEFAULT_TIMEOUT = 180
 TRACEBACK_DUMP_FILE = "traceback_dump.txt"
