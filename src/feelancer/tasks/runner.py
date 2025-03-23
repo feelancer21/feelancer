@@ -163,10 +163,13 @@ class TaskRunner(BaseServer):
         )
 
         # If config.seconds had changed we modify the trigger of the job.
-        if config.seconds != self.seconds:
+        if config.seconds != self.seconds and not self._is_stopped:
             self.seconds = config.seconds
             logger.info(f"Interval changed; executing tasks every {self.seconds}s now")
-            self.job.modify(trigger=IntervalTrigger(seconds=self.seconds))
+            try:
+                self.job.modify(trigger=IntervalTrigger(seconds=self.seconds))
+            except Exception as e:
+                logger.error(f"Could not modify the job: {e}")
 
     def register_task(self, task: Callable[[RunnerRequest], RunnerResult]) -> None:
         """
