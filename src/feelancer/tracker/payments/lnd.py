@@ -1,15 +1,14 @@
 import datetime
-import functools
 import hashlib
 import logging
 from collections.abc import Callable, Generator, Iterable
-from typing import Any
 
 import pytz
 
 from feelancer.lightning.lnd import LNDClient
 from feelancer.lnd.client import LndGrpc
 from feelancer.lnd.grpc_generated import lightning_pb2 as ln
+from feelancer.log import stream_logger
 from feelancer.retry import default_retry_handler
 from feelancer.tracker.data import (
     GraphNodeNotFound,
@@ -38,6 +37,7 @@ RECON_TIME_INTERVAL = 30 * 24 * 3600  # 30 days in seconds
 CHUNK_SIZE = 1000
 
 logger = logging.getLogger(__name__)
+payment_stream_logger = stream_logger(interval=100, items_name="payments")
 
 
 # Helper function for converting nanoseconds to a datetime object.
@@ -57,35 +57,6 @@ def _sha256_path(path: Iterable[int]) -> str:
 def _sha256_payment(payment: ln.Payment | ln.HTLCAttempt) -> str:
     """Creates the sha256sum of the payment object."""
     return hashlib.sha256(payment.SerializeToString(deterministic=True)).hexdigest()
-
-
-def _create_yield_logger(
-    interval: int,
-) -> Callable:
-    """
-    Decorator for writing a log message in the given interval of yielded items.
-    To see the process is still alive.
-    """
-
-    def decorator(generator_func):
-
-        @functools.wraps(generator_func)
-        def wrapper(*args: Any, **kwargs: Any):
-            count: int = 0
-            try:
-                for item in generator_func(*args, **kwargs):
-                    count += 1
-                    if count == interval:
-                        logger.info(f"Processed {count} payments")
-                        count = 0
-                    yield item
-
-            finally:
-                logger.info(f"Processed {count} payments")
-
-        return wrapper
-
-    return decorator
 
 
 class LNDPaymentReconSource:
@@ -172,7 +143,7 @@ class LNDPaymentTracker:
             self._attempts_from_paginator(), chunk_size=CHUNK_SIZE
         )
 
-    @_create_yield_logger(interval=1000)
+    @payment_stream_logger
     def _attempts_from_paginator(self) -> Generator[HTLCAttempt]:
 
         index_offset = self._store.get_max_payment_index()
@@ -198,7 +169,7 @@ class LNDPaymentTracker:
         # In every retry we initialize a new generator. This is necessary because
         # the generator is closed after the first iteration. Moreover we need
         # need, e.g. in the case an exception when storing the data.
-        @_create_yield_logger(interval=100)
+        @payment_stream_logger
         def attempts_from_stream() -> Generator[HTLCAttempt]:
             yield from start_stream()
 
