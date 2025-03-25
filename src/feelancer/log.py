@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import functools
 import logging
+from collections.abc import Callable
+from typing import Any
 
 DEFAULT_LOG_FILE = "feelancer.log"
 DEFAULT_LOG_LEVEL = logging.INFO
@@ -45,3 +47,42 @@ def log_func_call(func):
         return func(*args, **kwargs)
 
     return wrapper
+
+
+def stream_logger(
+    interval: int,
+    items_name: str = "items",
+) -> Callable:
+    """
+    Decorator for writing a log message in the given interval of yielded items.
+    To see the process is still alive.
+    """
+
+    def msg(increment: int, count: int) -> str:
+        return (
+            f"Processed another {increment} {items_name}; "
+            f"total processed: {count} {items_name}"
+        )
+
+    # count is shared between all instances of the decorated function
+    count: int = 0
+
+    def decorator(generator_func):
+        logger = logging.getLogger(generator_func.__module__)
+
+        @functools.wraps(generator_func)
+        def wrapper(*args: Any, **kwargs: Any):
+            nonlocal count
+            try:
+                for item in generator_func(*args, **kwargs):
+                    yield item
+                    count += 1
+                    if count % interval == 0:
+                        logger.info(msg(interval, count))
+            finally:
+                if (res := count % interval) > 0:
+                    logger.info(msg(res, count))
+
+        return wrapper
+
+    return decorator
