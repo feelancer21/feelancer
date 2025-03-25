@@ -1,5 +1,5 @@
 import functools
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from datetime import datetime
 
 from sqlalchemy import Delete, Float, Select, cast, delete, desc, func, select
@@ -14,6 +14,7 @@ from .models import (
     HTLCAttempt,
     HTLCResolveInfo,
     HTLCStatus,
+    Invoice,
     Payment,
     PaymentRequest,
     PaymentResolveInfo,
@@ -21,7 +22,6 @@ from .models import (
     Route,
 )
 
-CHUNK_SIZE = 1000
 CACHE_SIZE_PAYMENT_REQUEST_ID = 1000
 CACHE_SIZE_GRAPH_NODE_ID = 50000
 CACHE_SIZE_GRAPH_PATH = 100000
@@ -37,6 +37,9 @@ class GraphNodeNotFound(Exception): ...
 
 
 class GraphPathNotFound(Exception): ...
+
+
+class InvoiceNotFound(Exception): ...
 
 
 def query_payment_request(payment_hash: str) -> Select[tuple[PaymentRequest]]:
@@ -64,6 +67,16 @@ def query_graph_node(pub_key: str) -> Select[tuple[GraphNode]]:
 
 def query_graph_path(sha256_sum: str) -> Select[tuple[GraphPath]]:
     qry = select(GraphPath).where(GraphPath.sha256_sum == sha256_sum)
+    return qry
+
+
+def query_invoice(r_hash: str) -> Select[tuple[Invoice]]:
+    qry = select(Invoice).where(Invoice.r_hash == r_hash)
+    return qry
+
+
+def query_max_invoice_add_index(ln_node_id: int) -> Select[tuple[int]]:
+    qry = select(func.max(Invoice.add_index)).where(Invoice.ln_node_id == ln_node_id)
     return qry
 
 
@@ -268,22 +281,6 @@ class TrackerStore:
 
         self.ln_node_id = ln_node_id
 
-    def add_attempts(self, attempts: Iterable[HTLCAttempt]) -> None:
-        """
-        Adds a list of attempts to the database.
-        """
-
-        # TODO: We accept integrity errors because of this lnd issue
-        # https://github.com/lightningnetwork/lnd/issues/9542
-        self.db.add_all_from_iterable(attempts, True)
-
-    def add_attempt_chunks(self, attempts: Iterable[HTLCAttempt]) -> None:
-        """
-        Adds a list of attempts to the database in chunks.
-        """
-
-        self.db.add_chunks_from_iterable(attempts, CHUNK_SIZE)
-
     def add_graph_node(self, pub_key: str) -> int:
         """
         Adds a graph node to the database. Returns the id of the graph node.
@@ -361,4 +358,23 @@ class TrackerStore:
 
         return self.db.query_first(
             query_max_payment_index(self.ln_node_id), lambda p: p, 0
+        )
+
+    def get_invoice_id(self, r_hash: str) -> int:
+        """
+        Returns the invoice for a given r_hash.
+        """
+
+        id = self.db.query_first(query_invoice(r_hash), lambda p: p.id)
+        if id is None:
+            raise InvoiceNotFound(f"Invoice with r_hash {r_hash} not found.")
+        return id
+
+    def get_max_invoice_add_index(self) -> int:
+        """
+        Returns the maximum invoice add index.
+        """
+
+        return self.db.query_first(
+            query_max_invoice_add_index(self.ln_node_id), lambda p: p, 0
         )
