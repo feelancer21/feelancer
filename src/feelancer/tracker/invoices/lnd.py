@@ -1,15 +1,14 @@
 import base64
 import datetime
-import functools
 import logging
 from collections.abc import Callable, Generator
-from typing import Any
 
 import pytz
 
 from feelancer.lightning.lnd import LNDClient
 from feelancer.lnd.client import LndGrpc
 from feelancer.lnd.grpc_generated import lightning_pb2 as ln
+from feelancer.log import stream_logger
 from feelancer.retry import default_retry_handler
 from feelancer.tracker.data import InvoiceNotFound, TrackerStore
 from feelancer.tracker.models import (
@@ -23,6 +22,7 @@ RECON_TIME_INTERVAL = 30 * 24 * 3600  # 30 days in seconds
 CHUNK_SIZE = 1000
 
 logger = logging.getLogger(__name__)
+invoice_stream_logger = stream_logger(interval=100, items_name="invoices")
 
 
 def _sec_to_datetime(sec: int) -> datetime.datetime:
@@ -32,35 +32,6 @@ def _sec_to_datetime(sec: int) -> datetime.datetime:
 
 def _decode_bytes(b: bytes) -> str:
     return base64.b16encode(b).decode("utf-8").lower()
-
-
-def _create_yield_logger(
-    interval: int,
-) -> Callable:
-    """
-    Decorator for writing a log message in the given interval of yielded items.
-    To see the process is still alive.
-    """
-
-    def decorator(generator_func):
-
-        @functools.wraps(generator_func)
-        def wrapper(*args: Any, **kwargs: Any):
-            count: int = 0
-            try:
-                for item in generator_func(*args, **kwargs):
-                    count += 1
-                    if count == interval:
-                        logger.info(f"Processed {count} invoices")
-                        count = 0
-                    yield item
-
-            finally:
-                logger.info(f"Processed {count} invoices")
-
-        return wrapper
-
-    return decorator
 
 
 class LNDInvoiceReconSource:
@@ -135,7 +106,7 @@ class LNDInvoiceTracker:
             self._attempts_from_paginator(), chunk_size=CHUNK_SIZE
         )
 
-    @_create_yield_logger(interval=1000)
+    @invoice_stream_logger
     def _attempts_from_paginator(self) -> Generator[Invoice]:
         """
         Processes all invoices from the paginator.
@@ -153,7 +124,7 @@ class LNDInvoiceTracker:
     @default_retry_handler
     def _store_invoices(self, start_stream: Callable[..., Generator[Invoice]]) -> None:
 
-        @_create_yield_logger(interval=5)
+        @invoice_stream_logger
         def attempts_from_stream() -> Generator[Invoice]:
             yield from start_stream()
 
