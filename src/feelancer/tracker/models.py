@@ -85,7 +85,9 @@ class PaymentRequest(Base):
     id: Mapped[int] = mapped_column(autoincrement=True, primary_key=True)
 
     # The payment hash
-    payment_hash: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    payment_hash: Mapped[str] = mapped_column(
+        String, nullable=False, index=True, unique=True
+    )
 
     # The optional payment request being fulfilled
     payment_request: Mapped[str] = mapped_column(String, nullable=True)
@@ -365,4 +367,93 @@ class Hop(Base):
     )
     node_incoming: Mapped[GraphNode] = relationship(
         GraphNode, foreign_keys=[node_incoming_id]
+    )
+
+
+class Invoice(Base):
+    __tablename__ = "ln_invoice"
+    __table_args__ = (UniqueConstraint("add_index", "ln_node_id"),)
+    __table_args__ = (UniqueConstraint("settle_index", "ln_node_id"),)
+
+    # unique identifier of the invoice
+    id: Mapped[int] = mapped_column(autoincrement=True, primary_key=True)
+
+    ln_node_id: Mapped[int] = mapped_column(
+        ForeignKey("ln_node.id", ondelete="CASCADE"), nullable=False
+    )
+
+    # the local lightning node
+    ln_node: Mapped[DBLnNode] = relationship(DBLnNode)
+
+    # The payment hash
+    r_hash: Mapped[str] = mapped_column(String, nullable=False, index=True, unique=True)
+
+    creation_time: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+
+    # The value of the invoice in milli-satoshis
+    value_msat: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+    # Relationship to invoice htlcs
+    invoice_htlcs: Mapped[list[InvoiceHTLC]] = relationship(
+        "InvoiceHTLC", back_populates="invoice"
+    )
+
+    add_index: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+    settle_index: Mapped[int] = mapped_column(BigInteger, nullable=True)
+
+
+class InvoiceHTLC(Base):
+    __tablename__ = "ln_invoice_htlc"
+
+    # unique identifier of the invoice
+    id: Mapped[int] = mapped_column(autoincrement=True, primary_key=True)
+
+    # The invoice id
+    invoice_id: Mapped[int] = mapped_column(
+        ForeignKey("ln_invoice.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+
+    invoice: Mapped[Invoice] = relationship(Invoice, back_populates="invoice_htlcs")
+
+    amt_msat: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+    accept_time: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+
+    expiry_height: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    resolve_info: Mapped[InvoiceHTLCResolveInfo] = relationship(
+        "InvoiceHTLCResolveInfo", uselist=False, back_populates="invoice_htlc"
+    )
+
+
+class InvoiceHTLCState(PyEnum):
+    ACCEPTED = 0
+    SETTLED = 1
+    CANCELED = 2
+
+
+class InvoiceHTLCResolveInfo(Base):
+    __tablename__ = "ln_invoice_htlc_resolve_info"
+
+    invoice_htlc_id: Mapped[int] = mapped_column(
+        ForeignKey("ln_invoice_htlc.id", ondelete="CASCADE"),
+        nullable=False,
+        primary_key=True,
+    )
+
+    invoice_htlc: Mapped[InvoiceHTLC] = relationship(
+        InvoiceHTLC, uselist=False, back_populates="resolve_info"
+    )
+
+    resolve_time: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+
+    state: Mapped[InvoiceHTLCState] = mapped_column(
+        Enum(InvoiceHTLCState), nullable=False
     )

@@ -26,6 +26,8 @@ from .reconnect.service import ReconnectConfig, ReconnectService
 from .retry import stop_retry
 from .tasks.runner import TaskRunner
 from .tracker.data import TrackerStore
+from .tracker.invoices.lnd import LNDInvoiceTracker
+from .tracker.invoices.service import InvtrackConfig, InvtrackService
 from .tracker.payments.lnd import LNDPaymentTracker
 from .tracker.payments.service import PaytrackConfig, PaytrackService
 from .utils import read_config_file
@@ -55,6 +57,7 @@ class MainConfig:
     feelancer_cfg: FeelancerConfig
     reconnector: Reconnector
     payment_tracker: Tracker
+    invoice_tracker: Tracker
     tracker_store: TrackerStore
     timeout: int
 
@@ -78,6 +81,7 @@ class MainConfig:
             ln_store = LightningStore(db, pub_key)
             tracker_store = TrackerStore(db, ln_store.ln_node_id)
             payment_tracker: Tracker = LNDPaymentTracker(lnclient, tracker_store)
+            invoice_tracker: Tracker = LNDInvoiceTracker(lnclient, tracker_store)
         else:
             raise ValueError("'lnd' section is not included in config-file")
 
@@ -111,6 +115,7 @@ class MainConfig:
             feelancer_config,
             reconnector,
             payment_tracker,
+            invoice_tracker,
             tracker_store,
             timeout,
         )
@@ -256,6 +261,10 @@ class MainServer(BaseServer):
 
         self._register_tracker_service(
             cfg.payment_tracker, runner, "paytrack", PaytrackConfig, PaytrackService
+        )
+
+        self._register_tracker_service(
+            cfg.invoice_tracker, runner, "invtrack", InvtrackConfig, InvtrackService
         )
 
     def _register_tracker_service(
