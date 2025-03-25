@@ -19,6 +19,7 @@ from .grpc_generated import router_pb2 as rt
 from .grpc_generated import router_pb2_grpc as rtrpc
 
 PAGINATOR_MAX_FORWARDING_EVENTS = 10000
+PAGINATOR_MAX_INVOICES = 10000
 PAGINATOR_MAX_PAYMENTS = 10000
 
 
@@ -78,6 +79,9 @@ def set_chan_point(chan_point_str: str, chan_point: ln.ChannelPoint) -> None:
 class LndPaymentDispatcher(StreamDispatcher[ln.Payment]): ...
 
 
+class LndInvoiceDispatcher(StreamDispatcher[ln.Invoice]): ...
+
+
 class LndGrpc(SecureGrpcClient, BaseServer):
 
     def __init__(
@@ -100,6 +104,10 @@ class LndGrpc(SecureGrpcClient, BaseServer):
         self.track_payments_dispatcher = self._new_payments_dispatcher()
 
         self._register_sub_server(self.track_payments_dispatcher)
+
+        self.subscribe_invoices_dispatcher = self._new_invoice_dispatcher()
+
+        self._register_sub_server(self.subscribe_invoices_dispatcher)
 
     @property
     def _ln_stub(self) -> lnrpc.LightningStub:
@@ -301,6 +309,27 @@ class LndGrpc(SecureGrpcClient, BaseServer):
             num_max_events, index_offset, start_time=start_time, end_time=end_time
         )
 
+    def paginate_invoices(
+        self, num_max_invoices: int | None = None, index_offset: int = 0, **kwargs
+    ) -> Generator[ln.Invoice]:
+
+        def _read(d: ln.ListInvoiceResponse) -> tuple[Sequence[ln.Invoice], int]:
+            return d.invoices, d.last_index_offset
+
+        def _set(d: ln.ListInvoiceRequest, offset: int, max: int) -> None:
+            d.index_offset = offset
+            d.num_max_invoices = max
+
+        paginator = Paginator[ln.Invoice](
+            producer=self._ln_stub.ListInvoices,
+            request=ln.ListInvoiceRequest,
+            max_responses=PAGINATOR_MAX_INVOICES,
+            read_response=_read,
+            set_request=_set,
+        )
+
+        return paginator.request(num_max_invoices, index_offset, **kwargs)
+
     def paginate_payments(
         self,
         max_payments: int | None = None,
@@ -339,6 +368,18 @@ class LndGrpc(SecureGrpcClient, BaseServer):
 
         return LndPaymentDispatcher(
             new_stream_initializer=lambda: self._router_stub.TrackPayments,
+            request=req,
+            handle_rpc_stream=rpc_handler,
+        )
+
+    def _new_invoice_dispatcher(self) -> LndInvoiceDispatcher:
+
+        req = ln.InvoiceSubscription()
+
+        rpc_handler = lnd_resp_handler.create_handle_rpc_stream("SubscribeInvoices")
+
+        return LndInvoiceDispatcher(
+            new_stream_initializer=lambda: self._ln_stub.SubscribeInvoices,
             request=req,
             handle_rpc_stream=rpc_handler,
         )

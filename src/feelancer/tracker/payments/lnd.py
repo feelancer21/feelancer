@@ -35,6 +35,7 @@ from feelancer.tracker.models import (
 )
 
 RECON_TIME_INTERVAL = 30 * 24 * 3600  # 30 days in seconds
+CHUNK_SIZE = 1000
 
 logger = logging.getLogger(__name__)
 
@@ -166,7 +167,10 @@ class LNDPaymentTracker:
 
         if self._is_stopped:
             return
-        self._store.add_attempt_chunks(self._attempts_from_paginator())
+
+        self._store.db.add_chunks_from_iterable(
+            self._attempts_from_paginator(), chunk_size=CHUNK_SIZE
+        )
 
     @_create_yield_logger(interval=1000)
     def _attempts_from_paginator(self) -> Generator[HTLCAttempt]:
@@ -198,7 +202,7 @@ class LNDPaymentTracker:
         def attempts_from_stream() -> Generator[HTLCAttempt]:
             yield from start_stream()
 
-        self._store.add_attempts(attempts_from_stream())
+        self._store.db.add_all_from_iterable(attempts_from_stream(), True)
 
     def _process_payment(
         self, p: ln.Payment, recon_running: bool
@@ -207,8 +211,6 @@ class LNDPaymentTracker:
         Callback function for the subscription. Converts the payment object
         to an Iterable of HTLCAttempt objects.
         """
-
-        # logger.debug(f"Processing payment: {recon_running=} {MessageToDict(p)=}")
 
         # only process status SUCCEEDED or FAILED
         if p.status not in [2, 3]:
