@@ -1,4 +1,3 @@
-import base64
 import datetime
 import logging
 from collections.abc import Callable, Generator
@@ -17,21 +16,13 @@ from feelancer.tracker.models import (
     InvoiceHTLCResolveInfo,
     InvoiceHTLCState,
 )
+from feelancer.utils import bytes_to_str, sec_to_datetime
 
 RECON_TIME_INTERVAL = 30 * 24 * 3600  # 30 days in seconds
 CHUNK_SIZE = 1000
 
 logger = logging.getLogger(__name__)
 invoice_stream_logger = stream_logger(interval=100, items_name="invoices")
-
-
-def _sec_to_datetime(sec: int) -> datetime.datetime:
-    """Convert UNIX seconds to a timezone-aware datetime (UTC)."""
-    return datetime.datetime.fromtimestamp(sec, tz=pytz.utc)
-
-
-def _decode_bytes(b: bytes) -> str:
-    return base64.b16encode(b).decode("utf-8").lower()
 
 
 class LNDInvoiceReconSource:
@@ -145,7 +136,7 @@ class LNDInvoiceTracker:
             try:
                 # if the invoice is already in the database, we do not need to
                 # process it
-                self._store.get_invoice_id(_decode_bytes(i.r_hash))
+                self._store.get_invoice_id(bytes_to_str(i.r_hash))
                 return None
             except InvoiceNotFound:
                 logger.debug(
@@ -167,8 +158,8 @@ class LNDInvoiceTracker:
 
         return Invoice(
             ln_node_id=self._store.ln_node_id,
-            r_hash=_decode_bytes(invoice.r_hash),
-            creation_time=_sec_to_datetime(invoice.creation_date),
+            r_hash=bytes_to_str(invoice.r_hash),
+            creation_time=sec_to_datetime(invoice.creation_date),
             value_msat=invoice.value_msat,
             add_index=invoice.add_index,
             settle_index=invoice.settle_index,
@@ -177,7 +168,7 @@ class LNDInvoiceTracker:
     def _create_htlc(self, htlc: ln.InvoiceHTLC, invoice: Invoice) -> InvoiceHTLC:
 
         resolve_info = InvoiceHTLCResolveInfo(
-            resolve_time=_sec_to_datetime(htlc.resolve_time),
+            resolve_time=sec_to_datetime(htlc.resolve_time),
             state=InvoiceHTLCState(htlc.state),
         )
 
@@ -185,6 +176,6 @@ class LNDInvoiceTracker:
             invoice=invoice,
             resolve_info=resolve_info,
             amt_msat=htlc.amt_msat,
-            accept_time=_sec_to_datetime(htlc.accept_time),
+            accept_time=sec_to_datetime(htlc.accept_time),
             expiry_height=htlc.expiry_height,
         )
