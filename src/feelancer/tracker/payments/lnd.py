@@ -1,7 +1,6 @@
 import datetime
-import hashlib
 import logging
-from collections.abc import Callable, Generator, Iterable
+from collections.abc import Callable, Generator
 
 import pytz
 
@@ -32,31 +31,13 @@ from feelancer.tracker.models import (
     PaymentStatus,
     Route,
 )
+from feelancer.utils import ns_to_datetime, sha256_supports_str
 
 RECON_TIME_INTERVAL = 30 * 24 * 3600  # 30 days in seconds
 CHUNK_SIZE = 1000
 
 logger = logging.getLogger(__name__)
 payment_stream_logger = stream_logger(interval=100, items_name="payments")
-
-
-# Helper function for converting nanoseconds to a datetime object.
-def _ns_to_datetime(ns: int) -> datetime.datetime:
-    """Convert UNIX nanoseconds to a timezone-aware datetime (UTC)."""
-    return datetime.datetime.fromtimestamp(ns / 1e9, tz=pytz.utc)
-
-
-def _sha256_path(path: Iterable[int]) -> str:
-    """Creates the sha256sum of the concatenation of all public keys."""
-
-    # concat all the ids
-    string = ",".join([str(h) for h in path])
-    return hashlib.sha256(string.encode("utf-8")).hexdigest()
-
-
-def _sha256_payment(payment: ln.Payment | ln.HTLCAttempt) -> str:
-    """Creates the sha256sum of the payment object."""
-    return hashlib.sha256(payment.SerializeToString(deterministic=True)).hexdigest()
 
 
 class LNDPaymentReconSource:
@@ -234,7 +215,7 @@ class LNDPaymentTracker:
 
         return Payment(
             ln_node_id=self._store.ln_node_id,
-            creation_time=_ns_to_datetime(payment.creation_time_ns),
+            creation_time=ns_to_datetime(payment.creation_time_ns),
             payment_index=payment.payment_index,
             resolve_info=resolve_info,
         )
@@ -262,7 +243,7 @@ class LNDPaymentTracker:
         htlc_attempt = HTLCAttempt(
             payment=payment,
             attempt_id=attempt.attempt_id,
-            attempt_time=_ns_to_datetime(attempt.attempt_time_ns),
+            attempt_time=ns_to_datetime(attempt.attempt_time_ns),
             route=route,
             resolve_info=resolve_info,
         )
@@ -333,7 +314,7 @@ class LNDPaymentTracker:
             return None
 
         if attempt.resolve_time_ns > 0:
-            resolve_time = _ns_to_datetime(attempt.resolve_time_ns)
+            resolve_time = ns_to_datetime(attempt.resolve_time_ns)
         else:
             resolve_time = None
 
@@ -384,7 +365,7 @@ class LNDPaymentTracker:
             return self._store.add_graph_node(pub_key)
 
     def _get_graph_path_id(self, path: list[int]) -> int:
-        sha_path = _sha256_path(path)
+        sha_path = sha256_supports_str(path)
         try:
             path_id = self._store.get_graph_path_id(sha_path)
         except GraphPathNotFound:

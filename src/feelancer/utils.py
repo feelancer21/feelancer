@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import base64
+import datetime
+import hashlib
 import os
+from collections.abc import Iterable
 from copy import deepcopy
 from dataclasses import dataclass, fields
-from typing import TypeVar
+from typing import Protocol, TypeVar
 
+import pytz
 import tomli
 
 
@@ -82,3 +87,35 @@ def first_some(value1: U | None, value2: U) -> U:
     """Returns the first value which is not None"""
 
     return value1 if value1 is not None else value2
+
+
+class SupportsStr(Protocol):
+    def __str__(self) -> str: ...
+
+
+def sha256_supports_str(items: Iterable[SupportsStr], delim: str = ",") -> str:
+    """
+    Creates the sha256sum of the concatenation of the string representation
+    of the items. The items are separated by the delimiter.
+    """
+
+    string = delim.join([str(i) for i in items])
+    return hashlib.sha256(string.encode("utf-8")).hexdigest()
+
+
+def ns_to_datetime(ns: int) -> datetime.datetime:
+    """
+    Convert UNIX nanoseconds to a timezone-aware datetime (UTC).
+    """
+    return datetime.datetime.fromtimestamp(ns / 1e9, tz=pytz.utc)
+
+
+def sec_to_datetime(sec: int) -> datetime.datetime:
+    """
+    Convert UNIX seconds to a timezone-aware datetime (UTC).
+    """
+    return datetime.datetime.fromtimestamp(sec, tz=pytz.utc)
+
+
+def bytes_to_str(bytes: bytes) -> str:
+    return base64.b16encode(bytes).decode("utf-8").lower()
