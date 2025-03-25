@@ -8,6 +8,7 @@ from sqlalchemy.orm import joinedload
 from feelancer.data.db import SessionExecutor
 from feelancer.lightning.client import ChannelPolicy, LightningClient
 from feelancer.lightning.models import (
+    Base,
     DBLnChannelLiquidity,
     DBLnChannelPeer,
     DBLnChannelPolicy,
@@ -150,6 +151,7 @@ class LightningStore:
 
     def __init__(self, db: FeelancerDB, pubkey_local: str) -> None:
         self.db = db
+        self.db.create_base(Base)
         self.pubkey_local = pubkey_local
 
     @property
