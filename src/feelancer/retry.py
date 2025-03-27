@@ -1,23 +1,17 @@
 import logging
-import threading
 from collections.abc import Callable
 from datetime import datetime, timedelta
 from functools import wraps
 
 import pytz
 
+from .event import stop_event
+
 DEFAULT_EXCEPTIONS_RETRY = (Exception,)
 DEFAULT_EXCEPTIONS_RAISE = ()
 DEFAULT_MAX_RETRIES = 5
 DEFAULT_DELAY = 300  # 5 minutes
 DEFAULT_MIN_TOLERANCE_DELTA = 900  # 15 minutes
-
-
-stop_event = threading.Event()
-
-
-def stop_retry():
-    stop_event.set()
 
 
 def create_retry_handler(

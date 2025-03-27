@@ -4,7 +4,7 @@ import codecs
 import logging
 import os
 import queue
-import time
+import threading
 from collections.abc import Callable, Generator, Iterable, Sequence
 from functools import wraps
 from typing import Generic, Protocol, TypeVar
@@ -13,6 +13,7 @@ import grpc
 from google.protobuf.message import Message
 
 from feelancer.base import BaseServer
+from feelancer.event import stop_event
 from feelancer.retry import create_retry_handler, default_retry_handler
 
 DEFAULT_MESSAGE_SIZE_MB = 50 * 1024 * 1024
@@ -207,12 +208,6 @@ class ReconSource(Generic[V], Protocol):
         """
         ...
 
-    def stop(self) -> None:
-        """
-        Stops the generation of items.
-        """
-        ...
-
 
 class StreamDispatcher(Generic[T], BaseServer):
     """
@@ -243,10 +238,10 @@ class StreamDispatcher(Generic[T], BaseServer):
         self._handle_rpc_stream = handle_rpc_stream
 
         # Indicates whether there is a subscriber for the messages.
-        self._is_subscribed: bool = False
+        self._is_subscribed: threading.Event = threading.Event()
 
         # Indicates whether the dispatcher is receiving messages from the source
-        self._is_receiving: bool = False
+        self._is_receiving: threading.Event = threading.Event()
 
         self._register_sync_starter(self._start)
         self._register_sync_stopper(self._stop)
@@ -266,7 +261,7 @@ class StreamDispatcher(Generic[T], BaseServer):
         q: queue.Queue[T | Exception] = queue.Queue()
         self._message_queues.append(q)
 
-        self._is_subscribed = True
+        self._is_subscribed.set()
 
         # We return a callable which enables the subscriber to start a stream.
         # It gives the caller the possibility to restart the stream with a
@@ -286,10 +281,10 @@ class StreamDispatcher(Generic[T], BaseServer):
             # Blocking until we know that the dispatcher is receiving messages
             # from the source. Otherwise reconciliation would start too
             # early.
-            while not (self._is_receiving or self._is_stopped):
-                pass
+            while not (self._is_receiving.is_set() or stop_event.is_set()):
+                stop_event.wait(0.1)
 
-            if self._is_stopped:
+            if stop_event.is_set():
                 return None
 
             # Indicates the subscriber whether the messages were created during
@@ -305,12 +300,10 @@ class StreamDispatcher(Generic[T], BaseServer):
 
                 # Sleeping a little bit before fetching from the reconciliation
                 # source. This is to fill up the queue with messages from the stream.
-                time.sleep(SLEEP_RECON)
+                stop_event.wait(SLEEP_RECON)
                 recon_source = get_recon_source()
 
-                self._register_sync_stopper(recon_source.stop)
-
-                if self._is_stopped:
+                if stop_event.is_set():
                     return None
 
                 yield from recon_source.items()
@@ -346,11 +339,11 @@ class StreamDispatcher(Generic[T], BaseServer):
         """
 
         # blocking until there is a first subscription or the server is stopped.
-        while not (self._is_subscribed or self._is_stopped):
-            pass
+        while not (self._is_subscribed.is_set() or stop_event.is_set()):
+            stop_event.wait(0.1)
 
         # Returning early if the server is stopped.
-        if self._is_stopped:
+        if stop_event.is_set():
             return None
 
         # We have a subscriber. We can start the stream
@@ -383,7 +376,7 @@ class StreamDispatcher(Generic[T], BaseServer):
 
         self._logger.debug("Starting stream...")
         try:
-            self._is_receiving = True
+            self._is_receiving.set()
             # Receiving of the grp messages
             for m in self._handle_rpc_stream(self._stream):  # type: ignore
                 self._put_to_queues(m)
@@ -393,7 +386,7 @@ class StreamDispatcher(Generic[T], BaseServer):
 
         finally:
             self._stream = None
-            self._is_receiving = False
+            self._is_receiving.clear()
 
     def _stop(self) -> None:
         """Stops receiving of the messages from the upstream."""
