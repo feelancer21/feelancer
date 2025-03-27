@@ -285,10 +285,7 @@ class StreamDispatcher(Generic[T], BaseServer):
         # We return a callable which enables the subscriber to start a stream.
         # It gives the caller the possibility to restart the stream with a
         # new reconciliation when necessary.
-        def start_stream():
-            return self._start_subscriber_stream(q, convert, get_recon_source)
-
-        return start_stream
+        return lambda: self._start_subscriber_stream(q, convert, get_recon_source)
 
     def _start_subscriber_stream(
         self,

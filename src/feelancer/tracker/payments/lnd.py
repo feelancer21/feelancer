@@ -1,21 +1,17 @@
 import datetime
-import logging
-from collections.abc import Callable, Generator
+from collections.abc import Generator
 
 import pytz
 
-from feelancer.lightning.lnd import LNDClient
-from feelancer.lnd.client import LndGrpc
+from feelancer.lnd.client import LndPaymentDispatcher
 from feelancer.lnd.grpc_generated import lightning_pb2 as ln
-from feelancer.log import stream_logger
-from feelancer.retry import default_retry_handler
 from feelancer.tracker.data import (
     GraphNodeNotFound,
     GraphPathNotFound,
     PaymentNotFound,
     PaymentRequestNotFound,
-    TrackerStore,
 )
+from feelancer.tracker.lnd import LndBaseReconSource, LndBaseTracker
 from feelancer.tracker.models import (
     Failure,
     FailureCode,
@@ -34,127 +30,56 @@ from feelancer.tracker.models import (
 from feelancer.utils import ns_to_datetime, sha256_supports_str
 
 RECON_TIME_INTERVAL = 30 * 24 * 3600  # 30 days in seconds
-CHUNK_SIZE = 1000
-
-logger = logging.getLogger(__name__)
-payment_stream_logger = stream_logger(interval=100, items_name="payments")
+CHUNK_SIZE = 10
 
 
-class LNDPaymentReconSource:
-    def __init__(
+class LNDPaymentTracker(LndBaseTracker):
+
+    def _delete_orphaned_data(self) -> None:
+        self._store.delete_orphaned_payments()
+
+    def _get_items_name(self) -> str:
+        return "payments"
+
+    def _pre_sync_source(self) -> Generator[ln.Payment]:
+
+        index_offset = self._store.get_max_payment_index()
+        self._logger.debug(f"Starting from index {index_offset} for {self._pub_key}")
+
+        return self._lnd.paginate_payments(
+            index_offset=index_offset, include_incomplete=True
+        )
+
+    def _process_item_stream(
         self,
-        lnd: LndGrpc,
-        process_payment: Callable[[ln.Payment, bool], Generator[HTLCAttempt]],
-    ):
-        self._process_payment = process_payment
+        item: ln.Payment,
+        recon_running: bool,
+    ) -> Generator[HTLCAttempt]:
+
+        return self._process_payment(item, recon_running)
+
+    def _process_item_pre_sync(
+        self,
+        item: ln.Payment,
+        recon_running: bool,
+    ) -> Generator[HTLCAttempt]:
+
+        return self._process_payment(item, recon_running)
+
+    def _new_recon_source(self) -> LndBaseReconSource[HTLCAttempt, ln.Payment]:
 
         recon_start = datetime.datetime.now(tz=pytz.utc) - datetime.timedelta(
             seconds=RECON_TIME_INTERVAL
         )
-        self._paginator = lnd.paginate_payments(
+        paginator = self._lnd.paginate_payments(
             include_incomplete=True,
             creation_date_start=int(recon_start.timestamp()),
         )
-        self._is_stopped = False
 
-    def items(self) -> Generator[HTLCAttempt]:
-        for p in self._paginator:
-            yield from self._process_payment(p, True)
+        return LndBaseReconSource(paginator, self._process_payment)
 
-            if self._is_stopped:
-                self._paginator.close()
-
-    def stop(self) -> None:
-        self._is_stopped = True
-
-
-class LNDPaymentTracker:
-
-    def __init__(self, lnd: LNDClient, store: TrackerStore):
-
-        self._lnd: LndGrpc = lnd.lnd
-        self._pub_key = lnd.pubkey_local
-        self._store = store
-        self._is_stopped = False
-
-    def start(self) -> None:
-
-        # get_recon_source returns a new paginator for ListPayments over
-        # the last 30 days.
-        def get_recon_source() -> LNDPaymentReconSource:
-            return LNDPaymentReconSource(self._lnd, self._process_payment)
-
-        dispatcher = self._lnd.track_payments_dispatcher
-        start_stream = dispatcher.subscribe(self._process_payment, get_recon_source)
-
-        self._store_payments(start_stream)
-
-    def pre_sync_start(self) -> None:
-        """
-        Presync payments from the LND ListPayments API. This is done before the
-        subscription starts. This is necessary to get the payments that were
-        made while the subscription was not running.
-        """
-
-        logger.info(f"Presync payments for {self._pub_key}...")
-
-        # Delete orphaned objects in sync mode. This is necessary here to avoid
-        # foreign key constraints violations when adding new objects.
-        self._store.delete_orphaned()
-        self._pre_sync_start()
-
-        logger.info(f"Presync payments for {self._pub_key} finished")
-
-    def pre_sync_stop(self) -> None:
-        """
-        Stops the presync process.
-        """
-        self._is_stopped = True
-
-    @default_retry_handler
-    def _pre_sync_start(self) -> None:
-        """
-        Starts the presync process with a retry handler.
-        """
-
-        if self._is_stopped:
-            return
-
-        self._store.db.add_chunks_from_iterable(
-            self._attempts_from_paginator(), chunk_size=CHUNK_SIZE
-        )
-
-    @payment_stream_logger
-    def _attempts_from_paginator(self) -> Generator[HTLCAttempt]:
-
-        index_offset = self._store.get_max_payment_index()
-        logger.debug(f"Starting from index {index_offset} for {self._pub_key}")
-
-        generator = self._lnd.paginate_payments(
-            index_offset=index_offset, include_incomplete=True
-        )
-        for payment in generator:
-            if self._is_stopped:
-                generator.close()
-
-            yield from self._process_payment(payment, False)
-
-    @default_retry_handler
-    def _store_payments(
-        self, start_stream: Callable[..., Generator[HTLCAttempt]]
-    ) -> None:
-        """
-        Fetches the payments from the subscription and stores them in the database.
-        """
-
-        # In every retry we initialize a new generator. This is necessary because
-        # the generator is closed after the first iteration. Moreover we need
-        # need, e.g. in the case an exception when storing the data.
-        @payment_stream_logger
-        def attempts_from_stream() -> Generator[HTLCAttempt]:
-            yield from start_stream()
-
-        self._store.db.add_all_from_iterable(attempts_from_stream(), True)
+    def _new_dispatcher(self) -> LndPaymentDispatcher:
+        return self._lnd.track_payments_dispatcher
 
     def _process_payment(
         self, p: ln.Payment, recon_running: bool
@@ -177,7 +102,9 @@ class LNDPaymentTracker:
                 self._store.get_payment_id(p.payment_index)
                 return
             except PaymentNotFound:
-                logger.debug(f"Payment reconciliation: {p.payment_index=} not found.")
+                self._logger.debug(
+                    f"Payment reconciliation: {p.payment_index=} not found."
+                )
                 pass
 
         payment = self._create_payment(p)
@@ -325,7 +252,7 @@ class LNDPaymentTracker:
                 source_hop = hops[attempt.failure.failure_source_index]
             except IndexError:
                 source_hop = None
-                logger.warning(
+                self._logger.warning(
                     f"Failure source index out of bounds: {attempt.failure.failure_source_index=}, ",
                     f"{attempt.attempt_id=}",
                 )

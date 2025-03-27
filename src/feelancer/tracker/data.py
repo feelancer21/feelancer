@@ -295,7 +295,7 @@ class TrackerStore:
 
         return self.db.add_post(path, lambda p: p.id)
 
-    def delete_orphaned(self) -> None:
+    def delete_orphaned_payments(self) -> None:
         """
         Deletes all orphaned objects of this store. Atm only orphaned payment
         requests are deleted.
