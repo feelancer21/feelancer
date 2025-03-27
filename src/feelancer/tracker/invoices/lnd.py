@@ -1,15 +1,12 @@
 import datetime
-import logging
-from collections.abc import Callable, Generator
+from collections.abc import Generator
 
 import pytz
 
-from feelancer.lightning.lnd import LNDClient
-from feelancer.lnd.client import LndGrpc
+from feelancer.lnd.client import LndInvoiceDispatcher
 from feelancer.lnd.grpc_generated import lightning_pb2 as ln
-from feelancer.log import stream_logger
-from feelancer.retry import default_retry_handler
-from feelancer.tracker.data import InvoiceNotFound, TrackerStore
+from feelancer.tracker.data import InvoiceNotFound
+from feelancer.tracker.lnd import LndBaseReconSource, LndBaseTracker
 from feelancer.tracker.models import (
     Invoice,
     InvoiceHTLC,
@@ -21,105 +18,56 @@ from feelancer.utils import bytes_to_str, sec_to_datetime
 RECON_TIME_INTERVAL = 30 * 24 * 3600  # 30 days in seconds
 CHUNK_SIZE = 1000
 
-logger = logging.getLogger(__name__)
-invoice_stream_logger = stream_logger(interval=100, items_name="invoices")
 
+class LNDInvoiceTracker(LndBaseTracker):
 
-class LNDInvoiceReconSource:
-    def __init__(
+    def _delete_orphaned_data(self) -> None:
+        return None
+
+    def _get_items_name(self) -> str:
+        return "invoices"
+
+    def _pre_sync_source(self) -> Generator[ln.Invoice]:
+
+        index_offset = self._store.get_max_invoice_add_index()
+        self._logger.debug(f"Starting from index {index_offset} for {self._pub_key}")
+
+        return self._lnd.paginate_invoices(index_offset=index_offset)
+
+    def _process_item_stream(
         self,
-        lnd: LndGrpc,
-        process_payment: Callable[[ln.Invoice, bool], Generator[Invoice]],
-    ):
-        self._process_invoices = process_payment
+        item: ln.Invoice,
+        recon_running: bool,
+    ) -> Generator[Invoice]:
+
+        return self._process_invoice(item, recon_running)
+
+    def _process_item_pre_sync(
+        self,
+        item: ln.Invoice,
+        recon_running: bool,
+    ) -> Generator[Invoice]:
+
+        return self._process_invoice(item, recon_running)
+
+    def _new_recon_source(self) -> LndBaseReconSource[Invoice, ln.Invoice]:
 
         recon_start = datetime.datetime.now(tz=pytz.utc) - datetime.timedelta(
             seconds=RECON_TIME_INTERVAL
         )
-        self._paginator = lnd.paginate_invoices(
+        paginator = self._lnd.paginate_payments(
+            include_incomplete=True,
             creation_date_start=int(recon_start.timestamp()),
         )
-        self._is_stopped = False
 
-    def items(self) -> Generator[Invoice]:
-        for i in self._paginator:
-            yield from self._process_invoices(i, True)
-
-            if self._is_stopped:
-                self._paginator.close()
-
-    def stop(self) -> None:
-        self._is_stopped = True
-
-
-class LNDInvoiceTracker:
-
-    def __init__(self, lnd: LNDClient, store: TrackerStore):
-
-        self._lnd: LndGrpc = lnd.lnd
-        self._pub_key = lnd.pubkey_local
-        self._store = store
-        self._is_stopped = False
-
-    def start(self) -> None:
-
-        def get_recon_source() -> LNDInvoiceReconSource:
-            return LNDInvoiceReconSource(self._lnd, self._process_invoice)
-
-        dispatcher = self._lnd.subscribe_invoices_dispatcher
-        start_stream = dispatcher.subscribe(self._process_invoice, get_recon_source)
-
-        self._store_invoices(start_stream)
-
-    def pre_sync_start(self) -> None:
-
-        logger.info(f"Presync invoices for {self._pub_key}...")
-
-        self._pre_sync_start()
-        logger.info(f"Presync invoices for {self._pub_key} finished")
-
-    def pre_sync_stop(self) -> None:
-        """
-        Stops the presync process.
-        """
-        self._is_stopped = True
-
-    @default_retry_handler
-    def _pre_sync_start(self) -> None:
-        """
-        Starts the presync process with a retry handler.
-        """
-
-        if self._is_stopped:
-            return
-
-        self._store.db.add_chunks_from_iterable(
-            self._attempts_from_paginator(), chunk_size=CHUNK_SIZE
+        paginator = self._lnd.paginate_invoices(
+            creation_date_start=int(recon_start.timestamp()),
         )
 
-    @invoice_stream_logger
-    def _attempts_from_paginator(self) -> Generator[Invoice]:
-        """
-        Processes all invoices from the paginator.
-        """
+        return LndBaseReconSource(paginator, self._process_invoice)
 
-        index_offset = self._store.get_max_invoice_add_index()
-        logger.debug(f"Starting from index {index_offset} for {self._pub_key}")
-
-        for i in self._lnd.paginate_invoices(index_offset=index_offset):
-            if self._is_stopped:
-                return
-
-            yield from self._process_invoice(i, False)
-
-    @default_retry_handler
-    def _store_invoices(self, start_stream: Callable[..., Generator[Invoice]]) -> None:
-
-        @invoice_stream_logger
-        def attempts_from_stream() -> Generator[Invoice]:
-            yield from start_stream()
-
-        self._store.db.add_all_from_iterable(attempts_from_stream())
+    def _new_dispatcher(self) -> LndInvoiceDispatcher:
+        return self._lnd.subscribe_invoices_dispatcher
 
     def _process_invoice(
         self, i: ln.Invoice, recon_running: bool
@@ -139,7 +87,7 @@ class LNDInvoiceTracker:
                 self._store.get_invoice_id(bytes_to_str(i.r_hash))
                 return None
             except InvoiceNotFound:
-                logger.debug(
+                self._logger.debug(
                     f"Invoice reconciliation: {i.add_index=}; {i.settle_index=} not found."
                 )
                 pass

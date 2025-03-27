@@ -52,6 +52,7 @@ def log_func_call(func):
 def stream_logger(
     interval: int,
     items_name: str = "items",
+    logger: logging.Logger | None = None,
 ) -> Callable:
     """
     Decorator for writing a log message in the given interval of yielded items.
@@ -61,18 +62,21 @@ def stream_logger(
     def msg(increment: int, count: int) -> str:
         return (
             f"Processed another {increment} {items_name}; "
-            f"total processed: {count} {items_name}"
+            f"total processed: {count} {items_name} since startup"
         )
 
     # count is shared between all instances of the decorated function
     count: int = 0
 
     def decorator(generator_func):
-        logger = logging.getLogger(generator_func.__module__)
 
         @functools.wraps(generator_func)
         def wrapper(*args: Any, **kwargs: Any):
             nonlocal count
+            nonlocal logger
+            if logger is None:
+                logger = logging.getLogger(generator_func.__module__)
+
             try:
                 for item in generator_func(*args, **kwargs):
                     yield item
