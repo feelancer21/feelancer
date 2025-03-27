@@ -6,6 +6,7 @@ from typing import Generic, TypeVar
 from google.protobuf.message import Message
 from sqlalchemy.orm import DeclarativeBase
 
+from feelancer.event import stop_event
 from feelancer.grpc.client import StreamDispatcher
 from feelancer.lightning.lnd import LNDClient
 from feelancer.lnd.client import LndGrpc
@@ -34,17 +35,13 @@ class LndBaseReconSource(Generic[T, U]):
     ):
         self._source_items = source_items
         self._process_item = process_item
-        self._is_stopped = False
 
     def items(self) -> Generator[T]:
         for item in self._source_items:
             yield from self._process_item(item, True)
 
-            if self._is_stopped:
+            if stop_event.is_set():
                 self._source_items.close()
-
-    def stop(self) -> None:
-        self._is_stopped = True
 
 
 class LndBaseTracker(Generic[T, U, V], ABC):
@@ -53,7 +50,6 @@ class LndBaseTracker(Generic[T, U, V], ABC):
         self._lnd: LndGrpc = lnd.lnd
         self._pub_key = lnd.pubkey_local
         self._store = store
-        self._is_stopped = False
         self._items_name = self._get_items_name()
         self._logger = logging.getLogger(self.__module__)
         self._stream_logger = stream_logger(
@@ -98,14 +94,14 @@ class LndBaseTracker(Generic[T, U, V], ABC):
         Starts the presync process with a retry handler.
         """
 
-        if self._is_stopped:
+        if stop_event.is_set():
             return
 
         @self._stream_logger
         def pre_sync_stream() -> Generator[T]:
             stream = self._pre_sync_source()
             for item in stream:
-                if self._is_stopped:
+                if stop_event.is_set():
                     stream.close()
 
                 yield from self._process_item_pre_sync(item, recon_running=False)
@@ -166,9 +162,3 @@ class LndBaseTracker(Generic[T, U, V], ABC):
         self._pre_sync_start()
 
         self._logger.info(f"{msg} finished")
-
-    def pre_sync_stop(self) -> None:
-        """
-        Stops the presync process.
-        """
-        self._is_stopped = True
