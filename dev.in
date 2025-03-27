@@ -1,5 +1,4 @@
 grpcio
-googleapis-common-protos
 mypy-protobuf
 ruff
 black

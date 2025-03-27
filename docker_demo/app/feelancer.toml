@@ -6,9 +6,7 @@ ip_address = "192.168.2.21:10009"
 
 
 [sqlalchemy.url]
-# # Sqlalchemy configuration for your database.
-#drivername = "sqlite"
-#database = "/app/feelancer.db"
+# Sqlalchemy configuration for your database.
 drivername = "postgresql"
 username = "feelancer"
 port = 5432
@@ -147,7 +145,7 @@ margin_idiosyncratic = -10
 
 
 [reconnect]
-# If the 'reconnect' section is included in file a reconnect service will be started.
+# If the 'reconnect' section is included in config file a reconnect service will be started.
 # It reconnects channels with stuck htlcs and maybe inactive channels.
 
 # inactive channels are only included if set to true.
@@ -155,3 +153,42 @@ include_inactive = false
 
 # An htlc is defined as stuck if the expiry is less blocks away than this value
 max_blocks_to_expiry = 13
+
+[paytrack]
+# If the 'paytrack' section is included in config file a paytrack service will be started.
+# It stores all successful and failed payments in the database.
+
+# The following params control the creation of csv files using the stored data.
+# The files are created every feelancer.seconds.
+
+# Create the a list with pub_key, average node speed and count of payments
+node_speed_write_csv = false
+# time window of the historical data
+node_speed_time_window_hours = 48
+# percentiles to calculate, separated by comma. First element determines the 
+# order of the list
+node_speed_percentiles = [50]
+# csv file path
+node_speed_csv_file = "~/.feelancer/node_speed.csv"
+
+# Create a list with pub_keys of all slow nodes
+slow_nodes_write_csv = false
+# minimum number of htlc attempts
+slow_nodes_min_attempts = 0
+# percentile to use.
+slow_nodes_percentile = 50
+# minimum average node speed
+slow_nodes_min_speed = 21
+# csv file path
+slow_nodes_csv_file = "~/.feelancer/slow_nodes.csv"
+
+# Create a list with all htlc attempts and its locked liquidity
+htlc_liquidity_write_csv = false
+# csv file path
+htlc_liquidity_locked_csv_file = "~/.feelancer/htlc_liquidity_locked.csv"
+
+# Housekeeping, delete failed payments and htlc attempts. Job is running every
+# feelancer.seconds. Orphaned payment requests are deleted during next startup.
+delete_failed = true
+# Number of hours to keep failed payments and htlc attempts
+delete_failed_hours = 168

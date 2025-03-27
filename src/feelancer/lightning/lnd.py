@@ -10,6 +10,8 @@ from feelancer.lightning.utils import opening_height
 if TYPE_CHECKING:
     from feelancer.lnd.grpc_generated import lightning_pb2 as ln
 
+logger = logging.getLogger(__name__)
+
 
 def _liquidity_pending(channel: ln.Channel) -> tuple[int, int]:
     pending_out = sum(h.amount for h in channel.pending_htlcs if not h.incoming)
@@ -71,7 +73,7 @@ class LNDClient:
             # to BigInteger.
             # TODO: Remove it when we move to strings as channel_id in the database.
             if channel.chan_id >= 2**63:
-                logging.error(
+                logger.error(
                     f"Skipping {channel.channel_point=} because chan_id is too large"
                 )
                 continue
@@ -81,7 +83,7 @@ class LNDClient:
             try:
                 p_local, p_remote = self.get_channel_policies(channel.chan_id)
             except lnd.EdgeNotFound as e:
-                logging.error(f"Skipping {channel.channel_point=} because of '{e}'")
+                logger.error(f"Skipping {channel.channel_point=} because of '{e}'")
                 continue
 
             liq_pending_out, liq_pending_in = _liquidity_pending(channel)
@@ -119,17 +121,17 @@ class LNDClient:
         for a in sorted_addresses:
             host = a.addr
             try:
-                logging.debug(f"Trying to connect: {pub_key=}@{host=}")
+                logger.debug(f"Trying to connect: {pub_key=}@{host=}")
                 self.lnd.connect_peer(pub_key=pub_key, host=host)
-                logging.info(f"Connected to {pub_key=}; {host=}")
+                logger.info(f"Connected to {pub_key=}; {host=}")
                 return None
 
             except lnd.PeerAlreadyConnected as e:
-                logging.debug(f"Received from lnd: {e}")
+                logger.debug(f"Received from lnd: {e}")
                 return None
 
             except (lnd.DialProxFailed, lnd.EOF) as e:
-                logging.error(f"Received from lnd: {e}")
+                logger.error(f"Received from lnd: {e}")
 
     def disconnect_peer(self, pub_key: str) -> None:
 
@@ -137,9 +139,9 @@ class LNDClient:
         # is already disconnected.
         try:
             self.lnd.disconnect_peer(pub_key)
-            logging.info(f"Disonnected from {pub_key=}")
+            logger.info(f"Disonnected from {pub_key=}")
         except lnd.PeerNotConnected as e:
-            logging.debug(f"Received from lnd: {e}")
+            logger.debug(f"Received from lnd: {e}")
 
     def get_channel_policies(
         self, chan_id: int
@@ -183,9 +185,15 @@ class LNDClient:
             return
 
         for f in response.failed_updates:
-            logging.error(
+            logger.error(
                 f"update failure for chan_point {chan_point}; error: "
                 + f"{f.update_error}; failure: {lnd.update_failure_name(f.reason)}"
             )
         if len(response.failed_updates) > 0:
             raise Exception("update failure during policy update")
+
+    def start(self) -> None:
+        return self.lnd.start()
+
+    def stop(self) -> None:
+        return self.lnd.stop()
