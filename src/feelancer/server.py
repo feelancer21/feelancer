@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, TypeVar
 from .base import BaseServer
 from .config import DictInitializedConfig, FeelancerConfig
 from .data.db import FeelancerDB
+from .event import stop_event
 from .lightning.data import LightningStore
 from .lightning.lnd import LNDClient
 from .lnd.client import LndGrpc
@@ -23,7 +24,6 @@ from .pid.data import PidConfig, PidStore
 from .pid.service import PidService
 from .reconnect.reconnector import LNDReconnector
 from .reconnect.service import ReconnectConfig, ReconnectService
-from .retry import stop_retry
 from .tasks.runner import TaskRunner
 from .tracker.data import TrackerStore
 from .tracker.invoices.lnd import LNDInvoiceTracker
@@ -222,7 +222,7 @@ class MainServer(BaseServer):
         self.cfg = cfg
 
         # Stopping all retry handlers if the server is stopped.
-        self._register_sync_stopper(stop_retry)
+        self._register_sync_stopper(stop_event.set)
 
         # Setting up the signal handler for SIGTERM and SIGINT.
         SignalHandler(self.stop, self.kill, self.cfg.timeout)
@@ -288,7 +288,6 @@ class MainServer(BaseServer):
     def _register_tracker(self, tracker: Tracker) -> None:
         self._register_sync_starter(tracker.pre_sync_start)
         self._register_starter(tracker.start)
-        self._register_stopper(tracker.pre_sync_stop)
 
     def read_feelancer_cfg(self) -> FeelancerConfig:
         """

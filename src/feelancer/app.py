@@ -61,9 +61,12 @@ def app():
         else:
             logger.info(f"Not starting server: {args.no_server=}")
 
+        # Flsuhing the logger
+        logging.shutdown()
         logger.info("Feelancer shutdown completed.\n")
 
     except Exception:
+        logging.shutdown()
         # Hard exit with killing of all threads if there is an unknown error.
         logger.exception("An unexpected error occurred.")
 

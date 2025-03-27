@@ -22,12 +22,6 @@ class Tracker(Protocol):
         """
         ...
 
-    def pre_sync_stop(self) -> None:
-        """
-        Stops the pre sync process gracefully.
-        """
-        ...
-
 
 class TrackerBaseService(Generic[T]):
     """
