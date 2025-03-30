@@ -154,7 +154,7 @@ class LNDPaymentTracker(LndBaseTracker):
         # Determination of the index of the last used hop. It is the failure source
         # index if the attempt failed. If the attempt succeeded it is the receiver
         # of the attempt.
-        if attempt.status == 2 and attempt.failure is not None:
+        if attempt.status == 2 and attempt.HasField("failure"):
             last_used_hop_index = attempt.failure.failure_source_index
         elif attempt.status == 1:
             last_used_hop_index = len(attempt.route.hops)
@@ -247,7 +247,7 @@ class LNDPaymentTracker(LndBaseTracker):
 
         # If the attempt failed we store the failure information. For succeeded
         # attempts we don't need to store this information.
-        if attempt.status == 2 and attempt.failure is not None:
+        if attempt.status == 2 and attempt.HasField("failure"):
             try:
                 source_hop = hops[attempt.failure.failure_source_index]
             except IndexError:

@@ -8,6 +8,7 @@ from feelancer.data.db import FeelancerDB
 
 from .models import (
     Base,
+    ForwardingEvent,
     GraphNode,
     GraphPath,
     Hop,
@@ -77,6 +78,13 @@ def query_invoice(r_hash: str) -> Select[tuple[Invoice]]:
 
 def query_max_invoice_add_index(ln_node_id: int) -> Select[tuple[int]]:
     qry = select(func.max(Invoice.add_index)).where(Invoice.ln_node_id == ln_node_id)
+    return qry
+
+
+def query_count_forwarding_events(ln_node_id: int) -> Select[tuple[int]]:
+    qry = select(func.count(ForwardingEvent.id)).where(
+        ForwardingEvent.ln_node_id == ln_node_id
+    )
     return qry
 
 
@@ -377,4 +385,13 @@ class TrackerStore:
 
         return self.db.query_first(
             query_max_invoice_add_index(self.ln_node_id), lambda p: p, 0
+        )
+
+    def get_count_forwarding_events(self) -> int:
+        """
+        Returns the count of forwarding events.
+        """
+
+        return self.db.query_first(
+            query_count_forwarding_events(self.ln_node_id), lambda p: p, 0
         )

@@ -55,10 +55,6 @@ class LNDInvoiceTracker(LndBaseTracker):
         recon_start = datetime.datetime.now(tz=pytz.utc) - datetime.timedelta(
             seconds=RECON_TIME_INTERVAL
         )
-        paginator = self._lnd.paginate_payments(
-            include_incomplete=True,
-            creation_date_start=int(recon_start.timestamp()),
-        )
 
         paginator = self._lnd.paginate_invoices(
             creation_date_start=int(recon_start.timestamp()),

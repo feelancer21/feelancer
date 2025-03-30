@@ -17,6 +17,7 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from feelancer.lightning.models import Base, DBLnNode
@@ -457,3 +458,86 @@ class InvoiceHTLCResolveInfo(Base):
     state: Mapped[InvoiceHTLCState] = mapped_column(
         Enum(InvoiceHTLCState), nullable=False
     )
+
+
+class ForwardingEvent(Base):
+    __tablename__ = "ln_forwarding_event"
+
+    # Unique identifier for the forwarding event (optional, can be added if needed)
+    id: Mapped[int] = mapped_column(autoincrement=True, primary_key=True)
+
+    ln_node_id: Mapped[int] = mapped_column(
+        ForeignKey("ln_node.id", ondelete="CASCADE"), nullable=False
+    )
+
+    # the local lightning node
+    ln_node: Mapped[DBLnNode] = relationship(DBLnNode)
+
+    # The timestamp in nanoseconds since epoch
+    timestamp: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False)
+
+    # The incoming channel ID that carried the HTLC that created the circuit
+    chan_id_in: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+    # The outgoing channel ID that carried the preimage that completed the circuit
+    chan_id_out: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+    # The total fee (in milli-satoshis) for this payment circuit
+    fee_msat: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+    # The total amount (in milli-satoshis) of the incoming HTLC
+    amt_in_msat: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+    # The total amount (in milli-satoshis) of the outgoing HTLC
+    amt_out_msat: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+
+class HtlcEventType(PyEnum):
+    UNKNOWN = 0
+    SEND = 1
+    RECEIVE = 2
+    FORWARD = 3
+
+
+class HtlcEvent(Base):
+    __tablename__ = "ln_htlc_event"
+
+    # Primary key
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+
+    ln_node_id: Mapped[int] = mapped_column(
+        ForeignKey("ln_node.id", ondelete="CASCADE"), nullable=False
+    )
+
+    # the local lightning node
+    ln_node: Mapped[DBLnNode] = relationship(DBLnNode)
+
+    # Incoming channel ID
+    incoming_channel_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+    # Outgoing channel ID
+    outgoing_channel_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+    # Incoming HTLC ID
+    incoming_htlc_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+    # Outgoing HTLC ID
+    outgoing_htlc_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+    # Human-readable timestamp derived from `timestamp_ns`
+    timestamp: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+
+    # Event type
+    event_type: Mapped[HtlcEventType] = mapped_column(
+        Enum(HtlcEventType), nullable=False
+    )
+
+    # JSONB fields for each event type
+    forward_event: Mapped[dict] = mapped_column(JSONB, nullable=True)
+    forward_fail_event: Mapped[dict] = mapped_column(JSONB, nullable=True)
+    settle_event: Mapped[dict] = mapped_column(JSONB, nullable=True)
+    link_fail_event: Mapped[dict] = mapped_column(JSONB, nullable=True)
+    subscribed_event: Mapped[dict] = mapped_column(JSONB, nullable=True)
+    final_htlc_event: Mapped[dict] = mapped_column(JSONB, nullable=True)
