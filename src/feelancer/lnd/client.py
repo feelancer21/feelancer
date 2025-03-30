@@ -82,6 +82,9 @@ class LndPaymentDispatcher(StreamDispatcher[ln.Payment]): ...
 class LndInvoiceDispatcher(StreamDispatcher[ln.Invoice]): ...
 
 
+class LndHtlcEventDispatcher(StreamDispatcher[rt.HtlcEvent]): ...
+
+
 class LndGrpc(SecureGrpcClient, BaseServer):
 
     def __init__(
@@ -103,6 +106,10 @@ class LndGrpc(SecureGrpcClient, BaseServer):
         self.subscribe_invoices_dispatcher = self._new_invoice_dispatcher()
 
         self._register_sub_server(self.subscribe_invoices_dispatcher)
+
+        self.subscribe_htlc_events_dispatcher = self._new_htlc_event_dispatcher()
+
+        self._register_sub_server(self.subscribe_htlc_events_dispatcher)
 
     @property
     def _ln_stub(self) -> lnrpc.LightningStub:
@@ -375,6 +382,18 @@ class LndGrpc(SecureGrpcClient, BaseServer):
 
         return LndInvoiceDispatcher(
             new_stream_initializer=lambda: self._ln_stub.SubscribeInvoices,
+            request=req,
+            handle_rpc_stream=rpc_handler,
+        )
+
+    def _new_htlc_event_dispatcher(self) -> LndHtlcEventDispatcher:
+
+        req = rt.SubscribeHtlcEventsRequest()
+
+        rpc_handler = lnd_resp_handler.create_handle_rpc_stream("SubscribeHtlcEvents")
+
+        return LndHtlcEventDispatcher(
+            new_stream_initializer=lambda: self._router_stub.SubscribeHtlcEvents,
             request=req,
             handle_rpc_stream=rpc_handler,
         )
