@@ -9,6 +9,8 @@ from .reconnector import Reconnector
 
 DEFAULT_MAX_BLOCKS_TO_EXPIRY = 13
 
+logger = logging.getLogger(__name__)
+
 
 class ReconnectConfig:
     def __init__(self, config_dict: dict) -> None:
@@ -47,14 +49,14 @@ class ReconnectService:
         if cfg is None:
             return RunnerResult()
 
-        logging.info("Running reconnector...")
-        logging.debug(f"reconnect config: {cfg.__dict__=}")
+        logger.info("Running reconnector...")
+        logger.debug(f"reconnect config: {cfg.__dict__=}")
 
         self.reconnector.reconnect_channels(
             cfg.max_blocks_to_expiry, cfg.include_inactive
         )
 
-        logging.info("Finished reconnector")
+        logger.info("Finished reconnector")
 
         # return an empty result to be compliant with the protocol
         return RunnerResult()

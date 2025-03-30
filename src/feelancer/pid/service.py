@@ -15,6 +15,8 @@ if TYPE_CHECKING:
 
     from .data import PidConfig
 
+logger = logging.getLogger(__name__)
+
 
 class PidService:
 
@@ -22,12 +24,12 @@ class PidService:
         self,
         db: FeelancerDB,
         pubkey_local: str,
-        get_pid_config: Callable[..., PidConfig],
+        get_pid_config: Callable[..., PidConfig | None],
     ):
 
         self.pid_store = PidStore(db, pubkey_local)
         self.ln_store = LightningStore(db, pubkey_local)
-        self.get_pid_config: Callable[..., PidConfig] = get_pid_config
+        self.get_pid_config: Callable[..., PidConfig | None] = get_pid_config
         self.pid_controller: PidController | None = None
 
     def run(self, request: RunnerRequest) -> RunnerResult:
@@ -35,9 +37,11 @@ class PidService:
         Runs the the pid model.
         """
 
-        logging.info("Running pid controller...")
-
         pid_config = self.get_pid_config()
+        if pid_config is None:
+            return RunnerResult(None, None)
+
+        logger.info("Running pid controller...")
 
         if not self.pid_controller:
             self.pid_controller = PidController(
@@ -50,7 +54,7 @@ class PidService:
             self.pid_controller.store_data, self.pid_controller.policy_proposals()
         )
 
-        logging.info("Finished pid controller")
+        logger.info("Finished pid controller")
         return res
 
     def reset(self) -> None:
@@ -59,4 +63,4 @@ class PidService:
         """
 
         self.pid_controller = None
-        logging.debug("Finished reset of pid controller")
+        logger.debug("Finished reset of pid controller")

@@ -166,7 +166,7 @@ def call_spread_from_history(
     # the controller from the history with the current.
     # Hence the ewma's will be updated.
     history[-1][1].control_variable = start_value_ewma
-    spread_ct = SpreadController.from_history(params, history)
+    spread_ct = SpreadController.from_history(params, history, "")
 
     return spread_ct.ewma_controller
 

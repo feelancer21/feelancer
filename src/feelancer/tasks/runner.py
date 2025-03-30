@@ -13,6 +13,7 @@ from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_SCHEDULER_STARTED
 from apscheduler.schedulers.blocking import BlockingScheduler, Event
 from apscheduler.triggers.interval import IntervalTrigger
 
+from feelancer.base import BaseServer
 from feelancer.config import FeelancerConfig
 from feelancer.data.db import FeelancerDB
 from feelancer.lightning.chan_updates import update_channel_policies
@@ -24,6 +25,8 @@ if TYPE_CHECKING:
 
     from feelancer.lightning.chan_updates import PolicyProposal
     from feelancer.lightning.client import LightningClient
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -38,7 +41,7 @@ class RunnerRequest:
     ln: LightningCache
 
 
-class TaskRunner:
+class TaskRunner(BaseServer):
     def __init__(
         self,
         lnclient: LightningClient,
@@ -46,7 +49,9 @@ class TaskRunner:
         seconds: int,
         max_listener_attempts: int,
         read_feelancer_cfg: Callable[..., FeelancerConfig],
+        **kwargs,
     ):
+        super().__init__(**kwargs)
         self.lnclient = lnclient
         self.db = db
         self.read_feelancer_cfg = read_feelancer_cfg
@@ -76,6 +81,9 @@ class TaskRunner:
         self.listener_attempts: int = 0
         self.max_listener_attempts = max_listener_attempts
 
+        self._register_sync_starter(self._start)
+        self._register_sync_stopper(self._stop)
+
         # Setting up a scheduler which call self._run in an interval of
         # self.seconds.
         self.seconds = seconds
@@ -104,10 +112,10 @@ class TaskRunner:
                 if task_result.proposals is not None:
                     policy_updates += task_result.proposals
 
-            logging.info("Finished task execution")
+            logger.info("Finished task execution")
 
         except Exception as e:
-            logging.error("Could not run all tasks")
+            logger.error("Could not run all tasks")
             raise e
 
         timestamp_end = datetime.now(pytz.utc)
@@ -123,7 +131,7 @@ class TaskRunner:
             )
         except Exception:
             # We log the exception but don't raise it.
-            logging.exception("Unexpected error during policy updates occurred")
+            logger.exception("Unexpected error during policy updates occurred")
 
         # Storing the relevant data in the database by calling the store_funcs
         # with the cached data. We can return early if there is nothing to store.
@@ -145,11 +153,11 @@ class TaskRunner:
             return db_run
 
         # Execute the callable. The lambda function returns the run id
-        # for logging.
+        # for logger.
         run_id = self.db.execute_post(store_data, lambda db_run: db_run.id)
 
         run_time = timestamp_end - timestamp_start
-        logging.info(
+        logger.info(
             f"Run {run_id} successfully finished; start "
             f"{timestamp_start}; end {timestamp_end}; runtime {run_time}."
         )
@@ -157,7 +165,7 @@ class TaskRunner:
         # If config.seconds had changed we modify the trigger of the job.
         if config.seconds != self.seconds:
             self.seconds = config.seconds
-            logging.info(f"Interval changed; executing tasks every {self.seconds}s now")
+            logger.info(f"Interval changed; executing tasks every {self.seconds}s now")
             self.job.modify(trigger=IntervalTrigger(seconds=self.seconds))
 
     def register_task(self, task: Callable[[RunnerRequest], RunnerResult]) -> None:
@@ -182,9 +190,9 @@ class TaskRunner:
         for r in self.resets:
             r()
 
-        logging.debug("Reset of internal objects completed.")
+        logger.debug("Reset of internal objects completed.")
 
-    def start(self) -> None:
+    def _start(self) -> None:
         """
         Initializes a BlockingScheduler and starts it.
         """
@@ -195,7 +203,7 @@ class TaskRunner:
         if self.scheduler.running:
             return None
 
-        logging.info(f"Starting runner and executing tasks every {self.seconds}s")
+        logger.info(f"Starting runner and executing tasks every {self.seconds}s")
 
         # Starts the run and resets objects in the case of an unexpected error,
         # e.g. db loss.
@@ -208,12 +216,12 @@ class TaskRunner:
 
             self.listener_attempts += 1
             if is_running:
-                logging.warning(
+                logger.warning(
                     "There is a running listener which prevents the start of a new one."
                 )
                 # It acts like a timeout for pending listener jobs.
                 if self.listener_attempts > self.max_listener_attempts:
-                    logging.error(
+                    logger.error(
                         f"{self.max_listener_attempts=} exceeded. Killing the scheduler..."
                     )
                     self.scheduler.shutdown(wait=False)
@@ -227,7 +235,7 @@ class TaskRunner:
                 # Rpc Errors are logged before, but the objects has to be reset.
                 self._reset()
             except Exception:
-                logging.exception("An unexpected error occurred")
+                logger.exception("An unexpected error occurred")
                 self._reset()
             finally:
                 self.listener_running = False
@@ -247,30 +255,29 @@ class TaskRunner:
         # is started.
         def scheduler_started(event) -> None:
             self.lock.release()
-            logging.debug("Scheduler started and lock released.")
+            logger.debug("Scheduler started and lock released.")
 
         self.scheduler.add_listener(scheduler_started, EVENT_SCHEDULER_STARTED)
 
-        logging.info("Scheduler starting...")
+        logger.info("Scheduler starting...")
         self.scheduler.start()
 
         # Signal to the caller that the end of the scheduler was not gracefully.
         if self.listener_attempts > self.max_listener_attempts:
             raise Exception(f"{self.max_listener_attempts=} exceeded")
 
-    def stop(self) -> None:
+    def _stop(self) -> None:
         """
         Stops the BlockingScheduler
         """
 
-        self.lock.acquire()
+        with self.lock:
 
-        # Return early if scheduler is not running.
-        if not self.scheduler.running:
-            return None
+            # Return early if scheduler is not running.
+            if not self.scheduler.running:
+                return None
 
-        logging.info("Shutting down the scheduler...")
-        self.scheduler.shutdown(wait=True)
+            logger.info("Shutting down the scheduler...")
+            self.scheduler.shutdown(wait=True)
 
-        self.lock.release()
-        logging.info("Scheduler shutdown completed.")
+            logger.info("Scheduler shutdown completed.")

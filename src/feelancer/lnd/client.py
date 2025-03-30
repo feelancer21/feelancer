@@ -1,13 +1,25 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Generator, Iterable, Sequence
 
 import grpc
 
-from feelancer.grpc.client import RpcResponseHandler, SecureGrpcClient
+from feelancer.base import BaseServer
+from feelancer.grpc.client import (
+    Paginator,
+    RpcResponseHandler,
+    SecureGrpcClient,
+    StreamDispatcher,
+)
 
 from .grpc_generated import lightning_pb2 as ln
 from .grpc_generated import lightning_pb2_grpc as lnrpc
+from .grpc_generated import router_pb2 as rt
+from .grpc_generated import router_pb2_grpc as rtrpc
+
+PAGINATOR_MAX_FORWARDING_EVENTS = 10000
+PAGINATOR_MAX_PAYMENTS = 10000
 
 
 class EdgeNotFound(Exception): ...
@@ -25,19 +37,15 @@ class DialProxFailed(Exception): ...
 class EOF(Exception): ...
 
 
-def _eval_lnd_rpc_status(code: grpc.StatusCode, details: str) -> bool:
+def _eval_lnd_rpc_status(code: grpc.StatusCode, details: str) -> None:
     """
     Callable which evaluates lnd specific grpc error based on StatusCode and
     details. If a criteria is matched, a specific exception is raised or True
     is returned. If no criteria is matched False is returned.
     """
 
-    edge_not_found = "edge not found"
-    wallet_unlocked = "wallet locked, unlock it to enable full RPC access"
-    wrong_macaroon = "verification failed: signature mismatch after caveat verification"
-
     if code == grpc.StatusCode.UNKNOWN:
-        if details == edge_not_found:
+        if details == "edge not found":
             raise EdgeNotFound(details)
 
         if details == "EOF":
@@ -55,16 +63,13 @@ def _eval_lnd_rpc_status(code: grpc.StatusCode, details: str) -> bool:
         ):
             raise DialProxFailed(details)
 
-        # Caller should raise the original exception if the wallet is unlocked
-        # or the macaroon is wrong.
-        if details in [wallet_unlocked, wrong_macaroon]:
-            return True
 
-    return False
+class LndResponseHandler(RpcResponseHandler): ...
 
 
-lnd_resp_handler = RpcResponseHandler.with_eval_status(_eval_lnd_rpc_status)
-lnd_handle_rpc_errors = lnd_resp_handler.handle_rpc_errors
+lnd_resp_handler = LndResponseHandler(_eval_lnd_rpc_status)
+lnd_handle_rpc_unary = lnd_resp_handler.decorator_rpc_unary
+lnd_handle_rpc_stream = lnd_resp_handler.decorator_rpc_stream
 
 
 def set_chan_point(chan_point_str: str, chan_point: ln.ChannelPoint) -> None:
@@ -75,11 +80,32 @@ def set_chan_point(chan_point_str: str, chan_point: ln.ChannelPoint) -> None:
     chan_point.output_index = int(out_index)
 
 
-class LndGrpc(SecureGrpcClient):
+# Dispatcher for tracking payments. New class for logger.purposes.
+class LndPaymentDispatcher(StreamDispatcher[ln.Payment]): ...
+
+
+class LndGrpc(SecureGrpcClient, BaseServer):
+
+    def __init__(
+        self,
+        ip_address: str,
+        credentials: grpc.ChannelCredentials,
+        **kwargs,
+    ) -> None:
+        SecureGrpcClient.__init__(self, ip_address, credentials)
+
+        # Responsible for dispatching realtime streams form the grpc server
+        # to internal services.
+        BaseServer.__init__(self, **kwargs)
+
+        self.track_payments_dispatcher = self._new_payments_dispatcher()
+
+        self._register_sub_server(self.track_payments_dispatcher)
+
     @property
     def _ln_stub(self) -> lnrpc.LightningStub:
         """
-        Create a ln_stub dynamically to ensure channel freshness
+        Creates a LightningStub
 
         If we make a call to the Lightning RPC service when the wallet
         is locked or the server is down we will get back an RpcError with
@@ -89,7 +115,15 @@ class LndGrpc(SecureGrpcClient):
 
         return lnrpc.LightningStub(self._channel)
 
-    @lnd_handle_rpc_errors
+    @property
+    def _router_stub(self) -> rtrpc.RouterStub:
+        """
+        Creates a RouterStub
+        """
+
+        return rtrpc.RouterStub(self._channel)
+
+    @lnd_handle_rpc_unary
     def connect_peer(
         self,
         pub_key: str,
@@ -120,7 +154,7 @@ class LndGrpc(SecureGrpcClient):
 
         return self._ln_stub.ConnectPeer(req)
 
-    @lnd_handle_rpc_errors
+    @lnd_handle_rpc_unary
     def disconnect_peer(self, pub_key: str) -> ln.DisconnectPeerResponse:
         """
         Calls lnrp.DisconnectPeer
@@ -134,7 +168,7 @@ class LndGrpc(SecureGrpcClient):
 
         return self._ln_stub.DisconnectPeer(ln.DisconnectPeerRequest(pub_key=pub_key))
 
-    @lnd_handle_rpc_errors
+    @lnd_handle_rpc_unary
     def get_chan_info(self, chan_id: int) -> ln.ChannelEdge:
         """
         Calls lnrpc.GetChanInfo
@@ -146,7 +180,7 @@ class LndGrpc(SecureGrpcClient):
         """
         return self._ln_stub.GetChanInfo(ln.ChanInfoRequest(chan_id=chan_id))
 
-    @lnd_handle_rpc_errors
+    @lnd_handle_rpc_unary
     def get_info(self) -> ln.GetInfoResponse:
         """
         Calls lnrpc.GetInfo
@@ -158,7 +192,7 @@ class LndGrpc(SecureGrpcClient):
 
         return self._ln_stub.GetInfo(ln.GetInfoRequest())
 
-    @lnd_handle_rpc_errors
+    @lnd_handle_rpc_unary
     def get_node_info(
         self, pub_key: str, include_channels: bool = False
     ) -> ln.NodeInfo:
@@ -172,7 +206,7 @@ class LndGrpc(SecureGrpcClient):
         req = ln.NodeInfoRequest(pub_key=pub_key, include_channels=include_channels)
         return self._ln_stub.GetNodeInfo(req)
 
-    @lnd_handle_rpc_errors
+    @lnd_handle_rpc_unary
     def list_channels(self) -> ln.ListChannelsResponse:
         """
         Calls lnrpc.ListChannels
@@ -183,7 +217,7 @@ class LndGrpc(SecureGrpcClient):
 
         return self._ln_stub.ListChannels(ln.ListChannelsRequest())
 
-    @lnd_handle_rpc_errors
+    @lnd_handle_rpc_unary
     def update_channel_policy(
         self,
         base_fee_msat: int,
@@ -230,6 +264,85 @@ class LndGrpc(SecureGrpcClient):
                 infee.fee_rate_ppm = inbound_fee_rate_ppm
 
         return self._ln_stub.UpdateChannelPolicy(req)
+
+    @lnd_handle_rpc_stream
+    def track_payments(self, no_inflight_updates: bool = False) -> Iterable[ln.Payment]:
+
+        req = rt.TrackPaymentsRequest()
+        req.no_inflight_updates = no_inflight_updates
+
+        return self._router_stub.TrackPayments(req)
+
+    def paginate_forwarding_events(
+        self,
+        num_max_events: int | None = None,
+        index_offset: int = 0,
+        start_time: int = 0,
+        end_time: int = 0,
+    ) -> Generator[ln.ForwardingEvent]:
+
+        def _read(
+            d: ln.ForwardingHistoryResponse,
+        ) -> tuple[Sequence[ln.ForwardingEvent], int]:
+            return d.forwarding_events, d.last_offset_index
+
+        def _set(d: ln.ForwardingHistoryRequest, offset: int, max: int) -> None:
+            d.index_offset = offset
+            d.num_max_events = max
+
+        paginator = Paginator[ln.ForwardingEvent](
+            producer=self._ln_stub.ForwardingHistory,
+            request=ln.ForwardingHistoryRequest,
+            max_responses=PAGINATOR_MAX_FORWARDING_EVENTS,
+            read_response=_read,
+            set_request=_set,
+        )
+
+        return paginator.request(
+            num_max_events, index_offset, start_time=start_time, end_time=end_time
+        )
+
+    def paginate_payments(
+        self,
+        max_payments: int | None = None,
+        index_offset: int = 0,
+        include_incomplete: bool = False,
+        **kwargs,
+    ) -> Generator[ln.Payment]:
+
+        def _read(d: ln.ListPaymentsResponse) -> tuple[Sequence[ln.Payment], int]:
+            return d.payments, d.last_index_offset
+
+        def _set(d: ln.ListPaymentsRequest, offset: int, max: int) -> None:
+            d.index_offset = offset
+            d.max_payments = max
+
+        paginator = Paginator[ln.Payment](
+            producer=self._ln_stub.ListPayments,
+            request=ln.ListPaymentsRequest,
+            max_responses=PAGINATOR_MAX_PAYMENTS,
+            read_response=_read,
+            set_request=_set,
+        )
+
+        return paginator.request(
+            max_payments, index_offset, include_incomplete=include_incomplete, **kwargs
+        )
+
+    def _new_payments_dispatcher(
+        self, no_inflight_updates: bool = False
+    ) -> LndPaymentDispatcher:
+
+        req = rt.TrackPaymentsRequest()
+        req.no_inflight_updates = no_inflight_updates
+
+        rpc_handler = lnd_resp_handler.create_handle_rpc_stream("TrackPayments")
+
+        return LndPaymentDispatcher(
+            new_stream_initializer=lambda: self._router_stub.TrackPayments,
+            request=req,
+            handle_rpc_stream=rpc_handler,
+        )
 
 
 def update_failure_name(num) -> str:

@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from feelancer.config import FeelancerPeersConfig
 
     from .client import Channel, LightningClient
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -241,7 +242,7 @@ def _create_update_policies(
         dt := timenow.timestamp() - info.max_last_update
     ) < peer_config.min_seconds:
 
-        logging.debug(
+        logger.debug(
             f"no policy updates for {pub_key=}; last update was {dt}s ago "
             f"which is less than min_seconds {peer_config.min_seconds}s."
         )
@@ -249,7 +250,7 @@ def _create_update_policies(
 
     # If values haven't changed significantly we can skip the all channels,
     if not (info.outbound_changed or info.inbound_changed):
-        logging.debug(f"no policy update for {pub_key=} needed.")
+        logger.debug(f"no policy update for {pub_key=} needed.")
         return final_policies
 
     # Looping over all proposals now and creating the final policy which
@@ -296,10 +297,10 @@ def _update_channel_policies_peer(
                 policy.inbound_base_fee_msat,
             )
 
-            logging.info(f"policy update successful {msg}")
+            logger.info(f"policy update successful {msg}")
         except Exception as e:
             # RpcErrors are absorbed here too.
-            logging.error(f"policy update failed {msg}; error {e}")
+            logger.error(f"policy update failed {msg}; error {e}")
 
     return None
 
