@@ -263,7 +263,7 @@ class StreamDispatcher(Generic[T], BaseServer):
     def subscribe(
         self,
         convert: Callable[[T, bool], Generator[V]],
-        get_recon_source: Callable[..., ReconSource[V]] | None = None,
+        get_recon_source: Callable[..., ReconSource[V] | None] = lambda: None,
     ) -> Callable[..., Generator[V]]:
         """
         Returns a callable which starts a stream of all received messages
@@ -280,13 +280,13 @@ class StreamDispatcher(Generic[T], BaseServer):
         # We return a callable which enables the subscriber to start a stream.
         # It gives the caller the possibility to restart the stream with a
         # new reconciliation when necessary.
-        return lambda: self._start_subscriber_stream(q, convert, get_recon_source)
+        return lambda: self._subscribe_queue(q, convert, get_recon_source)
 
-    def _start_subscriber_stream(
+    def _subscribe_queue(
         self,
         q: queue.Queue[T | Exception],
         convert: Callable[[T, bool], Generator[V]],
-        get_recon_source: Callable[..., ReconSource[V]] | None = None,
+        get_recon_source: Callable[..., ReconSource[V] | None],
     ) -> Generator[V]:
         """Returns a generator for all new incoming messages converted to V."""
 
@@ -304,25 +304,23 @@ class StreamDispatcher(Generic[T], BaseServer):
             # Indicates the subscriber whether the messages were created during
             # reconciliation. In this way he can decide if the messages are
             # processed or not.
-            in_recon = False
+            in_recon = True
+            self._logger.info("Reconciliation started")
 
-            # If there are messages from the reconciliation source, we yield them
-            # first.
-            if get_recon_source is not None:
-                self._logger.info("Reconciliation started")
-                in_recon = True
+            # Sleeping a little bit before fetching from the reconciliation
+            # source. This is to fill up the queue with messages from the stream.
+            stop_event.wait(SLEEP_RECON)
+            recon_source = get_recon_source()
 
-                # Sleeping a little bit before fetching from the reconciliation
-                # source. This is to fill up the queue with messages from the stream.
-                stop_event.wait(SLEEP_RECON)
-                recon_source = get_recon_source()
+            if stop_event.is_set():
+                return None
 
-                if stop_event.is_set():
-                    return None
-
+            if recon_source is not None:
                 yield from recon_source.items()
+            else:
+                self._logger.info("No reconciliation source available")
 
-                self._logger.info("Reconciliation stage 1 finished")
+            self._logger.info("Reconciliation stage 1 finished")
 
             # We yield the messages from the stream until we got an exception.
             while True:
