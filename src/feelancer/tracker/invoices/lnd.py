@@ -1,9 +1,8 @@
 import datetime
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 
 import pytz
 
-from feelancer.lnd.client import LndInvoiceDispatcher
 from feelancer.lnd.grpc_generated import lightning_pb2 as ln
 from feelancer.tracker.data import InvoiceNotFound
 from feelancer.tracker.lnd import LndBaseReconSource, LndBaseTracker
@@ -66,8 +65,9 @@ class LNDInvoiceTracker(LndBaseTracker):
 
         return LndBaseReconSource(paginator, self._process_invoice, True)
 
-    def _new_dispatcher(self) -> LndInvoiceDispatcher:
-        return self._lnd.subscribe_invoices_dispatcher
+    def _get_new_stream(self) -> Callable[..., Generator[Invoice]]:
+        dispatcher = self._lnd.subscribe_invoices_dispatcher
+        return self._get_new_stream_from_dispatcher(dispatcher)
 
     def _process_invoice(
         self, i: ln.Invoice, recon_running: bool

@@ -1,9 +1,8 @@
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 
 from google.protobuf.json_format import MessageToDict
 from google.protobuf.message import Message
 
-from feelancer.lnd.client import LndHtlcEventDispatcher
 from feelancer.lnd.grpc_generated import lightning_pb2 as ln
 from feelancer.lnd.grpc_generated import router_pb2 as rt
 from feelancer.tracker.lnd import LndBaseTracker
@@ -56,8 +55,9 @@ class LNDHtlcTracker(LndBaseTracker):
 
         # return LndBaseReconSource(paginator, self._process_forwarding_event)
 
-    def _new_dispatcher(self) -> LndHtlcEventDispatcher:
-        return self._lnd.subscribe_htlc_events_dispatcher
+    def _get_new_stream(self) -> Callable[..., Generator[HtlcEvent]]:
+        dispatcher = self._lnd.subscribe_htlc_events_dispatcher
+        return self._get_new_stream_from_dispatcher(dispatcher)
 
     # def _process_forwarding_event(
     #     self, fwd: ln.ForwardingEvent, recon_running: bool
