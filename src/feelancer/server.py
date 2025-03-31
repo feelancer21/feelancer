@@ -26,6 +26,8 @@ from .reconnect.reconnector import LNDReconnector
 from .reconnect.service import ReconnectConfig, ReconnectService
 from .tasks.runner import TaskRunner
 from .tracker.data import TrackerStore
+from .tracker.forwards.lnd import LNDFwdTracker
+from .tracker.forwards.service import FwdtrackConfig, FwdtrackService
 from .tracker.htlcs.lnd import LNDHtlcTracker
 from .tracker.htlcs.service import HtlctrackConfig, HtlctrackService
 from .tracker.invoices.lnd import LNDInvoiceTracker
@@ -61,6 +63,7 @@ class MainConfig:
     payment_tracker: Tracker
     invoice_tracker: Tracker
     htlc_tracker: Tracker
+    fwd_tacker: Tracker
     tracker_store: TrackerStore
     timeout: int
 
@@ -86,6 +89,7 @@ class MainConfig:
             payment_tracker: Tracker = LNDPaymentTracker(lnclient, tracker_store)
             invoice_tracker: Tracker = LNDInvoiceTracker(lnclient, tracker_store)
             htlc_tracker: Tracker = LNDHtlcTracker(lnclient, tracker_store)
+            fwd_tracker: Tracker = LNDFwdTracker(lnclient, tracker_store)
         else:
             raise ValueError("'lnd' section is not included in config-file")
 
@@ -121,6 +125,7 @@ class MainConfig:
             payment_tracker,
             invoice_tracker,
             htlc_tracker,
+            fwd_tracker,
             tracker_store,
             timeout,
         )
@@ -273,7 +278,11 @@ class MainServer(BaseServer):
         )
 
         self._register_tracker_service(
-            cfg.htlc_tracker, runner, "fwdtrack", HtlctrackConfig, HtlctrackService
+            cfg.htlc_tracker, runner, "htlctrack", HtlctrackConfig, HtlctrackService
+        )
+
+        self._register_tracker_service(
+            cfg.fwd_tacker, runner, "fwdtrack", FwdtrackConfig, FwdtrackService
         )
 
     def _register_tracker_service(
