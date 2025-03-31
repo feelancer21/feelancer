@@ -5,6 +5,7 @@ import logging
 import os
 import queue
 import threading
+import time
 from collections.abc import Callable, Generator, Iterable, Sequence
 from functools import wraps
 from typing import Generic, Protocol, TypeVar
@@ -418,8 +419,14 @@ class Paginator(Generic[W]):
         self._set_request = set_request
 
     def request(
-        self, max_events: int | None, offset: int = 0, **kwargs
+        self, max_events: int | None, blocking_sec: int | None, offset: int, **kwargs
     ) -> Generator[W]:
+        """
+        If blocking_sec is set, the paginator will not stop after the receiving
+        the last events. It will wait for seconds and afterwards calling the
+        producer again.
+        If max_events is not None, it will stop after max_events events.
+        """
 
         events_open = max_events
 
@@ -441,15 +448,18 @@ class Paginator(Generic[W]):
 
             yield from data
 
-            # Next call would not return any more events
-            if len(data) < self._max_responses:
-                break
-
             # If there is no limit on the number of events, we continue until the
             # last event is reached.
-            if events_open is None:
-                continue
+            if events_open is not None:
+                events_open -= len(data)
+                if events_open == 0:
+                    # We will break even in a blocking case
+                    break
 
-            events_open -= len(data)
-            if events_open == 0:
-                break
+            # Next call would not return any more events
+            if len(data) < self._max_responses:
+                if blocking_sec is None:
+                    break
+
+            if blocking_sec is not None:
+                time.sleep(blocking_sec)
