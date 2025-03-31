@@ -32,13 +32,15 @@ class LndBaseReconSource(Generic[T, U]):
         self,
         source_items: Generator[U],
         process_item: Callable[[U, bool], Generator[T]],
+        recon_running: bool,
     ):
         self._source_items = source_items
         self._process_item = process_item
+        self._recon_running = recon_running
 
     def items(self) -> Generator[T]:
         for item in self._source_items:
-            yield from self._process_item(item, True)
+            yield from self._process_item(item, self._recon_running)
 
             if stop_event.is_set():
                 self._source_items.close()
@@ -71,7 +73,7 @@ class LndBaseTracker(Generic[T, U, V], ABC):
         """
 
     @abstractmethod
-    def _pre_sync_source(self) -> Generator[U]:
+    def _pre_sync_source(self) -> LndBaseReconSource[T, U] | None:
         """
         Source of items to be processed in the presync process.
         """
@@ -79,13 +81,17 @@ class LndBaseTracker(Generic[T, U, V], ABC):
     @abstractmethod
     def _process_item_stream(self, item: V, recon_running: bool) -> Generator[T]:
         """
-        Process an item from the LND API to a SQLAlchemy object.
+        Process an item from the LND API to a SQLAlchemy object after start.
         """
 
     @abstractmethod
     def _process_item_pre_sync(self, item: U, recon_running: bool) -> Generator[T]:
         """
-        Process an item from the LND API to a SQLAlchemy object.
+        Process an item from the LND API to a SQLAlchemy object during the pre
+        syn process.
+
+        Raises:
+            NotImplementedError: If not implemented in the case of no pre sync.
         """
 
     @default_retry_handler
@@ -99,12 +105,11 @@ class LndBaseTracker(Generic[T, U, V], ABC):
 
         @self._stream_logger
         def pre_sync_stream() -> Generator[T]:
-            stream = self._pre_sync_source()
-            for item in stream:
-                if stop_event.is_set():
-                    stream.close()
+            source = self._pre_sync_source()
+            if source is None:
+                return None
 
-                yield from self._process_item_pre_sync(item, recon_running=False)
+            yield from source.items()
 
         self._store.db.add_chunks_from_iterable(
             pre_sync_stream(), chunk_size=CHUNK_SIZE
