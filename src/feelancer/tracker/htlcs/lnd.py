@@ -3,7 +3,6 @@ from collections.abc import Callable, Generator
 from google.protobuf.json_format import MessageToDict
 from google.protobuf.message import Message
 
-from feelancer.lnd.grpc_generated import lightning_pb2 as ln
 from feelancer.lnd.grpc_generated import router_pb2 as rt
 from feelancer.tracker.lnd import LndBaseTracker
 from feelancer.tracker.models import HtlcEvent, HtlcEventType
@@ -22,13 +21,7 @@ class LNDHtlcTracker(LndBaseTracker):
         return "htlcs"
 
     def _pre_sync_source(self) -> None:
-
         return None
-
-        # index_offset = self._store.get_count_forwarding_events()
-        # self._logger.debug(f"Starting from index {index_offset} for {self._pub_key}")
-
-        # return self._lnd.paginate_forwarding_events(index_offset=index_offset)
 
     def _process_item_stream(
         self,
@@ -40,38 +33,19 @@ class LNDHtlcTracker(LndBaseTracker):
 
     def _process_item_pre_sync(
         self,
-        item: ln.ForwardingEvent,
+        item: rt.HtlcEvent,
         recon_running: bool,
     ) -> Generator[HtlcEvent]:
 
-        raise NotImplementedError("_process_item_pre_sync")
+        return self._process_htlc_event(item, recon_running)
 
     def _new_recon_source(self) -> None:
 
         return None
 
-        # index_offset = 2_100_000_000
-        # paginator = self._lnd.paginate_forwarding_events(index_offset=index_offset)
-
-        # return LndBaseReconSource(paginator, self._process_forwarding_event)
-
     def _get_new_stream(self) -> Callable[..., Generator[HtlcEvent]]:
         dispatcher = self._lnd.subscribe_htlc_events_dispatcher
         return self._get_new_stream_from_dispatcher(dispatcher)
-
-    # def _process_forwarding_event(
-    #     self, fwd: ln.ForwardingEvent, recon_running: bool
-    # ) -> Generator[HtlcEvent]:
-
-    #     yield ForwardingEvent(
-    #         ln_node_id=self._store.ln_node_id,
-    #         timestamp=ns_to_datetime(fwd.timestamp_ns),
-    #         chan_id_in=fwd.chan_id_in,
-    #         chan_id_out=fwd.chan_id_out,
-    #         fee_msat=fwd.fee_msat,
-    #         amt_in_msat=fwd.amt_in_msat,
-    #         amt_out_msat=fwd.amt_out_msat,
-    #     )
 
     def _process_htlc_event(
         self, htlc: rt.HtlcEvent, recon_running: bool

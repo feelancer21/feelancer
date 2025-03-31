@@ -145,6 +145,26 @@ class LndBaseTracker(Generic[T, U, V], ABC):
 
         return dispatcher.subscribe(self._process_item_stream, self._new_recon_source)
 
+    def _get_new_stream_from_paginator(
+        self,
+        get_stream: Callable[[int], Generator[V]],
+        get_offset: Callable[..., int],
+    ) -> Callable[..., Generator[T]]:
+        """
+        Returns a callable that returns a new stream from a paginator.
+        """
+
+        def new_stream() -> Generator[T]:
+            source = get_stream(get_offset())
+            # using recon source temporary for conversion of the items
+            # TODO: Build a new conversion class which is more generic
+            recon_source = LndBaseReconSource(
+                source, self._process_item_stream, recon_running=False
+            )
+            yield from recon_source.items()
+
+        return new_stream
+
     @abstractmethod
     def _new_recon_source(self) -> LndBaseReconSource[T, U] | None:
         """
