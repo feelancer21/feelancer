@@ -290,6 +290,7 @@ class LndGrpc(SecureGrpcClient, BaseServer):
     def paginate_forwarding_events(
         self,
         num_max_events: int | None = None,
+        blocking_sec: int | None = None,
         index_offset: int = 0,
         start_time: int = 0,
         end_time: int = 0,
@@ -313,11 +314,19 @@ class LndGrpc(SecureGrpcClient, BaseServer):
         )
 
         return paginator.request(
-            num_max_events, index_offset, start_time=start_time, end_time=end_time
+            num_max_events,
+            blocking_sec,
+            index_offset,
+            start_time=start_time,
+            end_time=end_time,
         )
 
     def paginate_invoices(
-        self, num_max_invoices: int | None = None, index_offset: int = 0, **kwargs
+        self,
+        num_max_invoices: int | None = None,
+        blocking_sec: int | None = None,
+        index_offset: int = 0,
+        **kwargs,
     ) -> Generator[ln.Invoice]:
 
         def _read(d: ln.ListInvoiceResponse) -> tuple[Sequence[ln.Invoice], int]:
@@ -335,11 +344,12 @@ class LndGrpc(SecureGrpcClient, BaseServer):
             set_request=_set,
         )
 
-        return paginator.request(num_max_invoices, index_offset, **kwargs)
+        return paginator.request(num_max_invoices, blocking_sec, index_offset, **kwargs)
 
     def paginate_payments(
         self,
         max_payments: int | None = None,
+        blocking_sec: int | None = None,
         index_offset: int = 0,
         include_incomplete: bool = False,
         **kwargs,
@@ -361,7 +371,11 @@ class LndGrpc(SecureGrpcClient, BaseServer):
         )
 
         return paginator.request(
-            max_payments, index_offset, include_incomplete=include_incomplete, **kwargs
+            max_payments,
+            blocking_sec,
+            index_offset,
+            include_incomplete=include_incomplete,
+            **kwargs,
         )
 
     def _new_payments_dispatcher(
