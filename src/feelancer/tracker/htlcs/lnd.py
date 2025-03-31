@@ -13,16 +13,16 @@ from feelancer.utils import ns_to_datetime
 RECON_TIME_INTERVAL = 30 * 24 * 3600  # 30 days in seconds
 CHUNK_SIZE = 1000
 
-ORM_OUT = ForwardingEvent | HtlcEvent
+type ORM_OUT = ForwardingEvent | HtlcEvent
 
 
-class LNDForwardTracker(LndBaseTracker):
+class LNDHtlcTracker(LndBaseTracker):
 
     def _delete_orphaned_data(self) -> None:
         return None
 
     def _get_items_name(self) -> str:
-        return "forwards"
+        return "htlcs"
 
     def _pre_sync_source(self) -> Generator[ln.ForwardingEvent]:
 
