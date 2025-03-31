@@ -18,6 +18,8 @@ from feelancer.utils import bytes_to_str, sec_to_datetime
 RECON_TIME_INTERVAL = 30 * 24 * 3600  # 30 days in seconds
 CHUNK_SIZE = 1000
 
+type LndInvoiceReconSource = LndBaseReconSource[Invoice, ln.Invoice]
+
 
 class LNDInvoiceTracker(LndBaseTracker):
 
@@ -27,12 +29,14 @@ class LNDInvoiceTracker(LndBaseTracker):
     def _get_items_name(self) -> str:
         return "invoices"
 
-    def _pre_sync_source(self) -> Generator[ln.Invoice]:
+    def _pre_sync_source(self) -> LndInvoiceReconSource:
 
         index_offset = self._store.get_max_invoice_add_index()
         self._logger.debug(f"Starting from index {index_offset} for {self._pub_key}")
 
-        return self._lnd.paginate_invoices(index_offset=index_offset)
+        paginator = self._lnd.paginate_invoices(index_offset=index_offset)
+
+        return LndBaseReconSource(paginator, self._process_invoice, False)
 
     def _process_item_stream(
         self,
@@ -50,7 +54,7 @@ class LNDInvoiceTracker(LndBaseTracker):
 
         return self._process_invoice(item, recon_running)
 
-    def _new_recon_source(self) -> LndBaseReconSource[Invoice, ln.Invoice]:
+    def _new_recon_source(self) -> LndInvoiceReconSource:
 
         recon_start = datetime.datetime.now(tz=pytz.utc) - datetime.timedelta(
             seconds=RECON_TIME_INTERVAL
@@ -60,7 +64,7 @@ class LNDInvoiceTracker(LndBaseTracker):
             creation_date_start=int(recon_start.timestamp()),
         )
 
-        return LndBaseReconSource(paginator, self._process_invoice)
+        return LndBaseReconSource(paginator, self._process_invoice, True)
 
     def _new_dispatcher(self) -> LndInvoiceDispatcher:
         return self._lnd.subscribe_invoices_dispatcher
