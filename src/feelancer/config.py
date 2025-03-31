@@ -43,7 +43,7 @@ class FeelancerConfig:
 
         self.tasks_config: dict[str, dict] = {}
 
-        tasks = ["pid", "reconnect", "paytrack", "invtrack", "fwdtrack"]
+        tasks = ["pid", "reconnect", "paytrack", "invtrack", "fwdtrack", "htlctrack"]
         tasks_required = []
 
         for task in tasks:
