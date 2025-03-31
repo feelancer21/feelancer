@@ -3,9 +3,10 @@ from collections.abc import Callable, Generator
 
 import pytz
 
+from feelancer.grpc.client import StreamConverter
 from feelancer.lnd.grpc_generated import lightning_pb2 as ln
 from feelancer.tracker.data import InvoiceNotFound
-from feelancer.tracker.lnd import LndBaseReconSource, LndBaseTracker
+from feelancer.tracker.lnd import LndBaseTracker
 from feelancer.tracker.models import (
     Invoice,
     InvoiceHTLC,
@@ -17,7 +18,7 @@ from feelancer.utils import bytes_to_str, sec_to_datetime
 RECON_TIME_INTERVAL = 30 * 24 * 3600  # 30 days in seconds
 CHUNK_SIZE = 1000
 
-type LndInvoiceReconSource = LndBaseReconSource[Invoice, ln.Invoice]
+type LndInvoiceReconSource = StreamConverter[Invoice, ln.Invoice]
 
 
 class LNDInvoiceTracker(LndBaseTracker):
@@ -35,7 +36,9 @@ class LNDInvoiceTracker(LndBaseTracker):
 
         paginator = self._lnd.paginate_invoices(index_offset=index_offset)
 
-        return LndBaseReconSource(paginator, self._process_invoice, False)
+        return StreamConverter(
+            paginator, lambda item: self._process_invoice(item, False)
+        )
 
     def _process_item_stream(
         self,
@@ -63,7 +66,9 @@ class LNDInvoiceTracker(LndBaseTracker):
             creation_date_start=int(recon_start.timestamp()),
         )
 
-        return LndBaseReconSource(paginator, self._process_invoice, True)
+        return StreamConverter(
+            paginator, lambda item: self._process_invoice(item, True)
+        )
 
     def _get_new_stream(self) -> Callable[..., Generator[Invoice]]:
         dispatcher = self._lnd.subscribe_invoices_dispatcher

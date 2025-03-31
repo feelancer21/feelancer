@@ -5,7 +5,6 @@ import logging
 import os
 import queue
 import threading
-import time
 from collections.abc import Callable, Generator, Iterable, Sequence
 from functools import wraps
 from typing import Generic, Protocol, TypeVar
@@ -213,6 +212,23 @@ _channel_retry_handler = create_retry_handler(
     delay=10,
     min_tolerance_delta=120,
 )
+
+
+class StreamConverter(Generic[V, T]):
+    def __init__(
+        self,
+        source_items: Generator[T],
+        process_item: Callable[[T], Generator[V]],
+    ):
+        self._source_items = source_items
+        self._process_item = process_item
+
+    def items(self) -> Generator[V]:
+        for item in self._source_items:
+            yield from self._process_item(item)
+
+            if stop_event.is_set():
+                self._source_items.close()
 
 
 class ReconSource(Generic[V], Protocol):

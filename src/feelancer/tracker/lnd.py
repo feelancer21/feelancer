@@ -7,7 +7,7 @@ from google.protobuf.message import Message
 from sqlalchemy.orm import DeclarativeBase
 
 from feelancer.event import stop_event
-from feelancer.grpc.client import StreamDispatcher
+from feelancer.grpc.client import StreamConverter, StreamDispatcher
 from feelancer.lightning.lnd import LNDClient
 from feelancer.lnd.client import LndGrpc
 from feelancer.log import stream_logger
@@ -25,25 +25,6 @@ V = TypeVar("V", bound=Message)
 
 CHUNK_SIZE = 1000
 STREAM_LOGGER_INTERVAL = 100
-
-
-class LndBaseReconSource(Generic[T, U]):
-    def __init__(
-        self,
-        source_items: Generator[U],
-        process_item: Callable[[U, bool], Generator[T]],
-        recon_running: bool,
-    ):
-        self._source_items = source_items
-        self._process_item = process_item
-        self._recon_running = recon_running
-
-    def items(self) -> Generator[T]:
-        for item in self._source_items:
-            yield from self._process_item(item, self._recon_running)
-
-            if stop_event.is_set():
-                self._source_items.close()
 
 
 class LndBaseTracker(Generic[T, U, V], ABC):
@@ -73,7 +54,7 @@ class LndBaseTracker(Generic[T, U, V], ABC):
         """
 
     @abstractmethod
-    def _pre_sync_source(self) -> LndBaseReconSource[T, U] | None:
+    def _pre_sync_source(self) -> StreamConverter[T, U] | None:
         """
         Source of items to be processed in the presync process.
         """
@@ -156,17 +137,15 @@ class LndBaseTracker(Generic[T, U, V], ABC):
 
         def new_stream() -> Generator[T]:
             source = get_stream(get_offset())
-            # using recon source temporary for conversion of the items
-            # TODO: Build a new conversion class which is more generic
-            recon_source = LndBaseReconSource(
-                source, self._process_item_stream, recon_running=False
+            converter = StreamConverter(
+                source, lambda item: self._process_item_stream(item, False)
             )
-            yield from recon_source.items()
+            yield from converter.items()
 
         return new_stream
 
     @abstractmethod
-    def _new_recon_source(self) -> LndBaseReconSource[T, U] | None:
+    def _new_recon_source(self) -> StreamConverter[T, U] | None:
         """
         Returns a new reconciliation source.
         """
