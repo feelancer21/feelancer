@@ -3,6 +3,7 @@ from collections.abc import Callable, Generator
 
 import pytz
 
+from feelancer.grpc.client import StreamConverter
 from feelancer.lnd.grpc_generated import lightning_pb2 as ln
 from feelancer.tracker.data import (
     GraphNodeNotFound,
@@ -10,7 +11,7 @@ from feelancer.tracker.data import (
     PaymentNotFound,
     PaymentRequestNotFound,
 )
-from feelancer.tracker.lnd import LndBaseReconSource, LndBaseTracker
+from feelancer.tracker.lnd import LndBaseTracker
 from feelancer.tracker.models import (
     Failure,
     FailureCode,
@@ -31,7 +32,7 @@ from feelancer.utils import ns_to_datetime, sha256_supports_str
 RECON_TIME_INTERVAL = 30 * 24 * 3600  # 30 days in seconds
 CHUNK_SIZE = 10
 
-type LndPaymentReconSource = LndBaseReconSource[HTLCAttempt, ln.Payment]
+type LndPaymentReconSource = StreamConverter[HTLCAttempt, ln.Payment]
 
 
 class LNDPaymentTracker(LndBaseTracker):
@@ -51,7 +52,9 @@ class LNDPaymentTracker(LndBaseTracker):
             index_offset=index_offset, include_incomplete=True
         )
 
-        return LndBaseReconSource(paginator, self._process_payment, False)
+        return StreamConverter(
+            paginator, lambda item: self._process_payment(item, False)
+        )
 
     def _process_item_stream(
         self,
@@ -79,7 +82,9 @@ class LNDPaymentTracker(LndBaseTracker):
             creation_date_start=int(recon_start.timestamp()),
         )
 
-        return LndBaseReconSource(paginator, self._process_payment, True)
+        return StreamConverter(
+            paginator, lambda item: self._process_payment(item, True)
+        )
 
     def _get_new_stream(self) -> Callable[..., Generator[HTLCAttempt]]:
         dispatcher = self._lnd.track_payments_dispatcher

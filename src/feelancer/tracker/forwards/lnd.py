@@ -1,7 +1,8 @@
 from collections.abc import Callable, Generator
 
+from feelancer.grpc.client import StreamConverter
 from feelancer.lnd.grpc_generated import lightning_pb2 as ln
-from feelancer.tracker.lnd import LndBaseReconSource, LndBaseTracker
+from feelancer.tracker.lnd import LndBaseTracker
 from feelancer.tracker.models import ForwardingEvent
 from feelancer.utils import ns_to_datetime
 
@@ -9,7 +10,7 @@ RECON_TIME_INTERVAL = 30 * 24 * 3600  # 30 days in seconds
 PAGINATOR_BLOCKING_INTERVAL = 21  # 21 seconds
 CHUNK_SIZE = 1000
 
-type LndForwardReconSource = LndBaseReconSource[ForwardingEvent, ln.ForwardingEvent]
+type LndForwardReconSource = StreamConverter[ForwardingEvent, ln.ForwardingEvent]
 
 
 class LNDFwdTracker(LndBaseTracker):
@@ -26,7 +27,9 @@ class LNDFwdTracker(LndBaseTracker):
 
         paginator = self._lnd.paginate_forwarding_events(index_offset=index_offset)
 
-        return LndBaseReconSource(paginator, self._process_forwarding_event, False)
+        return StreamConverter(
+            paginator, lambda item: self._process_forwarding_event(item, False)
+        )
 
     def _process_item_stream(
         self,
