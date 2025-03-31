@@ -1,9 +1,8 @@
 import datetime
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 
 import pytz
 
-from feelancer.lnd.client import LndPaymentDispatcher
 from feelancer.lnd.grpc_generated import lightning_pb2 as ln
 from feelancer.tracker.data import (
     GraphNodeNotFound,
@@ -82,8 +81,9 @@ class LNDPaymentTracker(LndBaseTracker):
 
         return LndBaseReconSource(paginator, self._process_payment, True)
 
-    def _new_dispatcher(self) -> LndPaymentDispatcher:
-        return self._lnd.track_payments_dispatcher
+    def _get_new_stream(self) -> Callable[..., Generator[HTLCAttempt]]:
+        dispatcher = self._lnd.track_payments_dispatcher
+        return self._get_new_stream_from_dispatcher(dispatcher)
 
     def _process_payment(
         self, p: ln.Payment, recon_running: bool
