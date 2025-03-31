@@ -32,6 +32,8 @@ from feelancer.utils import ns_to_datetime, sha256_supports_str
 RECON_TIME_INTERVAL = 30 * 24 * 3600  # 30 days in seconds
 CHUNK_SIZE = 10
 
+type LndPaymentReconSource = LndBaseReconSource[HTLCAttempt, ln.Payment]
+
 
 class LNDPaymentTracker(LndBaseTracker):
 
@@ -41,14 +43,16 @@ class LNDPaymentTracker(LndBaseTracker):
     def _get_items_name(self) -> str:
         return "payments"
 
-    def _pre_sync_source(self) -> Generator[ln.Payment]:
+    def _pre_sync_source(self) -> LndPaymentReconSource:
 
         index_offset = self._store.get_max_payment_index()
         self._logger.debug(f"Starting from index {index_offset} for {self._pub_key}")
 
-        return self._lnd.paginate_payments(
+        paginator = self._lnd.paginate_payments(
             index_offset=index_offset, include_incomplete=True
         )
+
+        return LndBaseReconSource(paginator, self._process_payment, False)
 
     def _process_item_stream(
         self,
@@ -66,7 +70,7 @@ class LNDPaymentTracker(LndBaseTracker):
 
         return self._process_payment(item, recon_running)
 
-    def _new_recon_source(self) -> LndBaseReconSource[HTLCAttempt, ln.Payment]:
+    def _new_recon_source(self) -> LndPaymentReconSource:
 
         recon_start = datetime.datetime.now(tz=pytz.utc) - datetime.timedelta(
             seconds=RECON_TIME_INTERVAL
@@ -76,7 +80,7 @@ class LNDPaymentTracker(LndBaseTracker):
             creation_date_start=int(recon_start.timestamp()),
         )
 
-        return LndBaseReconSource(paginator, self._process_payment)
+        return LndBaseReconSource(paginator, self._process_payment, True)
 
     def _new_dispatcher(self) -> LndPaymentDispatcher:
         return self._lnd.track_payments_dispatcher
