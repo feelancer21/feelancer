@@ -132,7 +132,7 @@ class LndBaseTracker(Generic[T, U, V], ABC):
         """
 
     @abstractmethod
-    def _new_recon_source(self) -> LndBaseReconSource[T, U]:
+    def _new_recon_source(self) -> LndBaseReconSource[T, U] | None:
         """
         Returns a new reconciliation source.
         """
