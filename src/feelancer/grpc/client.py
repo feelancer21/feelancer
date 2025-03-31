@@ -476,4 +476,7 @@ class Paginator(Generic[W]):
                     break
 
             if blocking_sec is not None:
-                time.sleep(blocking_sec)
+                stop_event.wait(blocking_sec)
+
+            if stop_event.is_set():
+                break
