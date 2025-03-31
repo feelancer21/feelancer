@@ -131,10 +131,19 @@ class LndBaseTracker(Generic[T, U, V], ABC):
         self._store.db.add_all_from_iterable(stream(), True)
 
     @abstractmethod
-    def _new_dispatcher(self) -> StreamDispatcher[V]:
+    def _get_new_stream(self) -> Callable[..., Generator[T]]:
         """
         Returns a new dispatcher for initializing a new data stream
         """
+
+    def _get_new_stream_from_dispatcher(
+        self, dispatcher: StreamDispatcher[V]
+    ) -> Callable[..., Generator[T]]:
+        """
+        Returns a callable that returns a new stream from the dispatcher.
+        """
+
+        return dispatcher.subscribe(self._process_item_stream, self._new_recon_source)
 
     @abstractmethod
     def _new_recon_source(self) -> LndBaseReconSource[T, U] | None:
@@ -144,12 +153,7 @@ class LndBaseTracker(Generic[T, U, V], ABC):
 
     def start(self) -> None:
 
-        dispatcher: StreamDispatcher[V] = self._new_dispatcher()
-
-        get_new_stream = dispatcher.subscribe(
-            self._process_item_stream, self._new_recon_source
-        )
-        self._start_stream(get_new_stream)
+        self._start_stream(self._get_new_stream())
 
     def pre_sync_start(self) -> None:
         """
