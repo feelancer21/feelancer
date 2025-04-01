@@ -89,7 +89,9 @@ class MainConfig:
             payment_tracker: Tracker = LNDPaymentTracker(lnclient, tracker_store)
             invoice_tracker: Tracker = LNDInvoiceTracker(lnclient, tracker_store)
             htlc_tracker: Tracker = LNDHtlcTracker(lnclient, tracker_store)
-            fwd_tracker: Tracker = LNDFwdTracker(lnclient, tracker_store)
+            fwd_tracker: Tracker = LNDFwdTracker(
+                lnclient, tracker_store, htlc_tracker.pop_settled_forwards
+            )
         else:
             raise ValueError("'lnd' section is not included in config-file")
 
