@@ -50,7 +50,7 @@ def create_retry_handler(
                     raise e
 
                 except exceptions_retry as e:
-                    logger.error(f"An error occurred: {e}; Check {retries_left=}")
+                    logger.warning(f"An error occurred: {e}; {retries_left=}")
                     if (
                         min_tolerence_time is not None
                         and datetime.now(pytz.utc) > min_tolerence_time
@@ -60,7 +60,6 @@ def create_retry_handler(
                     if retries_left == 0:
                         raise e
 
-                    logger.debug(f"{retries_left=}")
                     retries_left -= 1
                     if delay > 0:
                         logger.debug(f"Waiting {delay}s before retrying...")
