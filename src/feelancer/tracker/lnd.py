@@ -1,15 +1,18 @@
+import datetime
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator
 from typing import Generic, TypeVar
 
+import pytz
 from google.protobuf.message import Message
 from sqlalchemy.orm import DeclarativeBase
 
 from feelancer.event import stop_event
 from feelancer.grpc.client import StreamConverter, StreamDispatcher
 from feelancer.lightning.lnd import LNDClient
-from feelancer.lnd.client import LndGrpc
+
+# from feelancer.lnd.client import LndGrpc
 from feelancer.log import stream_logger
 from feelancer.retry import default_retry_handler
 
@@ -30,7 +33,7 @@ STREAM_LOGGER_INTERVAL = 100
 class LndBaseTracker(Generic[T, U, V], ABC):
     def __init__(self, lnd: LNDClient, store: TrackerStore):
 
-        self._lnd: LndGrpc = lnd.lnd
+        self._lnd = lnd.lnd
         self._pub_key = lnd.pubkey_local
         self._store = store
         self._items_name = self._get_items_name()
@@ -40,6 +43,7 @@ class LndBaseTracker(Generic[T, U, V], ABC):
             items_name=self._items_name,
             logger=self._logger,
         )
+        self._time_start: datetime.datetime | None = None
 
     @abstractmethod
     def _delete_orphaned_data(self) -> None:
@@ -101,6 +105,8 @@ class LndBaseTracker(Generic[T, U, V], ABC):
         """
         Fetches the items from the subscription and stores them in the database.
         """
+
+        self._time_start = datetime.datetime.now(pytz.utc)
 
         # In every retry we initialize a new generator. This is necessary because
         # the generator is closed after the first iteration. Moreover we need
