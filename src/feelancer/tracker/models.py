@@ -149,6 +149,7 @@ class PaymentResolveInfo(Base):
         ForeignKey("ln_payment.id", ondelete="CASCADE"),
         nullable=False,
         primary_key=True,
+        index=True,
     )
 
     payment: Mapped[Payment] = relationship(
@@ -220,12 +221,12 @@ class HTLCAttempt(Base):
         "Route", uselist=False, back_populates="htlc_attempt"
     )
 
-    resolve_info: Mapped[HTLCResolveInfo] = relationship(
-        "HTLCResolveInfo", uselist=False, back_populates="htlc_attempt"
+    resolve_info: Mapped[PaymentHtlcResolveInfo] = relationship(
+        "PaymentHtlcResolveInfo", uselist=False, back_populates="htlc_attempt"
     )
 
 
-class HTLCResolveInfo(Base):
+class PaymentHtlcResolveInfo(Base):
     __tablename__ = "ln_payment_htlc_resolve_info"
 
     htlc_attempt_id: Mapped[BigInteger] = mapped_column(
@@ -273,7 +274,7 @@ class Failure(Base):
         primary_key=True,
     )
     htlc_attempt: Mapped[HTLCAttempt] = relationship(
-        HTLCResolveInfo, uselist=False, back_populates="failure"
+        PaymentHtlcResolveInfo, uselist=False, back_populates="failure"
     )
 
     # Failure code as defined in the Lightning spec.
@@ -298,6 +299,7 @@ class Route(Base):
         ForeignKey("ln_payment_htlc_attempt.id", ondelete="CASCADE"),
         nullable=False,
         primary_key=True,
+        index=True,
     )
 
     htlc_attempt: Mapped[HTLCAttempt] = relationship(
@@ -445,6 +447,7 @@ class InvoiceHTLCResolveInfo(Base):
         ForeignKey("ln_invoice_htlc.id", ondelete="CASCADE"),
         nullable=False,
         primary_key=True,
+        index=True,
     )
 
     invoice_htlc: Mapped[InvoiceHTLC] = relationship(
@@ -460,43 +463,17 @@ class InvoiceHTLCResolveInfo(Base):
     )
 
 
-class ForwardingEvent(Base):
-    __tablename__ = "ln_forwarding_event"
-
-    # Unique identifier for the forwarding event (optional, can be added if needed)
-    id: Mapped[int] = mapped_column(autoincrement=True, primary_key=True)
-
-    ln_node_id: Mapped[int] = mapped_column(
-        ForeignKey("ln_node.id", ondelete="CASCADE"), nullable=False
-    )
-
-    # the local lightning node
-    ln_node: Mapped[DBLnNode] = relationship(DBLnNode)
-
-    # The timestamp in nanoseconds since epoch
-    timestamp: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False)
-
-    # The incoming channel ID that carried the HTLC that created the circuit
-    chan_id_in: Mapped[int] = mapped_column(BigInteger, nullable=False)
-
-    # The outgoing channel ID that carried the preimage that completed the circuit
-    chan_id_out: Mapped[int] = mapped_column(BigInteger, nullable=False)
-
-    # The total fee (in milli-satoshis) for this payment circuit
-    fee_msat: Mapped[int] = mapped_column(BigInteger, nullable=False)
-
-    # The total amount (in milli-satoshis) of the incoming HTLC
-    amt_in_msat: Mapped[int] = mapped_column(BigInteger, nullable=False)
-
-    # The total amount (in milli-satoshis) of the outgoing HTLC
-    amt_out_msat: Mapped[int] = mapped_column(BigInteger, nullable=False)
-
-
 class HtlcEventType(PyEnum):
     UNKNOWN = 0
     SEND = 1
     RECEIVE = 2
     FORWARD = 3
+
+
+class HtlcDirectionType(PyEnum):
+    UNKNOWN = 0
+    INCOMING = 1
+    OUTGOING = 2
 
 
 class HtlcEvent(Base):
@@ -541,3 +518,265 @@ class HtlcEvent(Base):
     link_fail_event: Mapped[dict] = mapped_column(JSONB, nullable=True)
     subscribed_event: Mapped[dict] = mapped_column(JSONB, nullable=True)
     final_htlc_event: Mapped[dict] = mapped_column(JSONB, nullable=True)
+
+
+class Htlc(Base):
+    __tablename__ = "ln_htlc"
+
+    # Primary key
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+
+    # The htlc_index, can be NULL because lnd can only provide it for invoices at
+    # the moment
+    htlc_index: Mapped[int] = mapped_column(BigInteger, nullable=True)
+
+    # The timestamp in nanoseconds since epoch when the htlc was added.
+    # For payments it is the attempt time and for invoices it is the accept time.
+    # For forwards it can be null for historic forwarding events.
+    attempt_time: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=True)
+
+    # Block height at which the HTLC expires.
+    timelock: Mapped[int] = mapped_column(Integer, nullable=True)
+
+    event_type: Mapped[HtlcEventType] = mapped_column(
+        Enum(HtlcEventType), nullable=False, index=True
+    )
+
+    direction_type: Mapped[HtlcDirectionType] = mapped_column(
+        Enum(HtlcDirectionType), nullable=False, index=True
+    )
+
+    # The channel ID of the incoming channel
+    channel_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+
+    # The amount in millisatoshis. Nullable for forward fail events without
+    # available htlc info.
+    amt_msat: Mapped[int] = mapped_column(BigInteger, nullable=True)
+
+    resolve_info: Mapped[HtlcResolveInfo] = relationship(
+        "HtlcResolveInfo", uselist=False, back_populates="htlc"
+    )
+
+    __mapper_args__ = {"polymorphic_on": event_type}
+
+
+class HtlcForward(Htlc):
+    __tablename__ = "ln_htlc_forward"
+
+    id: Mapped[int] = mapped_column(
+        ForeignKey("ln_htlc.id", ondelete="CASCADE"), primary_key=True, index=True
+    )
+
+    htlc: Mapped[Htlc] = relationship(Htlc, uselist=False)
+
+    __mapper_args__ = {
+        "polymorphic_identity": HtlcEventType.FORWARD,
+    }
+
+
+class HtlcReceive(Htlc):
+    __tablename__ = "ln_htlc_receive"
+
+    id: Mapped[int] = mapped_column(
+        ForeignKey("ln_htlc.id", ondelete="CASCADE"), primary_key=True, index=True
+    )
+
+    htlc: Mapped[Htlc] = relationship(Htlc, uselist=False)
+
+    __mapper_args__ = {
+        "polymorphic_identity": HtlcEventType.RECEIVE,
+    }
+
+
+class HtlcResolveType(PyEnum):
+    UNKNOWN = 0
+    SETTLED = 1
+    LINK_FAILED = 2
+    FORWARD_FAILED = 3
+
+
+class HtlcResolveInfo(Base):
+    __tablename__ = "ln_htlc_resolve_info"
+
+    htlc_id: Mapped[int] = mapped_column(
+        ForeignKey("ln_htlc.id", ondelete="CASCADE"),
+        nullable=False,
+        primary_key=True,
+        index=True,
+    )
+
+    htlc: Mapped[Htlc] = relationship(
+        Htlc, uselist=False, back_populates="resolve_info"
+    )
+
+    resolve_time: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+
+    # How the HTLC was resolved
+    resolve_type: Mapped[HtlcResolveType] = mapped_column(
+        Enum(HtlcResolveType), nullable=False
+    )
+
+    __mapper_args__ = {"polymorphic_on": resolve_type}
+
+
+class HtlcResolveInfoSettled(HtlcResolveInfo):
+    __tablename__ = "ln_htlc_resolve_info_settle"
+
+    htlc_id: Mapped[int] = mapped_column(
+        ForeignKey("ln_htlc_resolve_info.htlc_id", ondelete="CASCADE"),
+        nullable=False,
+        primary_key=True,
+        index=True,
+    )
+
+    resolve_info: Mapped[HtlcResolveInfo] = relationship(HtlcResolveInfo, uselist=False)
+
+    preimage: Mapped[str] = mapped_column(String, nullable=True)
+
+    __mapper_args__ = {"polymorphic_identity": HtlcResolveType.SETTLED}
+
+
+class HtlcResolveInfoForwardFailed(HtlcResolveInfo):
+    __tablename__ = "ln_htlc_resolve_info_forward_fail"
+
+    htlc_id: Mapped[int] = mapped_column(
+        ForeignKey("ln_htlc_resolve_info.htlc_id", ondelete="CASCADE"),
+        nullable=False,
+        primary_key=True,
+        index=True,
+    )
+
+    resolve_info: Mapped[HtlcResolveInfo] = relationship(HtlcResolveInfo, uselist=False)
+
+    # Usually forward fail events occures on the outgoing channel, but can also
+    # happen on the incoming channel, e.g. if a channel interceptor fails the
+    # htlc.
+    direction_failed: Mapped[HtlcDirectionType] = mapped_column(
+        Enum(HtlcDirectionType), nullable=False
+    )
+
+    __mapper_args__ = {"polymorphic_identity": HtlcResolveType.FORWARD_FAILED}
+
+
+class FailureDetail(PyEnum):
+    UNKNOWN = 0
+    NO_DETAIL = 1
+    ONION_DECODE = 2
+    LINK_NOT_ELIGIBLE = 3
+    ON_CHAIN_TIMEOUT = 4
+    HTLC_EXCEEDS_MAX = 5
+    INSUFFICIENT_BALANCE = 6
+    INCOMPLETE_FORWARD = 7
+    HTLC_ADD_FAILED = 8
+    FORWARDS_DISABLED = 9
+    INVOICE_CANCELED = 10
+    INVOICE_UNDERPAID = 11
+    INVOICE_EXPIRY_TOO_SOON = 12
+    INVOICE_NOT_OPEN = 13
+    MPP_INVOICE_TIMEOUT = 14
+    ADDRESS_MISMATCH = 15
+    SET_TOTAL_MISMATCH = 16
+    SET_TOTAL_TOO_LOW = 17
+    SET_OVERPAID = 18
+    UNKNOWN_INVOICE = 19
+    INVALID_KEYSEND = 20
+    MPP_IN_PROGRESS = 21
+    CIRCULAR_ROUTE = 22
+
+
+class HtlcResolveInfoLinkFailed(HtlcResolveInfo):
+    __tablename__ = "ln_htlc_resolve_info_link_fail"
+
+    htlc_id: Mapped[int] = mapped_column(
+        ForeignKey("ln_htlc_resolve_info.htlc_id", ondelete="CASCADE"),
+        nullable=False,
+        primary_key=True,
+        index=True,
+    )
+
+    wire_failure: Mapped[FailureCode] = mapped_column(Enum(FailureCode), nullable=False)
+
+    failure_detail: Mapped[FailureDetail] = mapped_column(
+        Enum(FailureDetail), nullable=False
+    )
+
+    failure_string: Mapped[str] = mapped_column(String, nullable=True)
+
+    resolve_info: Mapped[HtlcResolveInfo] = relationship(HtlcResolveInfo, uselist=False)
+
+    # channel_id of the failed link. Can be different from the channel_id of the
+    # htlc, e.g. we incoming htlc failed because of insufficient balance on the
+    # outgoing channel.
+    direction_failed: Mapped[HtlcDirectionType] = mapped_column(
+        Enum(HtlcDirectionType), nullable=False
+    )
+
+    link_failed: Mapped[str] = mapped_column(String, nullable=True, index=True)
+
+    __mapper_args__ = {"polymorphic_identity": HtlcResolveType.LINK_FAILED}
+
+
+class Forward(Base):
+    __tablename__ = "ln_forward"
+
+    # Unique identifier for the forwarding event (optional, can be added if needed)
+    id: Mapped[int] = mapped_column(autoincrement=True, primary_key=True)
+
+    ln_node_id: Mapped[int] = mapped_column(
+        ForeignKey("ln_node.id", ondelete="CASCADE"), nullable=False
+    )
+
+    # the local lightning node
+    ln_node: Mapped[DBLnNode] = relationship(DBLnNode)
+
+    # id of incoming htlc
+    htlc_id_in: Mapped[int] = mapped_column(
+        ForeignKey("ln_htlc_forward.id"), nullable=False, index=True
+    )
+
+    # incming htlc
+    htlc_in: Mapped[Htlc] = relationship(HtlcForward, foreign_keys=[htlc_id_in])
+
+    # id of outgoing htlc
+    htlc_id_out: Mapped[int] = mapped_column(
+        ForeignKey("ln_htlc_forward.id"), nullable=False, index=True
+    )
+
+    # incming htlc
+    htlc_out: Mapped[Htlc] = relationship(HtlcForward, foreign_keys=[htlc_id_out])
+
+    # The total fee (in milli-satoshis) for this payment circuit
+    fee_msat: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+    resolve_info: Mapped[ForwardResolveInfo] = relationship(
+        "ForwardResolveInfo", uselist=False, back_populates="forward"
+    )
+
+
+class ForwardResolveType(PyEnum):
+    UNKNOWN = 0
+    SETTLED = 1
+    FAILED = 2
+
+
+class ForwardResolveInfo(Base):
+    __tablename__ = "ln_forward_resolve_info"
+
+    forward_id: Mapped[int] = mapped_column(
+        ForeignKey("ln_forward.id", ondelete="CASCADE"),
+        nullable=False,
+        primary_key=True,
+        index=True,
+    )
+
+    forward: Mapped[Forward] = relationship(Forward, uselist=False)
+
+    resolve_time: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+
+    resolve_type: Mapped[ForwardResolveType] = mapped_column(
+        Enum(ForwardResolveType), nullable=False
+    )
