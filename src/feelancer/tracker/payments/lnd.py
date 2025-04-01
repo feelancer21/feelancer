@@ -18,10 +18,10 @@ from feelancer.tracker.models import (
     GraphPath,
     Hop,
     HTLCAttempt,
-    HTLCResolveInfo,
     HTLCStatus,
     Payment,
     PaymentFailureReason,
+    PaymentHtlcResolveInfo,
     PaymentRequest,
     PaymentResolveInfo,
     PaymentStatus,
@@ -239,7 +239,7 @@ class LNDPaymentTracker(LndBaseTracker):
         hops: list[Hop],
         last_used_hop_index: int | None,
         path: list[int],
-    ) -> HTLCResolveInfo | None:
+    ) -> PaymentHtlcResolveInfo | None:
         """
         Creates the resolve info object for the HTLCAttempt. This object is used
         to store the resolve information in the database.
@@ -275,7 +275,7 @@ class LNDPaymentTracker(LndBaseTracker):
         else:
             path_success_id = None
 
-        return HTLCResolveInfo(
+        return PaymentHtlcResolveInfo(
             resolve_time=resolve_time,
             status=HTLCStatus(attempt.status),
             failure=failure,
