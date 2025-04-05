@@ -4,7 +4,7 @@ import codecs
 import logging
 import os
 import queue
-import time
+import threading
 from collections.abc import Callable, Generator, Iterable, Sequence
 from functools import wraps
 from typing import Generic, Protocol, TypeVar
@@ -13,6 +13,7 @@ import grpc
 from google.protobuf.message import Message
 
 from feelancer.base import BaseServer
+from feelancer.event import stop_event
 from feelancer.retry import create_retry_handler, default_retry_handler
 
 DEFAULT_MESSAGE_SIZE_MB = 50 * 1024 * 1024
@@ -183,17 +184,28 @@ _channel_retry_handler = create_retry_handler(
 )
 
 
+class StreamConverter(Generic[V, T]):
+    def __init__(
+        self,
+        source_items: Generator[T],
+        process_item: Callable[[T], Generator[V]],
+    ):
+        self._source_items = source_items
+        self._process_item = process_item
+
+    def items(self) -> Generator[V]:
+        for item in self._source_items:
+            yield from self._process_item(item)
+
+            if stop_event.is_set():
+                self._source_items.close()
+
+
 class ReconSource(Generic[V], Protocol):
 
     def items(self) -> Generator[V]:
         """
         Generates the messages for the reconciliation.
-        """
-        ...
-
-    def stop(self) -> None:
-        """
-        Stops the generation of items.
         """
         ...
 
@@ -227,10 +239,10 @@ class StreamDispatcher(Generic[T], BaseServer):
         self._handle_rpc_stream = handle_rpc_stream
 
         # Indicates whether there is a subscriber for the messages.
-        self._is_subscribed: bool = False
+        self._is_subscribed: threading.Event = threading.Event()
 
         # Indicates whether the dispatcher is receiving messages from the source
-        self._is_receiving: bool = False
+        self._is_receiving: threading.Event = threading.Event()
 
         self._register_sync_starter(self._start)
         self._register_sync_stopper(self._stop)
@@ -238,7 +250,7 @@ class StreamDispatcher(Generic[T], BaseServer):
     def subscribe(
         self,
         convert: Callable[[T, bool], Generator[V]],
-        get_recon_source: Callable[..., ReconSource[V]] | None = None,
+        get_recon_source: Callable[..., ReconSource[V] | None] = lambda: None,
     ) -> Callable[..., Generator[V]]:
         """
         Returns a callable which starts a stream of all received messages
@@ -250,21 +262,18 @@ class StreamDispatcher(Generic[T], BaseServer):
         q: queue.Queue[T | Exception] = queue.Queue()
         self._message_queues.append(q)
 
-        self._is_subscribed = True
+        self._is_subscribed.set()
 
         # We return a callable which enables the subscriber to start a stream.
         # It gives the caller the possibility to restart the stream with a
         # new reconciliation when necessary.
-        def start_stream():
-            return self._start_subscriber_stream(q, convert, get_recon_source)
+        return lambda: self._subscribe_queue(q, convert, get_recon_source)
 
-        return start_stream
-
-    def _start_subscriber_stream(
+    def _subscribe_queue(
         self,
         q: queue.Queue[T | Exception],
         convert: Callable[[T, bool], Generator[V]],
-        get_recon_source: Callable[..., ReconSource[V]] | None = None,
+        get_recon_source: Callable[..., ReconSource[V] | None],
     ) -> Generator[V]:
         """Returns a generator for all new incoming messages converted to V."""
 
@@ -273,36 +282,32 @@ class StreamDispatcher(Generic[T], BaseServer):
             # Blocking until we know that the dispatcher is receiving messages
             # from the source. Otherwise reconciliation would start too
             # early.
-            while not (self._is_receiving or self._is_stopped):
-                pass
+            while not (self._is_receiving.is_set() or stop_event.is_set()):
+                stop_event.wait(0.1)
 
-            if self._is_stopped:
+            if stop_event.is_set():
                 return None
 
             # Indicates the subscriber whether the messages were created during
             # reconciliation. In this way he can decide if the messages are
             # processed or not.
-            in_recon = False
+            in_recon = True
+            self._logger.info("Reconciliation started")
 
-            # If there are messages from the reconciliation source, we yield them
-            # first.
-            if get_recon_source is not None:
-                self._logger.info("Reconciliation started")
-                in_recon = True
+            # Sleeping a little bit before fetching from the reconciliation
+            # source. This is to fill up the queue with messages from the stream.
+            stop_event.wait(SLEEP_RECON)
+            recon_source = get_recon_source()
 
-                # Sleeping a little bit before fetching from the reconciliation
-                # source. This is to fill up the queue with messages from the stream.
-                time.sleep(SLEEP_RECON)
-                recon_source = get_recon_source()
+            if stop_event.is_set():
+                return None
 
-                self._register_sync_stopper(recon_source.stop)
-
-                if self._is_stopped:
-                    return None
-
+            if recon_source is not None:
                 yield from recon_source.items()
+            else:
+                self._logger.info("No reconciliation source available")
 
-                self._logger.info("Reconciliation stage 1 finished")
+            self._logger.info("Reconciliation stage 1 finished")
 
             # We yield the messages from the stream until we got an exception.
             while True:
@@ -333,11 +338,11 @@ class StreamDispatcher(Generic[T], BaseServer):
         """
 
         # blocking until there is a first subscription or the server is stopped.
-        while not (self._is_subscribed or self._is_stopped):
-            pass
+        while not (self._is_subscribed.is_set() or stop_event.is_set()):
+            stop_event.wait(0.1)
 
         # Returning early if the server is stopped.
-        if self._is_stopped:
+        if stop_event.is_set():
             return None
 
         # We have a subscriber. We can start the stream
@@ -370,7 +375,7 @@ class StreamDispatcher(Generic[T], BaseServer):
 
         self._logger.debug("Starting stream...")
         try:
-            self._is_receiving = True
+            self._is_receiving.set()
             # Receiving of the grp messages
             for m in self._handle_rpc_stream(self._stream):  # type: ignore
                 self._put_to_queues(m)
@@ -380,7 +385,7 @@ class StreamDispatcher(Generic[T], BaseServer):
 
         finally:
             self._stream = None
-            self._is_receiving = False
+            self._is_receiving.clear()
 
     def _stop(self) -> None:
         """Stops receiving of the messages from the upstream."""
@@ -414,8 +419,14 @@ class Paginator(Generic[W]):
         self._set_request = set_request
 
     def request(
-        self, max_events: int | None, offset: int = 0, **kwargs
+        self, max_events: int | None, blocking_sec: int | None, offset: int, **kwargs
     ) -> Generator[W]:
+        """
+        If blocking_sec is set, the paginator will not stop after the receiving
+        the last events. It will wait for seconds and afterwards calling the
+        producer again.
+        If max_events is not None, it will stop after max_events events.
+        """
 
         events_open = max_events
 
@@ -437,15 +448,21 @@ class Paginator(Generic[W]):
 
             yield from data
 
-            # Next call would not return any more events
-            if len(data) < self._max_responses:
-                break
-
             # If there is no limit on the number of events, we continue until the
             # last event is reached.
-            if events_open is None:
-                continue
+            if events_open is not None:
+                events_open -= len(data)
+                if events_open == 0:
+                    # We will break even in a blocking case
+                    break
 
-            events_open -= len(data)
-            if events_open == 0:
+            # Next call would not return any more events
+            if len(data) < self._max_responses:
+                if blocking_sec is None:
+                    break
+
+            if blocking_sec is not None:
+                stop_event.wait(blocking_sec)
+
+            if stop_event.is_set():
                 break
