@@ -4,13 +4,13 @@ Defines MarginController, SpreadController and the PidController
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Generator
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
 from feelancer.lightning.chan_updates import PolicyProposal
+from feelancer.log import getLogger
 
 from .aggregator import ChannelAggregator
 from .analytics import EwmaController, MrController
@@ -39,7 +39,7 @@ if TYPE_CHECKING:
 PEER_TARGET_UNIT = 1_000_000
 LOG_THRESHOLD = 10
 
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
 
 
 def _calc_error(

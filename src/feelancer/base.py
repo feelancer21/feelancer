@@ -1,9 +1,10 @@
-import logging
 import os
 import signal
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Protocol, TypeVar
+
+from feelancer.log import getLogger
 
 from .event import stop_event
 
@@ -58,7 +59,7 @@ class BaseServer:
     def __init__(self) -> None:
 
         # Logger for the server
-        self._logger: logging.Logger = logging.getLogger(self.__module__)
+        self._logger = getLogger(self.__module__)
 
         # Callables to be called synchronously during server start
         self._sync_start: list[Callable[..., None]] = []

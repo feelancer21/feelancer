@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import logging
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
+from feelancer.log import getLogger
 from feelancer.tasks.runner import RunnerRequest, RunnerResult
 
 from .controller import PidController
@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
     from .data import PidConfig
 
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
 
 
 class PidService:

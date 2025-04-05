@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import threading
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
@@ -20,6 +19,7 @@ from feelancer.event import stop_event
 from feelancer.lightning.chan_updates import update_channel_policies
 from feelancer.lightning.data import LightningCache, LightningSessionCache
 from feelancer.lightning.models import DBRun
+from feelancer.log import getLogger
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from feelancer.lightning.chan_updates import PolicyProposal
     from feelancer.lightning.client import LightningClient
 
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
 
 
 @dataclass
