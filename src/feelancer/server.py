@@ -299,11 +299,7 @@ class MainServer(BaseServer):
             self.cfg.db.sel_all_to_csv,
             self.cfg.db.del_core,
             lnd.htlc_tracker.set_store_htlc_events,
-<<<<<<< HEAD
             lnd.store_untransformed_events,
-=======
-            store_untransformed_events,
->>>>>>> d8ef525 (tracker: Add config options for storing and deleting untransformed data)
         )
 
         self.runner.register_task(tracker.run)
