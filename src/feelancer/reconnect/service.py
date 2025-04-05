@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-import logging
 from collections.abc import Callable
 
+from feelancer.log import getLogger
 from feelancer.tasks.runner import RunnerRequest, RunnerResult
 
 from .reconnector import Reconnector
 
 DEFAULT_MAX_BLOCKS_TO_EXPIRY = 13
 
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
 
 
 class ReconnectConfig:

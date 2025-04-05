@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import codecs
-import logging
 import os
 import queue
 import threading
@@ -14,6 +13,7 @@ from google.protobuf.message import Message
 
 from feelancer.base import BaseServer
 from feelancer.event import stop_event
+from feelancer.log import getLogger
 from feelancer.retry import create_retry_handler, default_retry_handler
 
 DEFAULT_MESSAGE_SIZE_MB = 200 * 1024 * 1024
@@ -44,7 +44,7 @@ class RpcResponseHandler:
         # eval_error is a client specific function which evaluates a RpcError. It
         # takes the RpcError and an optional function name as arguments.
         self._eval_error = eval_error
-        self._logger = logging.getLogger(self.__module__)
+        self._logger = getLogger(self.__module__)
 
     def decorator_rpc_unary(self, fnc):
         """
@@ -257,9 +257,7 @@ class StreamDispatcher(Generic[T], BaseServer):
         BaseServer.__init__(self, **kwargs)
 
         # Want to have the class name in the logger name
-        self._logger: logging.Logger = logging.getLogger(
-            self.__module__ + "." + self.__class__.__name__
-        )
+        self._logger = getLogger(self.__module__ + "." + self.__class__.__name__)
 
         self._new_stream_initializer = new_stream_initializer
         self._request: Message = request
