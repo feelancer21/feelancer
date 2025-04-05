@@ -5,13 +5,13 @@ import logging
 import sys
 
 from . import __version__
-from .log import set_logger
+from .log import getLogger, set_logger
 from .server import MainConfig, MainServer
 
 DEFAULT_CONFIG = "~/.feelancer/feelancer.toml"
 # If the stop signal is received, the server has 180 seconds to stop.
 
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
 
 
 def _get_args():

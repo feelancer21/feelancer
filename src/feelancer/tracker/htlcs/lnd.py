@@ -150,7 +150,7 @@ class LNDHtlcTracker(LndBaseTracker):
         with self._fwd_lock:
             self._fwd_settled[index].append((htlc_in, htlc_out))
 
-            self._logger.debug(
+            self._logger.trace(
                 f"Added fwd htlc: {index=}; {htlc_in.__dict__=}; {htlc_out.__dict__=}; "
                 f"{len(self._fwd_settled)=}; "
                 f"{len(self._fwd_settled[index])=}; "
@@ -383,7 +383,7 @@ class LNDHtlcTracker(LndBaseTracker):
         index = _incoming_htlc_index(htlc)
         self._not_final_by_in[index].append(htlc)
 
-        self._logger.debug(
+        self._logger.trace(
             f"Added non final event: {index=}; event={MessageToDict(htlc)}; "
             f"{len(self._not_final_by_in)=}; "
         )

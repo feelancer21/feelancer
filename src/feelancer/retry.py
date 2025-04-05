@@ -1,4 +1,3 @@
-import logging
 from collections.abc import Callable
 from datetime import datetime, timedelta
 from functools import wraps
@@ -6,6 +5,7 @@ from functools import wraps
 import pytz
 
 from .event import stop_event
+from .log import getLogger
 
 DEFAULT_EXCEPTIONS_RETRY = (Exception,)
 DEFAULT_EXCEPTIONS_RAISE = ()
@@ -28,7 +28,7 @@ def create_retry_handler(
     """
 
     def retry_handler(func):
-        logger: logging.Logger = logging.getLogger(func.__module__)
+        logger = getLogger(func.__module__)
 
         @wraps(func)
         def wrapper(*args, **kwargs):

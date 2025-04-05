@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import faulthandler
-import logging
 import os
 import pprint
 import signal
@@ -20,6 +19,7 @@ from .event import stop_event
 from .lightning.data import LightningStore
 from .lightning.lnd import LNDClient
 from .lnd.client import LndGrpc
+from .log import getLogger
 from .pid.data import PidConfig, PidStore
 from .pid.service import PidService
 from .reconnect.reconnector import LNDReconnector
@@ -47,7 +47,7 @@ if TYPE_CHECKING:
 DEFAULT_TIMEOUT = 180
 TRACEBACK_DUMP_FILE = "traceback_dump.txt"
 FAULTHANDLER_DUMP_FILE = "faulthandler_dump.txt"
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
 
 
 @dataclass

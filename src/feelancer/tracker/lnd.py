@@ -1,5 +1,4 @@
 import datetime
-import logging
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator
 from typing import Generic, TypeVar
@@ -13,7 +12,7 @@ from feelancer.grpc.client import StreamConverter, StreamDispatcher
 from feelancer.lightning.lnd import LNDClient
 
 # from feelancer.lnd.client import LndGrpc
-from feelancer.log import stream_logger
+from feelancer.log import getLogger, stream_logger
 from feelancer.retry import default_retry_handler
 
 from .data import TrackerStore
@@ -37,7 +36,7 @@ class LndBaseTracker(Generic[T, U, V], ABC):
         self._pub_key = lnd.pubkey_local
         self._store = store
         self._items_name = self._get_items_name()
-        self._logger = logging.getLogger(self.__module__)
+        self._logger = getLogger(self.__module__)
         self._stream_logger = stream_logger(
             interval=STREAM_LOGGER_INTERVAL,
             items_name=self._items_name,

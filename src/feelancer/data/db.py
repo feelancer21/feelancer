@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import csv
-import logging
 import os
 import tempfile
 from collections.abc import Callable, Generator, Iterable, Sequence
@@ -12,6 +11,7 @@ from sqlalchemy import URL, Row, create_engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
+from feelancer.log import getLogger
 from feelancer.retry import create_retry_handler
 
 if TYPE_CHECKING:
@@ -27,7 +27,7 @@ DELAY = 5
 MIN_TOLERANCE_DELTA = 60
 
 
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
 
 
 def _fields_to_dict(result, relations: dict[str, dict]) -> dict:

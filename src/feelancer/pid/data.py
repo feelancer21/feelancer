@@ -4,7 +4,6 @@ Database interactions for the pid controller.
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Generator
 from copy import deepcopy
 from dataclasses import dataclass, field
@@ -13,6 +12,7 @@ from typing import TYPE_CHECKING, TypeVar
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
+from feelancer.log import getLogger
 from feelancer.utils import GenericConf, defaults_from_type, get_peers_config
 
 from .models import (
@@ -46,7 +46,7 @@ DEFAULT_MAX_AGE_SPREAD_HOURS = 0
 DEFAULT_DB_ONLY = True
 DEFAULT_SET_INBOUND = False
 
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
 
 
 @dataclass
