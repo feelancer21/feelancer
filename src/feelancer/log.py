@@ -3,11 +3,42 @@ from __future__ import annotations
 import functools
 import logging
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
+
+# Removed redundant import of getLogger to avoid redefinition error
 
 DEFAULT_LOG_FILE = "feelancer.log"
 DEFAULT_LOG_LEVEL = logging.INFO
 DEFAULT_LOG_FORMAT = "%(asctime)s [%(levelname)s] [%(name)s]: %(message)s"
+
+
+TRACE_LEVEL = 5
+logging.addLevelName(TRACE_LEVEL, "TRACE")
+
+
+def trace(self: logging.Logger, message, *args, **kwargs):
+
+    if self.isEnabledFor(TRACE_LEVEL):
+        self._log(TRACE_LEVEL, message, args, **kwargs)
+
+
+class MyLogger(logging.Logger):
+    def __init__(self, name: str) -> None:
+        super().__init__(name)
+
+    def trace(self, msg, *args, **kwargs):
+        if self.isEnabledFor(TRACE_LEVEL):
+            self._log(TRACE_LEVEL, msg, args, **kwargs)
+
+
+logging.setLoggerClass(MyLogger)
+
+
+def getLogger(name: str) -> MyLogger:
+    return cast(MyLogger, logging.getLogger(name))
+
+
+logger = getLogger(__name__)
 
 
 def _eval_log_level(level: str | None):
@@ -24,6 +55,8 @@ def _eval_log_level(level: str | None):
         return logging.ERROR
     elif level == "CRITICAL":
         return logging.CRITICAL
+    elif level == "TRACE":
+        return TRACE_LEVEL
 
     return DEFAULT_LOG_LEVEL
 
@@ -42,7 +75,7 @@ def set_logger(logfile: str | None, loglevel: str | None):
 def log_func_call(func):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
-        logger = logging.getLogger(func.__module__)
+        logger = getLogger(func.__module__)
         logger.debug(f"Calling {func.__name__}, args: {args=}, kwargs: {kwargs=}")
         return func(*args, **kwargs)
 
@@ -75,7 +108,7 @@ def stream_logger(
             nonlocal count
             nonlocal logger
             if logger is None:
-                logger = logging.getLogger(generator_func.__module__)
+                logger = getLogger(generator_func.__module__)
 
             try:
                 for item in generator_func(*args, **kwargs):

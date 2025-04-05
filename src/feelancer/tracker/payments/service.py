@@ -1,6 +1,6 @@
-import logging
 from datetime import timedelta
 
+from feelancer.log import getLogger
 from feelancer.tasks.runner import RunnerRequest, RunnerResult
 from feelancer.tracker.proto import TrackerBaseService
 
@@ -28,7 +28,7 @@ DEFAULT_HTLC_LIQUIDITY_LOCKED_CSV_FILE = "~/.feelancer/htlc_liquidity_locked.csv
 
 DEFAULT_DELETE_FAILED = False
 DEFAULT_DELETE_FAILED_HOURS = 168
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
 
 
 def _validate_percentiles(percentiles: list[int]) -> None:

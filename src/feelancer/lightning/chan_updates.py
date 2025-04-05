@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import copy
-import logging
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from feelancer.log import getLogger
 from feelancer.utils import first_some
 
 from .client import ChannelPolicy
@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from feelancer.config import FeelancerPeersConfig
 
     from .client import Channel, LightningClient
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
 
 
 @dataclass
