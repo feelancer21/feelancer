@@ -275,6 +275,19 @@ class LNDHtlcTracker(LndBaseTracker):
                     self._cache_fwd_htlcs(h_in, h_out)
                     return None
 
+                elif forward_resolved.HasField("link_fail_event"):
+                    # It happens that the first message is of type FORWARD and
+                    # the second message fails the link with type RECEIVE.
+                    if forward_resolved.event_type == rt.HtlcEvent.EventType.RECEIVE:
+                        print(datetime.now(), "link fail event incoming")
+                        h_in.resolve_info = self._create_link_fail(
+                            htlc=forward_resolved,
+                            resolve_time=ns_to_datetime(final.timestamp_ns),
+                            direction_failed=HtlcDirectionType.INCOMING,
+                        )
+                        yield h_in
+                        return None
+
                 elif forward_resolved.HasField("forward_fail_event"):
                     h_in.resolve_info = self._create_forward_fail(
                         resolve_time=ns_to_datetime(final.timestamp_ns),
@@ -307,6 +320,8 @@ class LNDHtlcTracker(LndBaseTracker):
 
                     return None
 
+        # Raise an error message if our htlcs haven't matched to one of the
+        # patterns above.
         raise ValueError(f"Cannot process htlc events for {_log_msg()}")
 
     def _create_incoming_htlc(
