@@ -27,6 +27,9 @@ from feelancer.tracker.models import (
     HtlcResolveInfoLinkFailed,
     HtlcResolveInfoSettled,
     HtlcResolveType,
+    HtlcType,
+    Operation,
+    OperationTransaction,
 )
 from feelancer.utils import bytes_to_str, ns_to_datetime
 
@@ -41,7 +44,7 @@ WAIT_TIME = 60
 #   case2: chan_id_in, chan_id_out, amt_in_msat, amt_out_msat
 type FwdAmtIndex = tuple[str, str, int, int]
 type HtlcIndex = tuple[int, int]
-type DataGenerated = HtlcEvent | HtlcForward | HtlcReceive | Forward
+type DataGenerated = HtlcEvent | HtlcForward | HtlcReceive | Operation
 
 
 def _incoming_htlc_index(htlc: rt.HtlcEvent) -> HtlcIndex:
@@ -83,14 +86,6 @@ class LNDHtlcTracker(LndBaseTracker):
         return None
 
     def _process_item_stream(
-        self,
-        item: rt.HtlcEvent,
-        recon_running: bool,
-    ) -> Generator[DataGenerated]:
-
-        return self._process_htlc_event(item, recon_running)
-
-    def _process_item_pre_sync(
         self,
         item: rt.HtlcEvent,
         recon_running: bool,
@@ -314,7 +309,7 @@ class LNDHtlcTracker(LndBaseTracker):
                             htlc_info.incoming_amt_msat - htlc_info.outgoing_amt_msat
                         )
 
-                    yield Forward(
+                    forward = Forward(
                         ln_node_id=self._store.ln_node_id,
                         htlc_in=h_in,
                         htlc_out=h_out,
@@ -322,6 +317,9 @@ class LNDHtlcTracker(LndBaseTracker):
                         resolve_info=fwd_resolve_info,
                     )
 
+                    txs = [OperationTransaction(transaction=forward)]
+
+                    yield Operation(operation_transactions=txs)
                     return None
 
         # Raise an error message if our htlcs haven't matched to one of the
@@ -337,9 +335,9 @@ class LNDHtlcTracker(LndBaseTracker):
             htlc_index=htlc.incoming_htlc_id,
             amt_msat=htlc_info.incoming_amt_msat if htlc_info else None,
             attempt_time=ns_to_datetime(htlc.timestamp_ns),
-            event_type=HtlcEventType(htlc.event_type),
             direction_type=HtlcDirectionType.INCOMING,
             timelock=htlc_info.incoming_timelock if htlc_info else None,
+            htlc_type=HtlcType(htlc.event_type),
         )
 
     def _create_outgoing_htlc(
@@ -351,9 +349,9 @@ class LNDHtlcTracker(LndBaseTracker):
             htlc_index=htlc.outgoing_htlc_id,
             amt_msat=htlc_info.outgoing_amt_msat if htlc_info else None,
             attempt_time=ns_to_datetime(htlc.timestamp_ns),
-            event_type=HtlcEventType(htlc.event_type),
             direction_type=HtlcDirectionType.OUTGOING,
             timelock=htlc_info.outgoing_timelock if htlc_info else None,
+            htlc_type=HtlcType(htlc.event_type),
         )
 
     def _create_link_fail(
@@ -412,9 +410,6 @@ class LNDHtlcTracker(LndBaseTracker):
     ) -> tuple[HtlcForward, HtlcForward]:
         """
         Returns all settled forward events.
-
-        Raises:
-            KeyError: If no forward events are found.
         """
         fwd_amt_index = (chan_id_in, chan_id_out, amt_in_msat, amt_out_msat)
 
