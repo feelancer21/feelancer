@@ -68,16 +68,6 @@ class LndBaseTracker(Generic[T, U, V], ABC):
         Process an item from the LND API to a SQLAlchemy object after start.
         """
 
-    @abstractmethod
-    def _process_item_pre_sync(self, item: U, recon_running: bool) -> Generator[T]:
-        """
-        Process an item from the LND API to a SQLAlchemy object during the pre
-        syn process.
-
-        Raises:
-            NotImplementedError: If not implemented in the case of no pre sync.
-        """
-
     @default_retry_handler
     def _pre_sync_start(self) -> None:
         """

@@ -12,16 +12,21 @@ from feelancer.tracker.models import (
     ForwardResolveInfo,
     ForwardResolveType,
     HtlcDirectionType,
-    HtlcEventType,
     HtlcForward,
     HtlcResolveInfoSettled,
     HtlcResolveType,
+    HtlcType,
+    LedgerEventHtlc,
+    LedgerEventType,
+    Operation,
+    OperationLedgerEvent,
+    OperationTransaction,
+    TransactionType,
 )
 from feelancer.utils import ns_to_datetime
 
 RECON_TIME_INTERVAL = 30 * 24 * 3600  # 30 days in seconds
 PAGINATOR_BLOCKING_INTERVAL = 21  # 21 seconds
-CHUNK_SIZE = 1000
 
 EXCEPTIONS_RETRY = (Exception,)
 EXCEPTIONS_RAISE = ()
@@ -29,7 +34,7 @@ MAX_RETRIES = 3
 DELAY = 3
 MIN_TOLERANCE_DELTA = None
 
-type LndForwardReconSource = StreamConverter[Forward, ln.ForwardingEvent]
+type LndForwardReconSource = StreamConverter[Operation, ln.ForwardingEvent]
 
 
 htlc_event_retry_handler = create_retry_handler(
@@ -73,15 +78,7 @@ class LNDFwdTracker(LndBaseTracker):
         self,
         item: ln.ForwardingEvent,
         recon_running: bool,
-    ) -> Generator[Forward]:
-
-        return self._process_forwarding_event(item, recon_running)
-
-    def _process_item_pre_sync(
-        self,
-        item: ln.ForwardingEvent,
-        recon_running: bool,
-    ) -> Generator[Forward]:
+    ) -> Generator[Operation]:
 
         return self._process_forwarding_event(item, recon_running)
 
@@ -99,7 +96,7 @@ class LNDFwdTracker(LndBaseTracker):
 
     def _process_forwarding_event(
         self, fwd: ln.ForwardingEvent, recon_running: bool
-    ) -> Generator[Forward]:
+    ) -> Generator[Operation]:
 
         try:
             # We are doing to a callback to the SubscribeHtlcEvent-Stream to get more
@@ -110,32 +107,35 @@ class LNDFwdTracker(LndBaseTracker):
             if self._time_start is None or fwd_time < self._time_start:
                 raise Exception("No htlc events expected.")
 
-            yield self._forward_from_htlc_event(fwd)
+            forward = self._forward_from_htlc_event(fwd)
 
         except Exception:
             # If any Exception occurs, we will generate a forward with the data
             # we have from the ForwardingEvent.
-            yield self._forward_from_fwd_event(fwd)
+            forward = self._forward_from_fwd_event(fwd)
+
+        yield self._create_operation(forward)
 
     def _forward_from_htlc_event(self, fwd: ln.ForwardingEvent) -> Forward:
 
         htlc_in, htlc_out = self._fwds_from_event_stream(
             str(fwd.chan_id_in), str(fwd.chan_id_out), fwd.amt_in_msat, fwd.amt_out_msat
         )
+        resolve_time = htlc_out.resolve_info.resolve_time
 
         return Forward(
             ln_node_id=self._store.ln_node_id,
             htlc_in=htlc_in,
             htlc_out=htlc_out,
             fee_msat=fwd.fee_msat,
-            resolve_info=self._create_forward_resolve_info(
-                htlc_out.resolve_info.resolve_time
-            ),
+            resolve_info=self._create_forward_resolve_info(resolve_time),
+            transaction_type=TransactionType.LN_FORWARD,
         )
 
     def _forward_from_fwd_event(self, fwd: ln.ForwardingEvent) -> Forward:
 
         resolve_time = ns_to_datetime(fwd.timestamp_ns)
+
         htlc_in = self._create_htlc_forward(
             channel_id=str(fwd.chan_id_in),
             amt_msat=fwd.amt_in_msat,
@@ -149,13 +149,16 @@ class LNDFwdTracker(LndBaseTracker):
             resolve_time=resolve_time,
         )
 
-        return Forward(
+        forward = Forward(
             ln_node_id=self._store.ln_node_id,
             htlc_in=htlc_in,
             htlc_out=htlc_out,
             fee_msat=fwd.fee_msat,
             resolve_info=self._create_forward_resolve_info(resolve_time),
+            transaction_type=TransactionType.LN_FORWARD,
         )
+
+        return forward
 
     def _create_forward_resolve_info(self, time: datetime) -> ForwardResolveInfo:
         """Create a resolve info for a forward."""
@@ -164,6 +167,24 @@ class LNDFwdTracker(LndBaseTracker):
             resolve_time=time,
             resolve_type=ForwardResolveType.SETTLED,
         )
+
+    def _create_operation(self, forward: Forward) -> Operation:
+
+        txs = [OperationTransaction(transaction=forward)]
+
+        ledger_event_htlc_in = LedgerEventHtlc(
+            event_type=LedgerEventType.LN_HTLC_EVENT, htlc=forward.htlc_in
+        )
+        ledger_event_htlc_out = LedgerEventHtlc(
+            event_type=LedgerEventType.LN_HTLC_EVENT, htlc=forward.htlc_out
+        )
+
+        events = [
+            OperationLedgerEvent(ledger_event=ledger_event_htlc_in),
+            OperationLedgerEvent(ledger_event=ledger_event_htlc_out),
+        ]
+
+        return Operation(operation_transactions=txs, operation_ledger_events=events)
 
     def _create_htlc_forward(
         self,
@@ -179,10 +200,10 @@ class LNDFwdTracker(LndBaseTracker):
             htlc_index=None,
             amt_msat=amt_msat,
             attempt_time=None,
-            event_type=HtlcEventType.FORWARD,
             direction_type=direction_type,
             timelock=None,
             resolve_info=self._create_resolve_info(resolve_time),
+            htlc_type=HtlcType.FORWARD,
         )
 
     def _create_resolve_info(self, resolve_time: datetime) -> HtlcResolveInfoSettled:
