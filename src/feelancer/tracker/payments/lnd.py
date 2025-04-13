@@ -30,7 +30,6 @@ from feelancer.tracker.models import (
 from feelancer.utils import ns_to_datetime, sha256_supports_str
 
 RECON_TIME_INTERVAL = 30 * 24 * 3600  # 30 days in seconds
-CHUNK_SIZE = 10
 
 type LndPaymentReconSource = StreamConverter[HTLCAttempt, ln.Payment]
 
@@ -57,14 +56,6 @@ class LNDPaymentTracker(LndBaseTracker):
         )
 
     def _process_item_stream(
-        self,
-        item: ln.Payment,
-        recon_running: bool,
-    ) -> Generator[HTLCAttempt]:
-
-        return self._process_payment(item, recon_running)
-
-    def _process_item_pre_sync(
         self,
         item: ln.Payment,
         recon_running: bool,

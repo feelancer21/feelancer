@@ -16,7 +16,6 @@ from feelancer.tracker.models import (
 from feelancer.utils import bytes_to_str, sec_to_datetime
 
 RECON_TIME_INTERVAL = 30 * 24 * 3600  # 30 days in seconds
-CHUNK_SIZE = 1000
 
 type LndInvoiceReconSource = StreamConverter[Invoice, ln.Invoice]
 
@@ -41,14 +40,6 @@ class LNDInvoiceTracker(LndBaseTracker):
         )
 
     def _process_item_stream(
-        self,
-        item: ln.Invoice,
-        recon_running: bool,
-    ) -> Generator[Invoice]:
-
-        return self._process_invoice(item, recon_running)
-
-    def _process_item_pre_sync(
         self,
         item: ln.Invoice,
         recon_running: bool,
