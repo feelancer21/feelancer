@@ -9,7 +9,7 @@ from google.protobuf.json_format import MessageToDict
 from feelancer.grpc.utils import convert_msg_to_dict
 from feelancer.lightning.lnd import LNDClient
 from feelancer.lnd.grpc_generated import router_pb2 as rt
-from feelancer.tracker.data import TrackerStore
+from feelancer.tracker.data import TrackerStore, create_operation_from_htlcs
 from feelancer.tracker.lnd import LndBaseTracker
 from feelancer.tracker.models import (
     FailureCode,
@@ -29,7 +29,6 @@ from feelancer.tracker.models import (
     HtlcResolveType,
     HtlcType,
     Operation,
-    OperationTransaction,
 )
 from feelancer.utils import bytes_to_str, ns_to_datetime
 
@@ -278,7 +277,6 @@ class LNDHtlcTracker(LndBaseTracker):
                     # It happens that the first message is of type FORWARD and
                     # the second message fails the link with type RECEIVE.
                     if forward_resolved.event_type == rt.HtlcEvent.EventType.RECEIVE:
-                        print(datetime.now(), "link fail event incoming")
                         h_in.resolve_info = self._create_link_fail(
                             htlc=forward_resolved,
                             resolve_time=ns_to_datetime(final.timestamp_ns),
@@ -317,9 +315,7 @@ class LNDHtlcTracker(LndBaseTracker):
                         resolve_info=fwd_resolve_info,
                     )
 
-                    txs = [OperationTransaction(transaction=forward)]
-
-                    yield Operation(operation_transactions=txs)
+                    yield create_operation_from_htlcs([forward], [])
                     return None
 
         # Raise an error message if our htlcs haven't matched to one of the

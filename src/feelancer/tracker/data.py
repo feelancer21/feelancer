@@ -14,15 +14,22 @@ from .models import (
     GraphNode,
     GraphPath,
     Hop,
+    Htlc,
     HTLCAttempt,
     HTLCStatus,
     Invoice,
+    LedgerEventHtlc,
+    LedgerEventType,
+    Operation,
+    OperationLedgerEvent,
+    OperationTransaction,
     Payment,
     PaymentHtlcResolveInfo,
     PaymentRequest,
     PaymentResolveInfo,
     PaymentStatus,
     Route,
+    Transaction,
 )
 
 CACHE_SIZE_PAYMENT_REQUEST_ID = 1000
@@ -43,6 +50,18 @@ class GraphPathNotFound(Exception): ...
 
 
 class InvoiceNotFound(Exception): ...
+
+
+def create_operation_from_htlcs(txs: list[Transaction], htlcs: list[Htlc]) -> Operation:
+
+    op_txs = [OperationTransaction(transaction=tx) for tx in txs]
+    op_events: list[OperationLedgerEvent] = []
+
+    for htlc in htlcs:
+        levent = LedgerEventHtlc(event_type=LedgerEventType.LN_HTLC_EVENT, htlc=htlc)
+        op_events.append(OperationLedgerEvent(ledger_event=levent))
+
+    return Operation(operation_transactions=op_txs, operation_ledger_events=op_events)
 
 
 def query_payment_request(payment_hash: str) -> Select[tuple[PaymentRequest]]:
