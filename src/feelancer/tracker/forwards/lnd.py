@@ -5,7 +5,7 @@ from feelancer.grpc.client import StreamConverter
 from feelancer.lightning.lnd import LNDClient
 from feelancer.lnd.grpc_generated import lightning_pb2 as ln
 from feelancer.retry import create_retry_handler
-from feelancer.tracker.data import TrackerStore
+from feelancer.tracker.data import TrackerStore, create_operation_from_htlcs
 from feelancer.tracker.lnd import LndBaseTracker
 from feelancer.tracker.models import (
     Forward,
@@ -16,11 +16,7 @@ from feelancer.tracker.models import (
     HtlcResolveInfoSettled,
     HtlcResolveType,
     HtlcType,
-    LedgerEventHtlc,
-    LedgerEventType,
     Operation,
-    OperationLedgerEvent,
-    OperationTransaction,
     TransactionType,
 )
 from feelancer.utils import ns_to_datetime
@@ -114,7 +110,9 @@ class LNDFwdTracker(LndBaseTracker):
             # we have from the ForwardingEvent.
             forward = self._forward_from_fwd_event(fwd)
 
-        yield self._create_operation(forward)
+        yield create_operation_from_htlcs(
+            txs=[forward], htlcs=[forward.htlc_in, forward.htlc_out]
+        )
 
     def _forward_from_htlc_event(self, fwd: ln.ForwardingEvent) -> Forward:
 
@@ -167,24 +165,6 @@ class LNDFwdTracker(LndBaseTracker):
             resolve_time=time,
             resolve_type=ForwardResolveType.SETTLED,
         )
-
-    def _create_operation(self, forward: Forward) -> Operation:
-
-        txs = [OperationTransaction(transaction=forward)]
-
-        ledger_event_htlc_in = LedgerEventHtlc(
-            event_type=LedgerEventType.LN_HTLC_EVENT, htlc=forward.htlc_in
-        )
-        ledger_event_htlc_out = LedgerEventHtlc(
-            event_type=LedgerEventType.LN_HTLC_EVENT, htlc=forward.htlc_out
-        )
-
-        events = [
-            OperationLedgerEvent(ledger_event=ledger_event_htlc_in),
-            OperationLedgerEvent(ledger_event=ledger_event_htlc_out),
-        ]
-
-        return Operation(operation_transactions=txs, operation_ledger_events=events)
 
     def _create_htlc_forward(
         self,
