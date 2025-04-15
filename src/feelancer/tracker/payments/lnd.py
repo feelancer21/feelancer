@@ -17,7 +17,8 @@ from feelancer.tracker.models import (
     FailureCode,
     GraphPath,
     Hop,
-    HTLCAttempt,
+    HtlcDirectionType,
+    HtlcPayment,
     HTLCStatus,
     Payment,
     PaymentFailureReason,
@@ -31,7 +32,7 @@ from feelancer.utils import ns_to_datetime, sha256_supports_str
 
 RECON_TIME_INTERVAL = 30 * 24 * 3600  # 30 days in seconds
 
-type LndPaymentReconSource = StreamConverter[HTLCAttempt, ln.Payment]
+type LndPaymentReconSource = StreamConverter[HtlcPayment, ln.Payment]
 
 
 class LNDPaymentTracker(LndBaseTracker):
@@ -59,7 +60,7 @@ class LNDPaymentTracker(LndBaseTracker):
         self,
         item: ln.Payment,
         recon_running: bool,
-    ) -> Generator[HTLCAttempt]:
+    ) -> Generator[HtlcPayment]:
 
         return self._process_payment(item, recon_running)
 
@@ -77,13 +78,13 @@ class LNDPaymentTracker(LndBaseTracker):
             paginator, lambda item: self._process_payment(item, True)
         )
 
-    def _get_new_stream(self) -> Callable[..., Generator[HTLCAttempt]]:
+    def _get_new_stream(self) -> Callable[..., Generator[HtlcPayment]]:
         dispatcher = self._lnd.track_payments_dispatcher
         return self._get_new_stream_from_dispatcher(dispatcher)
 
     def _process_payment(
         self, p: ln.Payment, recon_running: bool
-    ) -> Generator[HTLCAttempt]:
+    ) -> Generator[HtlcPayment]:
         """
         Callback function for the subscription. Converts the payment object
         to an Iterable of HTLCAttempt objects.
@@ -119,11 +120,11 @@ class LNDPaymentTracker(LndBaseTracker):
         except PaymentRequestNotFound:
             payment.payment_request = PaymentRequest(
                 payment_hash=p.payment_hash,
-                payment_request=p.payment_request,
+                payment_request=p.payment_request if p.payment_request != "" else None,
             )
 
         for h in p.htlcs:
-            yield self._create_htlc_attempt(h, payment)
+            yield self._create_htlc(h, payment)
 
     def _create_payment(self, payment: ln.Payment) -> Payment:
         """
@@ -147,9 +148,7 @@ class LNDPaymentTracker(LndBaseTracker):
             resolve_info=resolve_info,
         )
 
-    def _create_htlc_attempt(
-        self, attempt: ln.HTLCAttempt, payment: Payment
-    ) -> HTLCAttempt:
+    def _create_htlc(self, attempt: ln.HTLCAttempt, payment: Payment) -> HtlcPayment:
 
         # Determination of the index of the last used hop. It is the failure source
         # index if the attempt failed. If the attempt succeeded it is the receiver
@@ -167,15 +166,24 @@ class LNDPaymentTracker(LndBaseTracker):
             attempt, route.hops, last_used_hop_index, path
         )
 
-        htlc_attempt = HTLCAttempt(
+        if len(attempt.route.hops) > 0:
+            chan_out = str(attempt.route.hops[0].chan_id)
+        else:
+            chan_out = None
+
+        htlc = HtlcPayment(
+            amt_msat=attempt.route.total_amt_msat,
+            attempt_time=ns_to_datetime(attempt.attempt_time_ns),
+            channel_id=chan_out,
+            direction_type=HtlcDirectionType.OUTGOING,
+            timelock=attempt.route.total_time_lock,
             payment=payment,
             attempt_id=attempt.attempt_id,
-            attempt_time=ns_to_datetime(attempt.attempt_time_ns),
             route=route,
-            resolve_info=resolve_info,
+            resolve_info_payment=resolve_info,
         )
 
-        return htlc_attempt
+        return htlc
 
     def _create_route(self, route: ln.Route) -> tuple[Route, list[int]]:
 
@@ -215,8 +223,6 @@ class LNDPaymentTracker(LndBaseTracker):
         path_id = self._get_graph_path_id(path)
 
         res_route = Route(
-            total_time_lock=route.total_time_lock,
-            total_amt_msat=route.total_amt_msat,
             total_fees_msat=route.total_fees_msat,
             hops=hops,
             path_id=path_id,
