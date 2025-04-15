@@ -15,7 +15,7 @@ from .models import (
     GraphPath,
     Hop,
     Htlc,
-    HTLCAttempt,
+    HtlcPayment,
     HTLCStatus,
     Invoice,
     LedgerEventHtlc,
@@ -124,7 +124,7 @@ def query_average_node_speed(
 
     # Calculate the time difference in seconds
     time_diff = func.extract(
-        "epoch", PaymentHtlcResolveInfo.resolve_time - HTLCAttempt.attempt_time
+        "epoch", PaymentHtlcResolveInfo.resolve_time - HtlcPayment.attempt_time
     )
 
     n = PaymentHtlcResolveInfo.num_hops_successful
@@ -159,7 +159,7 @@ def query_average_node_speed(
     # and j = h - 1  with h=Hop.position_id
 
     liquidity_locked = (2 * time_diff * (1 - (Hop.position_id - 1) / n) / (n + 1)) * (
-        Route.total_amt_msat / (end_time - start_time).total_seconds() / 1_000
+        HtlcPayment.amt_msat / (end_time - start_time).total_seconds() / 1_000
     )
 
     def label_percentile(p: int) -> str:
@@ -178,12 +178,12 @@ def query_average_node_speed(
             GraphNode.pub_key,
             *func_perc,
             cast(func.sum(liquidity_locked), Float).label("liquidity_locked_sat"),
-            func.count(HTLCAttempt.id).label("num_attempts"),
+            func.count(HtlcPayment.id).label("num_attempts"),
         )
         .select_from(PaymentHtlcResolveInfo)
-        .join(HTLCAttempt, PaymentHtlcResolveInfo.htlc_attempt_id == HTLCAttempt.id)
-        .join(Route, HTLCAttempt.id == Route.htlc_attempt_id)
-        .join(Hop, Hop.htlc_attempt_id == Route.htlc_attempt_id)
+        .join(HtlcPayment, PaymentHtlcResolveInfo.htlc_id == HtlcPayment.id)
+        .join(Route, HtlcPayment.id == Route.htlc_id)
+        .join(Hop, Hop.htlc_id == Route.htlc_id)
         .join(GraphNode, GraphNode.id == Hop.node_id)
         .filter(
             PaymentHtlcResolveInfo.resolve_time.between(start_time, end_time),
@@ -216,24 +216,24 @@ def query_liquidity_locked_per_htlc(
 
     # Calculate the time difference in seconds
     time_diff = func.extract(
-        "epoch", PaymentHtlcResolveInfo.resolve_time - HTLCAttempt.attempt_time
+        "epoch", PaymentHtlcResolveInfo.resolve_time - HtlcPayment.attempt_time
     )
 
     liquidity_locked = (
-        time_diff * Route.total_amt_msat / (end_time - start_time).total_seconds()
+        time_diff * HtlcPayment.amt_msat / (end_time - start_time).total_seconds()
     ) / 1_000
 
     qry = (
         select(
-            HTLCAttempt.attempt_id,
-            HTLCAttempt.attempt_time,
+            HtlcPayment.attempt_id,
+            HtlcPayment.attempt_time,
             PaymentHtlcResolveInfo.resolve_time,
             time_diff,
             cast(liquidity_locked, Float).label("liquidity_locked_sat"),
         )
         .select_from(PaymentHtlcResolveInfo)
-        .join(HTLCAttempt, PaymentHtlcResolveInfo.htlc_attempt_id == HTLCAttempt.id)
-        .join(Route, HTLCAttempt.id == Route.htlc_attempt_id)
+        .join(HtlcPayment, PaymentHtlcResolveInfo.htlc_id == HtlcPayment.id)
+        .join(Route, HtlcPayment.id == Route.htlc_id)
         .filter(
             PaymentHtlcResolveInfo.resolve_time.between(start_time, end_time),
             PaymentHtlcResolveInfo.num_hops_successful > 0,
@@ -273,15 +273,16 @@ def query_slow_nodes(
 
 def delete_failed_htlc_attempts(
     deletion_cutoff: datetime,
-) -> Delete[tuple[HTLCAttempt]]:
+) -> Delete[tuple[HtlcPayment]]:
     """
     Returns a query to delete all failed HTLC attempts that are older than the
     given time. Time is exclusive.
     """
 
-    return delete(HTLCAttempt).where(
-        HTLCAttempt.id == PaymentHtlcResolveInfo.htlc_attempt_id,
-        HTLCAttempt.attempt_time < deletion_cutoff,
+    return delete(HtlcPayment).where(
+        HtlcPayment.id == PaymentHtlcResolveInfo.htlc_id,
+        HtlcPayment.htlc_id == Htlc.id,
+        HtlcPayment.attempt_time < deletion_cutoff,
         PaymentHtlcResolveInfo.status == HTLCStatus.FAILED,
     )
 
