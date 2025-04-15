@@ -190,6 +190,7 @@ class HtlcType(PyEnum):
     SEND = 1
     RECEIVE = 2
     FORWARD = 3
+    PAYMENT = 4
 
 
 class HtlcDirectionType(PyEnum):
@@ -268,6 +269,37 @@ class HtlcReceive(Htlc):
 
     __mapper_args__ = {
         "polymorphic_identity": HtlcType.RECEIVE,
+    }
+
+
+class HtlcPayment(Htlc):
+    __tablename__ = "ln_htlc_payment"
+
+    htlc_id: Mapped[int] = mapped_column(
+        ForeignKey("ln_htlc.id", ondelete="CASCADE"), primary_key=True
+    )
+
+    htlc: Mapped[Htlc] = relationship(Htlc, uselist=False)
+
+    payment_id: Mapped[BigInteger] = mapped_column(
+        ForeignKey("ln_payment.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+
+    payment: Mapped[Payment] = relationship("Payment", back_populates="attempts")
+
+    # The unique attempt ID of lnd that is used for this attempt.
+    attempt_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+    route: Mapped[Route] = relationship(
+        "Route", uselist=False, back_populates="htlc_attempt"
+    )
+
+    resolve_info_payment: Mapped[PaymentHtlcResolveInfo] = relationship(
+        "PaymentHtlcResolveInfo", uselist=False, back_populates="htlc_attempt"
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": HtlcType.PAYMENT,
     }
 
 
@@ -492,8 +524,8 @@ class Payment(Base):
         DateTime(timezone=True), nullable=False
     )
 
-    attempts: Mapped[list[HTLCAttempt]] = relationship(
-        "HTLCAttempt", back_populates="payment"
+    attempts: Mapped[list[HtlcPayment]] = relationship(
+        "HtlcPayment", back_populates="payment"
     )
 
     resolve_info: Mapped[PaymentResolveInfo] = relationship(
@@ -554,48 +586,15 @@ class GraphPath(Base):
     )
 
 
-class HTLCAttempt(Base):
-    __tablename__ = "ln_payment_htlc_attempt"
-
-    # TODO: Redesign this table to have a better unique constraint.
-    # e.g. node id, payment id)
-    __table_args__ = (UniqueConstraint("payment_id", "attempt_id"),)
-
-    # unique identifier of the attempt
-    id: Mapped[int] = mapped_column(autoincrement=True, primary_key=True)
-
-    payment_id: Mapped[BigInteger] = mapped_column(
-        ForeignKey("ln_payment.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-
-    payment: Mapped[Payment] = relationship("Payment", back_populates="attempts")
-
-    # The unique ID that is used for this attempt.
-    attempt_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
-
-    # The time in UNIX nanoseconds at which this HTLC was sent.
-    attempt_time: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
-
-    route: Mapped[Route] = relationship(
-        "Route", uselist=False, back_populates="htlc_attempt"
-    )
-
-    resolve_info: Mapped[PaymentHtlcResolveInfo] = relationship(
-        "PaymentHtlcResolveInfo", uselist=False, back_populates="htlc_attempt"
-    )
-
-
 class PaymentHtlcResolveInfo(Base):
     __tablename__ = "ln_payment_htlc_resolve_info"
 
-    htlc_attempt_id: Mapped[BigInteger] = mapped_column(
-        ForeignKey("ln_payment_htlc_attempt.id", ondelete="CASCADE"), primary_key=True
+    htlc_id: Mapped[BigInteger] = mapped_column(
+        ForeignKey("ln_htlc_payment.htlc_id", ondelete="CASCADE"), primary_key=True
     )
 
-    htlc_attempt: Mapped[HTLCAttempt] = relationship(
-        HTLCAttempt, uselist=False, back_populates="resolve_info"
+    htlc_attempt: Mapped[HtlcPayment] = relationship(
+        HtlcPayment, uselist=False, back_populates="resolve_info_payment"
     )
 
     # The time in UNIX nanoseconds at which this HTLC was settled or failed.
@@ -627,11 +626,11 @@ class PaymentHtlcResolveInfo(Base):
 class Failure(Base):
     __tablename__ = "ln_payment_failure"
 
-    htlc_attempt_id: Mapped[BigInteger] = mapped_column(
-        ForeignKey("ln_payment_htlc_resolve_info.htlc_attempt_id", ondelete="CASCADE"),
+    htlc_id: Mapped[BigInteger] = mapped_column(
+        ForeignKey("ln_payment_htlc_resolve_info.htlc_id", ondelete="CASCADE"),
         primary_key=True,
     )
-    htlc_attempt: Mapped[HTLCAttempt] = relationship(
+    htlc_attempt: Mapped[HtlcPayment] = relationship(
         PaymentHtlcResolveInfo, uselist=False, back_populates="failure"
     )
 
@@ -653,22 +652,16 @@ class Failure(Base):
 class Route(Base):
     __tablename__ = "ln_payment_route"
 
-    htlc_attempt_id: Mapped[BigInteger] = mapped_column(
-        ForeignKey("ln_payment_htlc_attempt.id", ondelete="CASCADE"), primary_key=True
+    htlc_id: Mapped[BigInteger] = mapped_column(
+        ForeignKey("ln_htlc_payment.htlc_id", ondelete="CASCADE"), primary_key=True
     )
 
-    htlc_attempt: Mapped[HTLCAttempt] = relationship(
-        HTLCAttempt, back_populates="route"
+    htlc_attempt: Mapped[HtlcPayment] = relationship(
+        HtlcPayment, back_populates="route"
     )
-
-    # The cumulative (final) time lock across the entire route.
-    total_time_lock: Mapped[int] = mapped_column(Integer, nullable=False)
 
     # The total fees in millisatoshis.
     total_fees_msat: Mapped[int] = mapped_column(BigInteger, nullable=False)
-
-    # The total amount in millisatoshis.
-    total_amt_msat: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
     # Relationship to hops
     hops: Mapped[list[Hop]] = relationship("Hop", back_populates="route")
@@ -682,14 +675,14 @@ class Route(Base):
 
 class Hop(Base):
     __tablename__ = "ln_payment_hop"
-    __table_args__ = (UniqueConstraint("htlc_attempt_id", "position_id"),)
+    __table_args__ = (UniqueConstraint("htlc_id", "position_id"),)
 
     # unique identifier of the hop
     id: Mapped[int] = mapped_column(autoincrement=True, primary_key=True)
 
     # the id of the route
-    htlc_attempt_id: Mapped[BigInteger] = mapped_column(
-        ForeignKey("ln_payment_route.htlc_attempt_id", ondelete="CASCADE"), index=True
+    htlc_id: Mapped[BigInteger] = mapped_column(
+        ForeignKey("ln_payment_route.htlc_id", ondelete="CASCADE"), index=True
     )
     route: Mapped[Route] = relationship(Route, uselist=False, back_populates="hops")
 
