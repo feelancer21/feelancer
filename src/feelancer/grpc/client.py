@@ -34,6 +34,9 @@ os.environ["GRPC_SSL_CIPHER_SUITES"] = "HIGH+ECDSA"
 class LocallyCancelled(Exception): ...
 
 
+class DeadlineExceeded(Exception): ...
+
+
 class RpcResponseHandler:
     def __init__(self, eval_status: Callable[[grpc.StatusCode, str], None]):
 
@@ -117,6 +120,9 @@ class RpcResponseHandler:
         if code == grpc.StatusCode.CANCELLED:
             if details == "Locally cancelled by application!":
                 raise LocallyCancelled(details)
+
+        if code == grpc.StatusCode.DEADLINE_EXCEEDED:
+            raise DeadlineExceeded(details)
 
         # In other cases we raise the exception.
         self._logger.error(msg)

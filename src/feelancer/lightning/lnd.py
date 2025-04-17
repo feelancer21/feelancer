@@ -4,6 +4,7 @@ import logging
 from typing import TYPE_CHECKING
 
 import feelancer.lnd.client as lnd
+from feelancer.grpc.client import DeadlineExceeded
 from feelancer.lightning.client import Channel, ChannelPolicy
 from feelancer.lightning.utils import opening_height
 
@@ -130,8 +131,8 @@ class LNDClient:
                 logger.debug(f"Received from lnd: {e}")
                 return None
 
-            except (lnd.DialProxFailed, lnd.EOF) as e:
-                logger.error(f"Received from lnd: {e}")
+            except (lnd.DialProxFailed, lnd.EOF, DeadlineExceeded) as e:
+                logger.warning(f"Received from lnd: {e}")
 
     def disconnect_peer(self, pub_key: str) -> None:
 
@@ -140,7 +141,7 @@ class LNDClient:
         try:
             self.lnd.disconnect_peer(pub_key)
             logger.info(f"Disonnected from {pub_key=}")
-        except lnd.PeerNotConnected as e:
+        except (lnd.PeerNotConnected, DeadlineExceeded) as e:
             logger.debug(f"Received from lnd: {e}")
 
     def get_channel_policies(
