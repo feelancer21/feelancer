@@ -215,6 +215,10 @@ class LNDHtlcTracker(LndBaseTracker):
             htlc_info = incoming_accepted.link_fail_event.info
         elif incoming_accepted.HasField("forward_fail_event"):
             htlc_info = None
+        elif incoming_accepted.HasField("settle_event"):
+            # We have missed the forward event, maybe due to restart.
+            return None
+
         else:
             raise ValueError(f"Cannot determine htlc info for {_log_msg()}")
 
