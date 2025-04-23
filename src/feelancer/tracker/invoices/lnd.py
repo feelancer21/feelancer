@@ -8,8 +8,9 @@ from feelancer.lnd.grpc_generated import lightning_pb2 as ln
 from feelancer.tracker.data import InvoiceNotFound
 from feelancer.tracker.lnd import LndBaseTracker
 from feelancer.tracker.models import (
+    HtlcDirectionType,
+    HtlcInvoice,
     Invoice,
-    InvoiceHTLC,
     InvoiceHTLCResolveInfo,
     InvoiceHTLCState,
 )
@@ -109,17 +110,20 @@ class LNDInvoiceTracker(LndBaseTracker):
             settle_index=invoice.settle_index,
         )
 
-    def _create_htlc(self, htlc: ln.InvoiceHTLC, invoice: Invoice) -> InvoiceHTLC:
+    def _create_htlc(self, htlc: ln.InvoiceHTLC, invoice: Invoice) -> HtlcInvoice:
 
         resolve_info = InvoiceHTLCResolveInfo(
             resolve_time=sec_to_datetime(htlc.resolve_time),
             state=InvoiceHTLCState(htlc.state),
         )
 
-        return InvoiceHTLC(
+        return HtlcInvoice(
             invoice=invoice,
-            resolve_info=resolve_info,
+            resolve_info_invoice=resolve_info,
             amt_msat=htlc.amt_msat,
-            accept_time=sec_to_datetime(htlc.accept_time),
-            expiry_height=htlc.expiry_height,
+            attempt_time=sec_to_datetime(htlc.accept_time),
+            timelock=htlc.expiry_height,
+            htlc_index=htlc.htlc_index,
+            channel_id=str(htlc.chan_id),
+            direction_type=HtlcDirectionType.INCOMING,
         )
