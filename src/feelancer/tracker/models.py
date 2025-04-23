@@ -188,9 +188,11 @@ class LedgerEventHtlc(LedgerEvent):
 class HtlcType(PyEnum):
     UNKNOWN = 0
     SEND = 1
+    # Receives not associated with an invoice (e.g. unknown invoice)
     RECEIVE = 2
     FORWARD = 3
     PAYMENT = 4
+    INVOICE = 5
 
 
 class HtlcDirectionType(PyEnum):
@@ -300,6 +302,31 @@ class HtlcPayment(Htlc):
 
     __mapper_args__ = {
         "polymorphic_identity": HtlcType.PAYMENT,
+    }
+
+
+class HtlcInvoice(Htlc):
+    __tablename__ = "ln_htlc_invoice"
+
+    htlc_id: Mapped[int] = mapped_column(
+        ForeignKey("ln_htlc.id", ondelete="CASCADE"), primary_key=True
+    )
+
+    htlc: Mapped[Htlc] = relationship(Htlc, uselist=False)
+
+    # The invoice id
+    invoice_id: Mapped[int] = mapped_column(
+        ForeignKey("ln_invoice.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+
+    invoice: Mapped[Invoice] = relationship("Invoice", back_populates="invoice_htlcs")
+
+    resolve_info_invoice: Mapped[InvoiceHTLCResolveInfo] = relationship(
+        "InvoiceHTLCResolveInfo", uselist=False, back_populates="invoice_htlc"
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": HtlcType.INVOICE,
     }
 
 
@@ -745,39 +772,13 @@ class Invoice(Base):
     value_msat: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
     # Relationship to invoice htlcs
-    invoice_htlcs: Mapped[list[InvoiceHTLC]] = relationship(
-        "InvoiceHTLC", back_populates="invoice"
+    invoice_htlcs: Mapped[list[HtlcInvoice]] = relationship(
+        "HtlcInvoice", back_populates="invoice"
     )
 
     add_index: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
     settle_index: Mapped[int] = mapped_column(BigInteger, nullable=True)
-
-
-class InvoiceHTLC(Base):
-    __tablename__ = "ln_invoice_htlc"
-
-    # unique identifier of the invoice
-    id: Mapped[int] = mapped_column(autoincrement=True, primary_key=True)
-
-    # The invoice id
-    invoice_id: Mapped[int] = mapped_column(
-        ForeignKey("ln_invoice.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-
-    invoice: Mapped[Invoice] = relationship(Invoice, back_populates="invoice_htlcs")
-
-    amt_msat: Mapped[int] = mapped_column(BigInteger, nullable=False)
-
-    accept_time: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
-
-    expiry_height: Mapped[int] = mapped_column(Integer, nullable=False)
-
-    resolve_info: Mapped[InvoiceHTLCResolveInfo] = relationship(
-        "InvoiceHTLCResolveInfo", uselist=False, back_populates="invoice_htlc"
-    )
 
 
 class InvoiceHTLCState(PyEnum):
@@ -787,14 +788,14 @@ class InvoiceHTLCState(PyEnum):
 
 
 class InvoiceHTLCResolveInfo(Base):
-    __tablename__ = "ln_invoice_htlc_resolve_info"
+    __tablename__ = "ln_htlc_invoice_resolve_info"
 
     invoice_htlc_id: Mapped[int] = mapped_column(
-        ForeignKey("ln_invoice_htlc.id", ondelete="CASCADE"), primary_key=True
+        ForeignKey("ln_htlc_invoice.htlc_id", ondelete="CASCADE"), primary_key=True
     )
 
-    invoice_htlc: Mapped[InvoiceHTLC] = relationship(
-        InvoiceHTLC, uselist=False, back_populates="resolve_info"
+    invoice_htlc: Mapped[HtlcInvoice] = relationship(
+        HtlcInvoice, uselist=False, back_populates="resolve_info_invoice"
     )
 
     resolve_time: Mapped[datetime.datetime] = mapped_column(
