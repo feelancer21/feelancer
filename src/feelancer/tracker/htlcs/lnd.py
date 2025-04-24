@@ -313,6 +313,7 @@ class LNDHtlcTracker(LndBaseTracker):
                         htlc_out=h_out,
                         fee_msat=fee_mast,
                         resolve_info=fwd_resolve_info,
+                        creation_time=h_in.attempt_time,
                     )
 
                     yield create_operation_from_htlcs([forward], [])
