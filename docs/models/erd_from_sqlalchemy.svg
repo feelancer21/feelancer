@@ -11,23 +11,23 @@
 <!-- run -->
 <g id="node1" class="node">
 <title>run</title>
-<polygon fill="none" stroke="black" points="8,-1879.2 8,-1908.4 287.94,-1908.4 287.94,-1879.2 8,-1879.2"/>
-<text text-anchor="start" x="135.08" y="-1890" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="16.00">run</text>
-<polygon fill="none" stroke="black" points="8,-1852.4 8,-1879.2 287.94,-1879.2 287.94,-1852.4 8,-1852.4"/>
-<text text-anchor="start" x="13" y="-1862.6" font-family="Helvetica,sans-Serif" text-decoration="underline" font-size="14.00">id</text>
-<text text-anchor="start" x="23.9" y="-1862.6" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="27.79" y="-1862.6" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
-<text text-anchor="start" x="101.68" y="-1862.6" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
-<polygon fill="none" stroke="black" points="8,-1825.6 8,-1852.4 287.94,-1852.4 287.94,-1825.6 8,-1825.6"/>
-<text text-anchor="start" x="13" y="-1835.8" font-family="Helvetica,sans-Serif" font-size="14.00">timestamp_end</text>
-<text text-anchor="start" x="108.72" y="-1835.8" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="112.61" y="-1835.8" font-family="Helvetica,sans-Serif" font-size="14.00"> [TIMESTAMP]</text>
-<text text-anchor="start" x="205.94" y="-1835.8" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
-<polygon fill="none" stroke="black" points="8,-1798.8 8,-1825.6 287.94,-1825.6 287.94,-1798.8 8,-1798.8"/>
-<text text-anchor="start" x="13" y="-1809" font-family="Helvetica,sans-Serif" font-size="14.00">timestamp_start</text>
-<text text-anchor="start" x="112.59" y="-1809" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="116.48" y="-1809" font-family="Helvetica,sans-Serif" font-size="14.00"> [TIMESTAMP]</text>
-<text text-anchor="start" x="209.81" y="-1809" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="8,-2006.2 8,-2035.4 287.94,-2035.4 287.94,-2006.2 8,-2006.2"/>
+<text text-anchor="start" x="135.08" y="-2017" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="16.00">run</text>
+<polygon fill="none" stroke="black" points="8,-1979.4 8,-2006.2 287.94,-2006.2 287.94,-1979.4 8,-1979.4"/>
+<text text-anchor="start" x="13" y="-1989.6" font-family="Helvetica,sans-Serif" text-decoration="underline" font-size="14.00">id</text>
+<text text-anchor="start" x="23.9" y="-1989.6" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="27.79" y="-1989.6" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
+<text text-anchor="start" x="101.68" y="-1989.6" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="8,-1952.6 8,-1979.4 287.94,-1979.4 287.94,-1952.6 8,-1952.6"/>
+<text text-anchor="start" x="13" y="-1962.8" font-family="Helvetica,sans-Serif" font-size="14.00">timestamp_end</text>
+<text text-anchor="start" x="108.72" y="-1962.8" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="112.61" y="-1962.8" font-family="Helvetica,sans-Serif" font-size="14.00"> [TIMESTAMP]</text>
+<text text-anchor="start" x="205.94" y="-1962.8" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="8,-1925.8 8,-1952.6 287.94,-1952.6 287.94,-1925.8 8,-1925.8"/>
+<text text-anchor="start" x="13" y="-1936" font-family="Helvetica,sans-Serif" font-size="14.00">timestamp_start</text>
+<text text-anchor="start" x="112.59" y="-1936" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="116.48" y="-1936" font-family="Helvetica,sans-Serif" font-size="14.00"> [TIMESTAMP]</text>
+<text text-anchor="start" x="209.81" y="-1936" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
 </g>
 <!-- ln_run -->
 <g id="node2" class="node">
@@ -48,9 +48,9 @@
 <!-- run&#45;&#45;ln_run -->
 <g id="edge1" class="edge">
 <title>run&#45;&#45;ln_run</title>
-<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M295.85,-1833.98C330.87,-1829.3 367.88,-1824.36 401.63,-1819.85"/>
-<text text-anchor="start" x="394.63" y="-1807.25" font-family="Times,serif" font-size="14.00">1</text>
-<text text-anchor="start" x="295.85" y="-1833.98" font-family="Times,serif" font-size="14.00">1</text>
+<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M245.37,-1921.93C283.15,-1900.2 327.35,-1876.33 368.94,-1857.6 379.55,-1852.82 390.73,-1848.18 402.01,-1843.77"/>
+<text text-anchor="start" x="395.01" y="-1847.97" font-family="Times,serif" font-size="14.00">1</text>
+<text text-anchor="start" x="238.37" y="-1909.33" font-family="Times,serif" font-size="14.00">1</text>
 </g>
 <!-- pid_run -->
 <g id="node3" class="node">
@@ -71,224 +71,224 @@
 <!-- run&#45;&#45;pid_run -->
 <g id="edge2" class="edge">
 <title>run&#45;&#45;pid_run</title>
-<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M182.3,-1912.23C220.15,-1973.93 287.37,-2069.93 368.94,-2127.6 379.02,-2134.73 390.14,-2141 401.64,-2146.49"/>
-<text text-anchor="start" x="394.64" y="-2133.89" font-family="Times,serif" font-size="14.00">1</text>
-<text text-anchor="start" x="175.3" y="-1916.43" font-family="Times,serif" font-size="14.00">1</text>
+<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M234.67,-2039.37C290.11,-2077.13 354.55,-2120.42 368.94,-2127.6 379.48,-2132.86 390.66,-2137.84 402,-2142.48"/>
+<text text-anchor="start" x="395" y="-2129.88" font-family="Times,serif" font-size="14.00">1</text>
+<text text-anchor="start" x="227.67" y="-2043.57" font-family="Times,serif" font-size="14.00">1</text>
 </g>
 <!-- ln_channel_liquidity -->
 <g id="node10" class="node">
 <title>ln_channel_liquidity</title>
-<polygon fill="none" stroke="black" points="760.7,-1539.4 760.7,-1568.6 1064.07,-1568.6 1064.07,-1539.4 760.7,-1539.4"/>
-<text text-anchor="start" x="835.48" y="-1550.2" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="16.00">ln_channel_liquidity</text>
-<polygon fill="none" stroke="black" points="760.7,-1512.6 760.7,-1539.4 1064.07,-1539.4 1064.07,-1512.6 760.7,-1512.6"/>
-<text text-anchor="start" x="765.7" y="-1522.8" font-family="Helvetica,sans-Serif" text-decoration="underline" font-size="14.00">channel_static_id</text>
-<text text-anchor="start" x="873.89" y="-1522.8" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="877.78" y="-1522.8" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
-<text text-anchor="start" x="951.67" y="-1522.8" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
-<polygon fill="none" stroke="black" points="760.7,-1485.8 760.7,-1512.6 1064.07,-1512.6 1064.07,-1485.8 760.7,-1485.8"/>
-<text text-anchor="start" x="765.7" y="-1496" font-family="Helvetica,sans-Serif" text-decoration="underline" font-size="14.00">run_id</text>
-<text text-anchor="start" x="804.62" y="-1496" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="808.51" y="-1496" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
-<text text-anchor="start" x="882.41" y="-1496" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
-<polygon fill="none" stroke="black" points="760.7,-1459 760.7,-1485.8 1064.07,-1485.8 1064.07,-1459 760.7,-1459"/>
-<text text-anchor="start" x="765.7" y="-1469.2" font-family="Helvetica,sans-Serif" font-size="14.00">liquidity_in_pending_sat</text>
-<text text-anchor="start" x="915.15" y="-1469.2" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="919.04" y="-1469.2" font-family="Helvetica,sans-Serif" font-size="14.00"> [BIGINT]</text>
-<text text-anchor="start" x="977.38" y="-1469.2" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
-<polygon fill="none" stroke="black" points="760.7,-1432.2 760.7,-1459 1064.07,-1459 1064.07,-1432.2 760.7,-1432.2"/>
-<text text-anchor="start" x="765.7" y="-1442.4" font-family="Helvetica,sans-Serif" font-size="14.00">liquidity_in_settled_sat</text>
-<text text-anchor="start" x="906.57" y="-1442.4" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="910.46" y="-1442.4" font-family="Helvetica,sans-Serif" font-size="14.00"> [BIGINT]</text>
-<text text-anchor="start" x="968.8" y="-1442.4" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
-<polygon fill="none" stroke="black" points="760.7,-1405.4 760.7,-1432.2 1064.07,-1432.2 1064.07,-1405.4 760.7,-1405.4"/>
-<text text-anchor="start" x="765.7" y="-1415.6" font-family="Helvetica,sans-Serif" font-size="14.00">liquidity_out_pending_sat</text>
-<text text-anchor="start" x="923.71" y="-1415.6" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="927.6" y="-1415.6" font-family="Helvetica,sans-Serif" font-size="14.00"> [BIGINT]</text>
-<text text-anchor="start" x="985.94" y="-1415.6" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
-<polygon fill="none" stroke="black" points="760.7,-1378.6 760.7,-1405.4 1064.07,-1405.4 1064.07,-1378.6 760.7,-1378.6"/>
-<text text-anchor="start" x="765.7" y="-1388.8" font-family="Helvetica,sans-Serif" font-size="14.00">liquidity_out_settled_sat</text>
-<text text-anchor="start" x="915.14" y="-1388.8" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="919.03" y="-1388.8" font-family="Helvetica,sans-Serif" font-size="14.00"> [BIGINT]</text>
-<text text-anchor="start" x="977.36" y="-1388.8" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="760.7,-1545.4 760.7,-1574.6 1064.07,-1574.6 1064.07,-1545.4 760.7,-1545.4"/>
+<text text-anchor="start" x="835.48" y="-1556.2" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="16.00">ln_channel_liquidity</text>
+<polygon fill="none" stroke="black" points="760.7,-1518.6 760.7,-1545.4 1064.07,-1545.4 1064.07,-1518.6 760.7,-1518.6"/>
+<text text-anchor="start" x="765.7" y="-1528.8" font-family="Helvetica,sans-Serif" text-decoration="underline" font-size="14.00">channel_static_id</text>
+<text text-anchor="start" x="873.89" y="-1528.8" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="877.78" y="-1528.8" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
+<text text-anchor="start" x="951.67" y="-1528.8" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="760.7,-1491.8 760.7,-1518.6 1064.07,-1518.6 1064.07,-1491.8 760.7,-1491.8"/>
+<text text-anchor="start" x="765.7" y="-1502" font-family="Helvetica,sans-Serif" text-decoration="underline" font-size="14.00">run_id</text>
+<text text-anchor="start" x="804.62" y="-1502" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="808.51" y="-1502" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
+<text text-anchor="start" x="882.41" y="-1502" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="760.7,-1465 760.7,-1491.8 1064.07,-1491.8 1064.07,-1465 760.7,-1465"/>
+<text text-anchor="start" x="765.7" y="-1475.2" font-family="Helvetica,sans-Serif" font-size="14.00">liquidity_in_pending_sat</text>
+<text text-anchor="start" x="915.15" y="-1475.2" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="919.04" y="-1475.2" font-family="Helvetica,sans-Serif" font-size="14.00"> [BIGINT]</text>
+<text text-anchor="start" x="977.38" y="-1475.2" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="760.7,-1438.2 760.7,-1465 1064.07,-1465 1064.07,-1438.2 760.7,-1438.2"/>
+<text text-anchor="start" x="765.7" y="-1448.4" font-family="Helvetica,sans-Serif" font-size="14.00">liquidity_in_settled_sat</text>
+<text text-anchor="start" x="906.57" y="-1448.4" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="910.46" y="-1448.4" font-family="Helvetica,sans-Serif" font-size="14.00"> [BIGINT]</text>
+<text text-anchor="start" x="968.8" y="-1448.4" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="760.7,-1411.4 760.7,-1438.2 1064.07,-1438.2 1064.07,-1411.4 760.7,-1411.4"/>
+<text text-anchor="start" x="765.7" y="-1421.6" font-family="Helvetica,sans-Serif" font-size="14.00">liquidity_out_pending_sat</text>
+<text text-anchor="start" x="923.71" y="-1421.6" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="927.6" y="-1421.6" font-family="Helvetica,sans-Serif" font-size="14.00"> [BIGINT]</text>
+<text text-anchor="start" x="985.94" y="-1421.6" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="760.7,-1384.6 760.7,-1411.4 1064.07,-1411.4 1064.07,-1384.6 760.7,-1384.6"/>
+<text text-anchor="start" x="765.7" y="-1394.8" font-family="Helvetica,sans-Serif" font-size="14.00">liquidity_out_settled_sat</text>
+<text text-anchor="start" x="915.14" y="-1394.8" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="919.03" y="-1394.8" font-family="Helvetica,sans-Serif" font-size="14.00"> [BIGINT]</text>
+<text text-anchor="start" x="977.36" y="-1394.8" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
 </g>
 <!-- ln_run&#45;&#45;ln_channel_liquidity -->
 <g id="edge10" class="edge">
 <title>ln_run&#45;&#45;ln_channel_liquidity</title>
-<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M646.91,-1772.79C658.98,-1766.22 670.24,-1758.25 679.7,-1748.6 715.11,-1712.46 694.11,-1686.36 715.7,-1640.6 728.91,-1612.61 731.23,-1603.89 752.7,-1581.6 755.71,-1578.48 758.82,-1575.4 762.01,-1572.36"/>
-<text text-anchor="start" x="737.9" y="-1576.56" font-family="Times,serif" font-size="14.00">0..N</text>
-<text text-anchor="start" x="646.91" y="-1760.19" font-family="Times,serif" font-size="14.00">1</text>
+<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M646.74,-1772.62C658.84,-1766.08 670.16,-1758.17 679.7,-1748.6 713.65,-1714.56 694.8,-1689.89 715.7,-1646.6 729.16,-1618.73 731.23,-1609.89 752.7,-1587.6 755.71,-1584.48 758.82,-1581.4 762.01,-1578.36"/>
+<text text-anchor="start" x="737.9" y="-1582.56" font-family="Times,serif" font-size="14.00">0..N</text>
+<text text-anchor="start" x="646.74" y="-1760.02" font-family="Times,serif" font-size="14.00">1</text>
 </g>
 <!-- ln_channel_policy -->
 <g id="node11" class="node">
 <title>ln_channel_policy</title>
-<polygon fill="none" stroke="black" points="763.04,-1943.2 763.04,-1972.4 1061.73,-1972.4 1061.73,-1943.2 763.04,-1943.2"/>
-<text text-anchor="start" x="843.03" y="-1954" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="16.00">ln_channel_policy</text>
-<polygon fill="none" stroke="black" points="763.04,-1916.4 763.04,-1943.2 1061.73,-1943.2 1061.73,-1916.4 763.04,-1916.4"/>
-<text text-anchor="start" x="768.04" y="-1926.6" font-family="Helvetica,sans-Serif" text-decoration="underline" font-size="14.00">channel_static_id</text>
-<text text-anchor="start" x="876.22" y="-1926.6" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="880.11" y="-1926.6" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
-<text text-anchor="start" x="954.01" y="-1926.6" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
-<polygon fill="none" stroke="black" points="763.04,-1889.6 763.04,-1916.4 1061.73,-1916.4 1061.73,-1889.6 763.04,-1889.6"/>
-<text text-anchor="start" x="768.04" y="-1899.8" font-family="Helvetica,sans-Serif" text-decoration="underline" font-size="14.00">local</text>
-<text text-anchor="start" x="796.83" y="-1899.8" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="800.72" y="-1899.8" font-family="Helvetica,sans-Serif" font-size="14.00"> [BOOLEAN]</text>
-<text text-anchor="start" x="880.08" y="-1899.8" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
-<polygon fill="none" stroke="black" points="763.04,-1862.8 763.04,-1889.6 1061.73,-1889.6 1061.73,-1862.8 763.04,-1862.8"/>
-<text text-anchor="start" x="768.04" y="-1873" font-family="Helvetica,sans-Serif" text-decoration="underline" font-size="14.00">run_id</text>
-<text text-anchor="start" x="806.95" y="-1873" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="810.84" y="-1873" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
-<text text-anchor="start" x="884.74" y="-1873" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
-<polygon fill="none" stroke="black" points="763.04,-1836 763.04,-1862.8 1061.73,-1862.8 1061.73,-1836 763.04,-1836"/>
-<text text-anchor="start" x="768.04" y="-1846.2" font-family="Helvetica,sans-Serif" text-decoration="underline" font-size="14.00">sequence_id</text>
-<text text-anchor="start" x="847.44" y="-1846.2" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="851.33" y="-1846.2" font-family="Helvetica,sans-Serif" font-size="14.00"> [BIGINT]</text>
-<text text-anchor="start" x="909.66" y="-1846.2" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
-<polygon fill="none" stroke="black" points="763.04,-1809.2 763.04,-1836 1061.73,-1836 1061.73,-1809.2 763.04,-1809.2"/>
-<text text-anchor="start" x="768.04" y="-1819.4" font-family="Helvetica,sans-Serif" font-size="14.00">base_fee_msat</text>
-<text text-anchor="start" x="863.77" y="-1819.4" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="867.66" y="-1819.4" font-family="Helvetica,sans-Serif" font-size="14.00"> [BIGINT]</text>
-<text text-anchor="start" x="925.99" y="-1819.4" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
-<polygon fill="none" stroke="black" points="763.04,-1782.4 763.04,-1809.2 1061.73,-1809.2 1061.73,-1782.4 763.04,-1782.4"/>
-<text text-anchor="start" x="768.04" y="-1792.6" font-family="Helvetica,sans-Serif" font-size="14.00">disabled</text>
-<text text-anchor="start" x="820.19" y="-1792.6" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="824.08" y="-1792.6" font-family="Helvetica,sans-Serif" font-size="14.00"> [BOOLEAN]</text>
-<text text-anchor="start" x="903.44" y="-1792.6" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
-<polygon fill="none" stroke="black" points="763.04,-1755.6 763.04,-1782.4 1061.73,-1782.4 1061.73,-1755.6 763.04,-1755.6"/>
-<text text-anchor="start" x="768.04" y="-1765.8" font-family="Helvetica,sans-Serif" font-size="14.00">fee_rate_ppm</text>
-<text text-anchor="start" x="854.43" y="-1765.8" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="858.32" y="-1765.8" font-family="Helvetica,sans-Serif" font-size="14.00"> [BIGINT]</text>
-<text text-anchor="start" x="916.66" y="-1765.8" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
-<polygon fill="none" stroke="black" points="763.04,-1728.8 763.04,-1755.6 1061.73,-1755.6 1061.73,-1728.8 763.04,-1728.8"/>
-<text text-anchor="start" x="768.04" y="-1739" font-family="Helvetica,sans-Serif" font-size="14.00">inbound_base_fee_msat</text>
-<text text-anchor="start" x="921.38" y="-1739" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="925.27" y="-1739" font-family="Helvetica,sans-Serif" font-size="14.00"> [BIGINT]</text>
-<text text-anchor="start" x="983.61" y="-1739" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
-<polygon fill="none" stroke="black" points="763.04,-1702 763.04,-1728.8 1061.73,-1728.8 1061.73,-1702 763.04,-1702"/>
-<text text-anchor="start" x="768.04" y="-1712.2" font-family="Helvetica,sans-Serif" font-size="14.00">inbound_fee_rate_ppm</text>
-<text text-anchor="start" x="912.04" y="-1712.2" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="915.93" y="-1712.2" font-family="Helvetica,sans-Serif" font-size="14.00"> [BIGINT]</text>
-<text text-anchor="start" x="974.27" y="-1712.2" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
-<polygon fill="none" stroke="black" points="763.04,-1675.2 763.04,-1702 1061.73,-1702 1061.73,-1675.2 763.04,-1675.2"/>
-<text text-anchor="start" x="768.04" y="-1685.4" font-family="Helvetica,sans-Serif" font-size="14.00">last_update</text>
-<text text-anchor="start" x="840.43" y="-1685.4" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="844.32" y="-1685.4" font-family="Helvetica,sans-Serif" font-size="14.00"> [BIGINT]</text>
-<text text-anchor="start" x="902.66" y="-1685.4" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
-<polygon fill="none" stroke="black" points="763.04,-1648.4 763.04,-1675.2 1061.73,-1675.2 1061.73,-1648.4 763.04,-1648.4"/>
-<text text-anchor="start" x="768.04" y="-1658.6" font-family="Helvetica,sans-Serif" font-size="14.00">max_htlc_msat</text>
-<text text-anchor="start" x="862.18" y="-1658.6" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="866.07" y="-1658.6" font-family="Helvetica,sans-Serif" font-size="14.00"> [BIGINT]</text>
-<text text-anchor="start" x="924.41" y="-1658.6" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
-<polygon fill="none" stroke="black" points="763.04,-1621.6 763.04,-1648.4 1061.73,-1648.4 1061.73,-1621.6 763.04,-1621.6"/>
-<text text-anchor="start" x="768.04" y="-1631.8" font-family="Helvetica,sans-Serif" font-size="14.00">min_htlc_msat</text>
-<text text-anchor="start" x="858.29" y="-1631.8" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="862.18" y="-1631.8" font-family="Helvetica,sans-Serif" font-size="14.00"> [BIGINT]</text>
-<text text-anchor="start" x="920.52" y="-1631.8" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
-<polygon fill="none" stroke="black" points="763.04,-1594.8 763.04,-1621.6 1061.73,-1621.6 1061.73,-1594.8 763.04,-1594.8"/>
-<text text-anchor="start" x="768.04" y="-1605" font-family="Helvetica,sans-Serif" font-size="14.00">time_lock_delta</text>
-<text text-anchor="start" x="865.31" y="-1605" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="869.2" y="-1605" font-family="Helvetica,sans-Serif" font-size="14.00"> [SMALLINT]</text>
-<text text-anchor="start" x="949.33" y="-1605" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="763.04,-1949.2 763.04,-1978.4 1061.73,-1978.4 1061.73,-1949.2 763.04,-1949.2"/>
+<text text-anchor="start" x="843.03" y="-1960" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="16.00">ln_channel_policy</text>
+<polygon fill="none" stroke="black" points="763.04,-1922.4 763.04,-1949.2 1061.73,-1949.2 1061.73,-1922.4 763.04,-1922.4"/>
+<text text-anchor="start" x="768.04" y="-1932.6" font-family="Helvetica,sans-Serif" text-decoration="underline" font-size="14.00">channel_static_id</text>
+<text text-anchor="start" x="876.22" y="-1932.6" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="880.11" y="-1932.6" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
+<text text-anchor="start" x="954.01" y="-1932.6" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="763.04,-1895.6 763.04,-1922.4 1061.73,-1922.4 1061.73,-1895.6 763.04,-1895.6"/>
+<text text-anchor="start" x="768.04" y="-1905.8" font-family="Helvetica,sans-Serif" text-decoration="underline" font-size="14.00">local</text>
+<text text-anchor="start" x="796.83" y="-1905.8" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="800.72" y="-1905.8" font-family="Helvetica,sans-Serif" font-size="14.00"> [BOOLEAN]</text>
+<text text-anchor="start" x="880.08" y="-1905.8" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="763.04,-1868.8 763.04,-1895.6 1061.73,-1895.6 1061.73,-1868.8 763.04,-1868.8"/>
+<text text-anchor="start" x="768.04" y="-1879" font-family="Helvetica,sans-Serif" text-decoration="underline" font-size="14.00">run_id</text>
+<text text-anchor="start" x="806.95" y="-1879" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="810.84" y="-1879" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
+<text text-anchor="start" x="884.74" y="-1879" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="763.04,-1842 763.04,-1868.8 1061.73,-1868.8 1061.73,-1842 763.04,-1842"/>
+<text text-anchor="start" x="768.04" y="-1852.2" font-family="Helvetica,sans-Serif" text-decoration="underline" font-size="14.00">sequence_id</text>
+<text text-anchor="start" x="847.44" y="-1852.2" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="851.33" y="-1852.2" font-family="Helvetica,sans-Serif" font-size="14.00"> [BIGINT]</text>
+<text text-anchor="start" x="909.66" y="-1852.2" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="763.04,-1815.2 763.04,-1842 1061.73,-1842 1061.73,-1815.2 763.04,-1815.2"/>
+<text text-anchor="start" x="768.04" y="-1825.4" font-family="Helvetica,sans-Serif" font-size="14.00">base_fee_msat</text>
+<text text-anchor="start" x="863.77" y="-1825.4" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="867.66" y="-1825.4" font-family="Helvetica,sans-Serif" font-size="14.00"> [BIGINT]</text>
+<text text-anchor="start" x="925.99" y="-1825.4" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="763.04,-1788.4 763.04,-1815.2 1061.73,-1815.2 1061.73,-1788.4 763.04,-1788.4"/>
+<text text-anchor="start" x="768.04" y="-1798.6" font-family="Helvetica,sans-Serif" font-size="14.00">disabled</text>
+<text text-anchor="start" x="820.19" y="-1798.6" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="824.08" y="-1798.6" font-family="Helvetica,sans-Serif" font-size="14.00"> [BOOLEAN]</text>
+<text text-anchor="start" x="903.44" y="-1798.6" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="763.04,-1761.6 763.04,-1788.4 1061.73,-1788.4 1061.73,-1761.6 763.04,-1761.6"/>
+<text text-anchor="start" x="768.04" y="-1771.8" font-family="Helvetica,sans-Serif" font-size="14.00">fee_rate_ppm</text>
+<text text-anchor="start" x="854.43" y="-1771.8" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="858.32" y="-1771.8" font-family="Helvetica,sans-Serif" font-size="14.00"> [BIGINT]</text>
+<text text-anchor="start" x="916.66" y="-1771.8" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="763.04,-1734.8 763.04,-1761.6 1061.73,-1761.6 1061.73,-1734.8 763.04,-1734.8"/>
+<text text-anchor="start" x="768.04" y="-1745" font-family="Helvetica,sans-Serif" font-size="14.00">inbound_base_fee_msat</text>
+<text text-anchor="start" x="921.38" y="-1745" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="925.27" y="-1745" font-family="Helvetica,sans-Serif" font-size="14.00"> [BIGINT]</text>
+<text text-anchor="start" x="983.61" y="-1745" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="763.04,-1708 763.04,-1734.8 1061.73,-1734.8 1061.73,-1708 763.04,-1708"/>
+<text text-anchor="start" x="768.04" y="-1718.2" font-family="Helvetica,sans-Serif" font-size="14.00">inbound_fee_rate_ppm</text>
+<text text-anchor="start" x="912.04" y="-1718.2" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="915.93" y="-1718.2" font-family="Helvetica,sans-Serif" font-size="14.00"> [BIGINT]</text>
+<text text-anchor="start" x="974.27" y="-1718.2" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="763.04,-1681.2 763.04,-1708 1061.73,-1708 1061.73,-1681.2 763.04,-1681.2"/>
+<text text-anchor="start" x="768.04" y="-1691.4" font-family="Helvetica,sans-Serif" font-size="14.00">last_update</text>
+<text text-anchor="start" x="840.43" y="-1691.4" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="844.32" y="-1691.4" font-family="Helvetica,sans-Serif" font-size="14.00"> [BIGINT]</text>
+<text text-anchor="start" x="902.66" y="-1691.4" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="763.04,-1654.4 763.04,-1681.2 1061.73,-1681.2 1061.73,-1654.4 763.04,-1654.4"/>
+<text text-anchor="start" x="768.04" y="-1664.6" font-family="Helvetica,sans-Serif" font-size="14.00">max_htlc_msat</text>
+<text text-anchor="start" x="862.18" y="-1664.6" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="866.07" y="-1664.6" font-family="Helvetica,sans-Serif" font-size="14.00"> [BIGINT]</text>
+<text text-anchor="start" x="924.41" y="-1664.6" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="763.04,-1627.6 763.04,-1654.4 1061.73,-1654.4 1061.73,-1627.6 763.04,-1627.6"/>
+<text text-anchor="start" x="768.04" y="-1637.8" font-family="Helvetica,sans-Serif" font-size="14.00">min_htlc_msat</text>
+<text text-anchor="start" x="858.29" y="-1637.8" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="862.18" y="-1637.8" font-family="Helvetica,sans-Serif" font-size="14.00"> [BIGINT]</text>
+<text text-anchor="start" x="920.52" y="-1637.8" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="763.04,-1600.8 763.04,-1627.6 1061.73,-1627.6 1061.73,-1600.8 763.04,-1600.8"/>
+<text text-anchor="start" x="768.04" y="-1611" font-family="Helvetica,sans-Serif" font-size="14.00">time_lock_delta</text>
+<text text-anchor="start" x="865.31" y="-1611" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="869.2" y="-1611" font-family="Helvetica,sans-Serif" font-size="14.00"> [SMALLINT]</text>
+<text text-anchor="start" x="949.33" y="-1611" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
 </g>
 <!-- ln_run&#45;&#45;ln_channel_policy -->
 <g id="edge11" class="edge">
 <title>ln_run&#45;&#45;ln_channel_policy</title>
-<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M646.94,-1797.3C681.31,-1795.52 719.2,-1793.56 755.29,-1791.69"/>
-<text text-anchor="start" x="731.18" y="-1779.09" font-family="Times,serif" font-size="14.00">0..N</text>
-<text text-anchor="start" x="646.94" y="-1784.7" font-family="Times,serif" font-size="14.00">1</text>
+<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M646.94,-1799.19C681.31,-1797.94 719.2,-1796.57 755.29,-1795.26"/>
+<text text-anchor="start" x="731.18" y="-1782.66" font-family="Times,serif" font-size="14.00">0..N</text>
+<text text-anchor="start" x="646.94" y="-1786.59" font-family="Times,serif" font-size="14.00">1</text>
 </g>
 <!-- pid_spread_controller -->
 <g id="node13" class="node">
 <title>pid_spread_controller</title>
-<polygon fill="none" stroke="black" points="771.23,-2403.6 771.23,-2432.8 1053.54,-2432.8 1053.54,-2403.6 771.23,-2403.6"/>
-<text text-anchor="start" x="828.36" y="-2414.4" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="16.00">pid_spread_controller</text>
-<polygon fill="none" stroke="black" points="771.23,-2376.8 771.23,-2403.6 1053.54,-2403.6 1053.54,-2376.8 771.23,-2376.8"/>
-<text text-anchor="start" x="776.23" y="-2387" font-family="Helvetica,sans-Serif" text-decoration="underline" font-size="14.00">peer_id</text>
-<text text-anchor="start" x="822.94" y="-2387" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="826.83" y="-2387" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
-<text text-anchor="start" x="900.72" y="-2387" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
-<polygon fill="none" stroke="black" points="771.23,-2350 771.23,-2376.8 1053.54,-2376.8 1053.54,-2350 771.23,-2350"/>
-<text text-anchor="start" x="776.23" y="-2360.2" font-family="Helvetica,sans-Serif" text-decoration="underline" font-size="14.00">run_id</text>
-<text text-anchor="start" x="815.15" y="-2360.2" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="819.04" y="-2360.2" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
-<text text-anchor="start" x="892.94" y="-2360.2" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
-<polygon fill="none" stroke="black" points="771.23,-2323.2 771.23,-2350 1053.54,-2350 1053.54,-2323.2 771.23,-2323.2"/>
-<text text-anchor="start" x="776.23" y="-2333.4" font-family="Helvetica,sans-Serif" font-size="14.00">ewma_controller_id</text>
-<text text-anchor="start" x="897.63" y="-2333.4" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="901.52" y="-2333.4" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
-<text text-anchor="start" x="975.41" y="-2333.4" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
-<polygon fill="none" stroke="black" points="771.23,-2296.4 771.23,-2323.2 1053.54,-2323.2 1053.54,-2296.4 771.23,-2296.4"/>
-<text text-anchor="start" x="776.23" y="-2306.6" font-family="Helvetica,sans-Serif" font-size="14.00">target</text>
-<text text-anchor="start" x="812.03" y="-2306.6" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="815.92" y="-2306.6" font-family="Helvetica,sans-Serif" font-size="14.00"> [FLOAT]</text>
-<text text-anchor="start" x="872.71" y="-2306.6" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="771.23,-2409.6 771.23,-2438.8 1053.54,-2438.8 1053.54,-2409.6 771.23,-2409.6"/>
+<text text-anchor="start" x="828.36" y="-2420.4" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="16.00">pid_spread_controller</text>
+<polygon fill="none" stroke="black" points="771.23,-2382.8 771.23,-2409.6 1053.54,-2409.6 1053.54,-2382.8 771.23,-2382.8"/>
+<text text-anchor="start" x="776.23" y="-2393" font-family="Helvetica,sans-Serif" text-decoration="underline" font-size="14.00">peer_id</text>
+<text text-anchor="start" x="822.94" y="-2393" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="826.83" y="-2393" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
+<text text-anchor="start" x="900.72" y="-2393" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="771.23,-2356 771.23,-2382.8 1053.54,-2382.8 1053.54,-2356 771.23,-2356"/>
+<text text-anchor="start" x="776.23" y="-2366.2" font-family="Helvetica,sans-Serif" text-decoration="underline" font-size="14.00">run_id</text>
+<text text-anchor="start" x="815.15" y="-2366.2" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="819.04" y="-2366.2" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
+<text text-anchor="start" x="892.94" y="-2366.2" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="771.23,-2329.2 771.23,-2356 1053.54,-2356 1053.54,-2329.2 771.23,-2329.2"/>
+<text text-anchor="start" x="776.23" y="-2339.4" font-family="Helvetica,sans-Serif" font-size="14.00">ewma_controller_id</text>
+<text text-anchor="start" x="897.63" y="-2339.4" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="901.52" y="-2339.4" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
+<text text-anchor="start" x="975.41" y="-2339.4" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="771.23,-2302.4 771.23,-2329.2 1053.54,-2329.2 1053.54,-2302.4 771.23,-2302.4"/>
+<text text-anchor="start" x="776.23" y="-2312.6" font-family="Helvetica,sans-Serif" font-size="14.00">target</text>
+<text text-anchor="start" x="812.03" y="-2312.6" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="815.92" y="-2312.6" font-family="Helvetica,sans-Serif" font-size="14.00"> [FLOAT]</text>
+<text text-anchor="start" x="872.71" y="-2312.6" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
 </g>
 <!-- pid_run&#45;&#45;pid_spread_controller -->
 <g id="edge17" class="edge">
 <title>pid_run&#45;&#45;pid_spread_controller</title>
-<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M646.86,-2210.34C671.07,-2218.94 695.53,-2229.86 716.7,-2243.6 736.77,-2256.62 733.73,-2269.03 752.7,-2283.6 756.63,-2286.61 760.68,-2289.57 764.83,-2292.46"/>
-<text text-anchor="start" x="740.72" y="-2279.86" font-family="Times,serif" font-size="14.00">0..N</text>
-<text text-anchor="start" x="646.86" y="-2197.74" font-family="Times,serif" font-size="14.00">1</text>
+<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M646.86,-2208.96C671.26,-2217.68 695.8,-2228.99 716.7,-2243.6 737.98,-2258.47 732.67,-2273.09 752.7,-2289.6 756.4,-2292.65 760.23,-2295.63 764.17,-2298.53"/>
+<text text-anchor="start" x="740.06" y="-2285.93" font-family="Times,serif" font-size="14.00">0..N</text>
+<text text-anchor="start" x="646.86" y="-2208.96" font-family="Times,serif" font-size="14.00">1</text>
 </g>
 <!-- pid_result -->
 <g id="node14" class="node">
 <title>pid_result</title>
-<polygon fill="none" stroke="black" points="776.68,-2241 776.68,-2270.2 1048.09,-2270.2 1048.09,-2241 776.68,-2241"/>
-<text text-anchor="start" x="874.15" y="-2251.8" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="16.00">pid_result</text>
-<polygon fill="none" stroke="black" points="776.68,-2214.2 776.68,-2241 1048.09,-2241 1048.09,-2214.2 776.68,-2214.2"/>
-<text text-anchor="start" x="781.68" y="-2224.4" font-family="Helvetica,sans-Serif" text-decoration="underline" font-size="14.00">channel_static_id</text>
-<text text-anchor="start" x="889.87" y="-2224.4" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="893.76" y="-2224.4" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
-<text text-anchor="start" x="967.65" y="-2224.4" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
-<polygon fill="none" stroke="black" points="776.68,-2187.4 776.68,-2214.2 1048.09,-2214.2 1048.09,-2187.4 776.68,-2187.4"/>
-<text text-anchor="start" x="781.68" y="-2197.6" font-family="Helvetica,sans-Serif" text-decoration="underline" font-size="14.00">run_id</text>
-<text text-anchor="start" x="820.6" y="-2197.6" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="824.49" y="-2197.6" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
-<text text-anchor="start" x="898.38" y="-2197.6" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
-<polygon fill="none" stroke="black" points="776.68,-2160.6 776.68,-2187.4 1048.09,-2187.4 1048.09,-2160.6 776.68,-2160.6"/>
-<text text-anchor="start" x="781.68" y="-2170.8" font-family="Helvetica,sans-Serif" font-size="14.00">margin_base</text>
-<text text-anchor="start" x="862.62" y="-2170.8" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="866.51" y="-2170.8" font-family="Helvetica,sans-Serif" font-size="14.00"> [FLOAT]</text>
-<text text-anchor="start" x="923.29" y="-2170.8" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
-<polygon fill="none" stroke="black" points="776.68,-2133.8 776.68,-2160.6 1048.09,-2160.6 1048.09,-2133.8 776.68,-2133.8"/>
-<text text-anchor="start" x="781.68" y="-2144" font-family="Helvetica,sans-Serif" font-size="14.00">margin_idiosyncratic</text>
-<text text-anchor="start" x="909.29" y="-2144" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="913.18" y="-2144" font-family="Helvetica,sans-Serif" font-size="14.00"> [FLOAT]</text>
-<text text-anchor="start" x="969.96" y="-2144" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
-<polygon fill="none" stroke="black" points="776.68,-2107 776.68,-2133.8 1048.09,-2133.8 1048.09,-2107 776.68,-2107"/>
-<text text-anchor="start" x="781.68" y="-2117.2" font-family="Helvetica,sans-Serif" font-size="14.00">spread</text>
-<text text-anchor="start" x="824.49" y="-2117.2" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="828.38" y="-2117.2" font-family="Helvetica,sans-Serif" font-size="14.00"> [FLOAT]</text>
-<text text-anchor="start" x="885.16" y="-2117.2" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="776.68,-2247 776.68,-2276.2 1048.09,-2276.2 1048.09,-2247 776.68,-2247"/>
+<text text-anchor="start" x="874.15" y="-2257.8" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="16.00">pid_result</text>
+<polygon fill="none" stroke="black" points="776.68,-2220.2 776.68,-2247 1048.09,-2247 1048.09,-2220.2 776.68,-2220.2"/>
+<text text-anchor="start" x="781.68" y="-2230.4" font-family="Helvetica,sans-Serif" text-decoration="underline" font-size="14.00">channel_static_id</text>
+<text text-anchor="start" x="889.87" y="-2230.4" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="893.76" y="-2230.4" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
+<text text-anchor="start" x="967.65" y="-2230.4" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="776.68,-2193.4 776.68,-2220.2 1048.09,-2220.2 1048.09,-2193.4 776.68,-2193.4"/>
+<text text-anchor="start" x="781.68" y="-2203.6" font-family="Helvetica,sans-Serif" text-decoration="underline" font-size="14.00">run_id</text>
+<text text-anchor="start" x="820.6" y="-2203.6" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="824.49" y="-2203.6" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
+<text text-anchor="start" x="898.38" y="-2203.6" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="776.68,-2166.6 776.68,-2193.4 1048.09,-2193.4 1048.09,-2166.6 776.68,-2166.6"/>
+<text text-anchor="start" x="781.68" y="-2176.8" font-family="Helvetica,sans-Serif" font-size="14.00">margin_base</text>
+<text text-anchor="start" x="862.62" y="-2176.8" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="866.51" y="-2176.8" font-family="Helvetica,sans-Serif" font-size="14.00"> [FLOAT]</text>
+<text text-anchor="start" x="923.29" y="-2176.8" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="776.68,-2139.8 776.68,-2166.6 1048.09,-2166.6 1048.09,-2139.8 776.68,-2139.8"/>
+<text text-anchor="start" x="781.68" y="-2150" font-family="Helvetica,sans-Serif" font-size="14.00">margin_idiosyncratic</text>
+<text text-anchor="start" x="909.29" y="-2150" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="913.18" y="-2150" font-family="Helvetica,sans-Serif" font-size="14.00"> [FLOAT]</text>
+<text text-anchor="start" x="969.96" y="-2150" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="776.68,-2113 776.68,-2139.8 1048.09,-2139.8 1048.09,-2113 776.68,-2113"/>
+<text text-anchor="start" x="781.68" y="-2123.2" font-family="Helvetica,sans-Serif" font-size="14.00">spread</text>
+<text text-anchor="start" x="824.49" y="-2123.2" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="828.38" y="-2123.2" font-family="Helvetica,sans-Serif" font-size="14.00"> [FLOAT]</text>
+<text text-anchor="start" x="885.16" y="-2123.2" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
 </g>
 <!-- pid_run&#45;&#45;pid_result -->
 <g id="edge19" class="edge">
 <title>pid_run&#45;&#45;pid_result</title>
-<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M646.94,-2183.81C685.62,-2184.51 728.75,-2185.29 768.78,-2186.01"/>
-<text text-anchor="start" x="744.66" y="-2173.41" font-family="Times,serif" font-size="14.00">0..N</text>
-<text text-anchor="start" x="646.94" y="-2171.21" font-family="Times,serif" font-size="14.00">1</text>
+<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M646.94,-2185.7C685.62,-2187 728.75,-2188.45 768.78,-2189.8"/>
+<text text-anchor="start" x="744.66" y="-2177.2" font-family="Times,serif" font-size="14.00">0..N</text>
+<text text-anchor="start" x="646.94" y="-2173.1" font-family="Times,serif" font-size="14.00">1</text>
 </g>
 <!-- pid_margin_controller -->
 <g id="node15" class="node">
 <title>pid_margin_controller</title>
-<polygon fill="none" stroke="black" points="781.74,-2051.8 781.74,-2081 1043.03,-2081 1043.03,-2051.8 781.74,-2051.8"/>
-<text text-anchor="start" x="827.92" y="-2062.6" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="16.00">pid_margin_controller</text>
-<polygon fill="none" stroke="black" points="781.74,-2025 781.74,-2051.8 1043.03,-2051.8 1043.03,-2025 781.74,-2025"/>
-<text text-anchor="start" x="786.74" y="-2035.2" font-family="Helvetica,sans-Serif" text-decoration="underline" font-size="14.00">mr_controller_id</text>
-<text text-anchor="start" x="887.12" y="-2035.2" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="891" y="-2035.2" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
-<text text-anchor="start" x="964.9" y="-2035.2" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
-<polygon fill="none" stroke="black" points="781.74,-1998.2 781.74,-2025 1043.03,-2025 1043.03,-1998.2 781.74,-1998.2"/>
-<text text-anchor="start" x="786.74" y="-2008.4" font-family="Helvetica,sans-Serif" text-decoration="underline" font-size="14.00">run_id</text>
-<text text-anchor="start" x="825.66" y="-2008.4" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="829.55" y="-2008.4" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
-<text text-anchor="start" x="903.45" y="-2008.4" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="781.74,-2057.8 781.74,-2087 1043.03,-2087 1043.03,-2057.8 781.74,-2057.8"/>
+<text text-anchor="start" x="827.92" y="-2068.6" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="16.00">pid_margin_controller</text>
+<polygon fill="none" stroke="black" points="781.74,-2031 781.74,-2057.8 1043.03,-2057.8 1043.03,-2031 781.74,-2031"/>
+<text text-anchor="start" x="786.74" y="-2041.2" font-family="Helvetica,sans-Serif" text-decoration="underline" font-size="14.00">mr_controller_id</text>
+<text text-anchor="start" x="887.12" y="-2041.2" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="891" y="-2041.2" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
+<text text-anchor="start" x="964.9" y="-2041.2" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="781.74,-2004.2 781.74,-2031 1043.03,-2031 1043.03,-2004.2 781.74,-2004.2"/>
+<text text-anchor="start" x="786.74" y="-2014.4" font-family="Helvetica,sans-Serif" text-decoration="underline" font-size="14.00">run_id</text>
+<text text-anchor="start" x="825.66" y="-2014.4" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="829.55" y="-2014.4" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
+<text text-anchor="start" x="903.45" y="-2014.4" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
 </g>
 <!-- pid_run&#45;&#45;pid_margin_controller -->
 <g id="edge18" class="edge">
 <title>pid_run&#45;&#45;pid_margin_controller</title>
-<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M646.69,-2140.44C657.9,-2136.24 669.05,-2131.93 679.7,-2127.6 712.86,-2114.12 719.49,-2106.94 752.7,-2093.6 759.99,-2090.67 767.51,-2087.76 775.13,-2084.89"/>
-<text text-anchor="start" x="751.02" y="-2089.09" font-family="Times,serif" font-size="14.00">0..N</text>
-<text text-anchor="start" x="646.69" y="-2127.84" font-family="Times,serif" font-size="14.00">1</text>
+<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M646.8,-2139.49C657.94,-2135.52 669.04,-2131.51 679.7,-2127.6 712.33,-2115.64 720.03,-2111.42 752.7,-2099.6 760.64,-2096.73 768.81,-2093.82 777.07,-2090.91"/>
+<text text-anchor="start" x="752.96" y="-2095.11" font-family="Times,serif" font-size="14.00">0..N</text>
+<text text-anchor="start" x="646.8" y="-2126.89" font-family="Times,serif" font-size="14.00">1</text>
 </g>
 <!-- ln_node -->
 <g id="node4" class="node">
@@ -316,9 +316,9 @@
 <!-- ln_node&#45;&#45;pid_run -->
 <g id="edge5" class="edge">
 <title>ln_node&#45;&#45;pid_run</title>
-<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M181.27,-1578.73C214.71,-1627.5 266.15,-1708.61 295.94,-1785.6 352.02,-1930.55 266.18,-2010.99 368.94,-2127.6 378.14,-2138.04 389.47,-2146.46 401.78,-2153.25"/>
-<text text-anchor="start" x="377.67" y="-2157.45" font-family="Times,serif" font-size="14.00">0..N</text>
-<text text-anchor="start" x="174.27" y="-1582.93" font-family="Times,serif" font-size="14.00">1</text>
+<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M167.24,-1578.87C195.68,-1649.71 251.82,-1791.22 295.94,-1912.6 330.41,-2007.44 297.91,-2055.92 368.94,-2127.6 378.43,-2137.18 389.72,-2145.07 401.8,-2151.55"/>
+<text text-anchor="start" x="377.69" y="-2155.75" font-family="Times,serif" font-size="14.00">0..N</text>
+<text text-anchor="start" x="160.24" y="-1583.07" font-family="Times,serif" font-size="14.00">1</text>
 </g>
 <!-- ln_channel_static -->
 <g id="node5" class="node">
@@ -376,114 +376,119 @@
 <!-- ln_transaction -->
 <g id="node6" class="node">
 <title>ln_transaction</title>
-<polygon fill="none" stroke="black" points="376.94,-870.2 376.94,-899.4 671.7,-899.4 671.7,-870.2 376.94,-870.2"/>
-<text text-anchor="start" x="469.64" y="-881" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="16.00">ln_transaction</text>
-<polygon fill="none" stroke="black" points="376.94,-843.4 376.94,-870.2 671.7,-870.2 671.7,-843.4 376.94,-843.4"/>
-<text text-anchor="start" x="381.94" y="-853.6" font-family="Helvetica,sans-Serif" text-decoration="underline" font-size="14.00">id</text>
-<text text-anchor="start" x="392.83" y="-853.6" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="396.72" y="-853.6" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
-<text text-anchor="start" x="470.62" y="-853.6" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
-<polygon fill="none" stroke="black" points="376.94,-816.6 376.94,-843.4 671.7,-843.4 671.7,-816.6 376.94,-816.6"/>
-<text text-anchor="start" x="381.94" y="-826.8" font-family="Helvetica,sans-Serif" font-size="14.00">ln_node_id</text>
-<text text-anchor="start" x="450.45" y="-826.8" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="454.34" y="-826.8" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
-<polygon fill="none" stroke="black" points="376.94,-789.8 376.94,-816.6 671.7,-816.6 671.7,-789.8 376.94,-789.8"/>
-<text text-anchor="start" x="381.94" y="-800" font-family="Helvetica,sans-Serif" font-size="14.00">transaction_type</text>
-<text text-anchor="start" x="484.67" y="-800" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="488.56" y="-800" font-family="Helvetica,sans-Serif" font-size="14.00"> [VARCHAR(10)]</text>
-<text text-anchor="start" x="593.58" y="-800" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="376.94,-869.6 376.94,-898.8 671.7,-898.8 671.7,-869.6 376.94,-869.6"/>
+<text text-anchor="start" x="469.64" y="-880.4" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="16.00">ln_transaction</text>
+<polygon fill="none" stroke="black" points="376.94,-842.8 376.94,-869.6 671.7,-869.6 671.7,-842.8 376.94,-842.8"/>
+<text text-anchor="start" x="381.94" y="-853" font-family="Helvetica,sans-Serif" text-decoration="underline" font-size="14.00">id</text>
+<text text-anchor="start" x="392.83" y="-853" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="396.72" y="-853" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
+<text text-anchor="start" x="470.62" y="-853" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="376.94,-816 376.94,-842.8 671.7,-842.8 671.7,-816 376.94,-816"/>
+<text text-anchor="start" x="381.94" y="-826.2" font-family="Helvetica,sans-Serif" font-size="14.00">creation_time</text>
+<text text-anchor="start" x="465.98" y="-826.2" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="469.87" y="-826.2" font-family="Helvetica,sans-Serif" font-size="14.00"> [DATETIME]</text>
+<text text-anchor="start" x="552.32" y="-826.2" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="376.94,-789.2 376.94,-816 671.7,-816 671.7,-789.2 376.94,-789.2"/>
+<text text-anchor="start" x="381.94" y="-799.4" font-family="Helvetica,sans-Serif" font-size="14.00">ln_node_id</text>
+<text text-anchor="start" x="450.45" y="-799.4" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="454.34" y="-799.4" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
+<polygon fill="none" stroke="black" points="376.94,-762.4 376.94,-789.2 671.7,-789.2 671.7,-762.4 376.94,-762.4"/>
+<text text-anchor="start" x="381.94" y="-772.6" font-family="Helvetica,sans-Serif" font-size="14.00">transaction_type</text>
+<text text-anchor="start" x="484.67" y="-772.6" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="488.56" y="-772.6" font-family="Helvetica,sans-Serif" font-size="14.00"> [VARCHAR(10)]</text>
+<text text-anchor="start" x="593.58" y="-772.6" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
 </g>
 <!-- ln_node&#45;&#45;ln_transaction -->
 <g id="edge6" class="edge">
 <title>ln_node&#45;&#45;ln_transaction</title>
-<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M165.27,-1488.46C197.6,-1398.82 271.96,-1191.99 332.94,-1017.6 349.22,-971.03 335.56,-948.93 368.94,-912.6 371.91,-909.37 375.06,-906.28 378.37,-903.33"/>
-<text text-anchor="start" x="354.26" y="-907.53" font-family="Times,serif" font-size="14.00">0..N</text>
-<text text-anchor="start" x="165.27" y="-1475.86" font-family="Times,serif" font-size="14.00">{0,1}</text>
+<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M164.73,-1488.41C214.29,-1346.44 363.95,-918.38 368.94,-912.6 371.91,-909.15 375.06,-905.83 378.37,-902.62"/>
+<text text-anchor="start" x="354.26" y="-906.82" font-family="Times,serif" font-size="14.00">0..N</text>
+<text text-anchor="start" x="164.73" y="-1475.81" font-family="Times,serif" font-size="14.00">{0,1}</text>
 </g>
 <!-- ln_payment -->
 <g id="node7" class="node">
 <title>ln_payment</title>
-<polygon fill="none" stroke="black" points="380.43,-222 380.43,-251.2 668.21,-251.2 668.21,-222 380.43,-222"/>
-<text text-anchor="start" x="479.86" y="-232.8" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="16.00">ln_payment</text>
-<polygon fill="none" stroke="black" points="380.43,-195.2 380.43,-222 668.21,-222 668.21,-195.2 380.43,-195.2"/>
-<text text-anchor="start" x="385.43" y="-205.4" font-family="Helvetica,sans-Serif" text-decoration="underline" font-size="14.00">id</text>
-<text text-anchor="start" x="396.33" y="-205.4" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="400.22" y="-205.4" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
-<text text-anchor="start" x="474.12" y="-205.4" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
-<polygon fill="none" stroke="black" points="380.43,-168.4 380.43,-195.2 668.21,-195.2 668.21,-168.4 380.43,-168.4"/>
-<text text-anchor="start" x="385.43" y="-178.6" font-family="Helvetica,sans-Serif" font-size="14.00">creation_time</text>
-<text text-anchor="start" x="469.48" y="-178.6" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="473.36" y="-178.6" font-family="Helvetica,sans-Serif" font-size="14.00"> [DATETIME]</text>
-<text text-anchor="start" x="555.81" y="-178.6" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
-<polygon fill="none" stroke="black" points="380.43,-141.6 380.43,-168.4 668.21,-168.4 668.21,-141.6 380.43,-141.6"/>
-<text text-anchor="start" x="385.43" y="-151.8" font-family="Helvetica,sans-Serif" font-size="14.00">ln_node_id</text>
-<text text-anchor="start" x="453.94" y="-151.8" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="457.83" y="-151.8" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
-<text text-anchor="start" x="531.73" y="-151.8" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
-<polygon fill="none" stroke="black" points="380.43,-114.8 380.43,-141.6 668.21,-141.6 668.21,-114.8 380.43,-114.8"/>
-<text text-anchor="start" x="385.43" y="-125" font-family="Helvetica,sans-Serif" font-size="14.00">payment_index</text>
-<text text-anchor="start" x="480.39" y="-125" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="484.27" y="-125" font-family="Helvetica,sans-Serif" font-size="14.00"> [BIGINT]</text>
-<text text-anchor="start" x="542.61" y="-125" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
-<polygon fill="none" stroke="black" points="380.43,-88 380.43,-114.8 668.21,-114.8 668.21,-88 380.43,-88"/>
-<text text-anchor="start" x="385.43" y="-98.2" font-family="Helvetica,sans-Serif" font-size="14.00">payment_request_id</text>
-<text text-anchor="start" x="512.3" y="-98.2" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="516.19" y="-98.2" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
-<text text-anchor="start" x="590.08" y="-98.2" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="380.43,-195 380.43,-224.2 668.21,-224.2 668.21,-195 380.43,-195"/>
+<text text-anchor="start" x="479.86" y="-205.8" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="16.00">ln_payment</text>
+<polygon fill="none" stroke="black" points="380.43,-168.2 380.43,-195 668.21,-195 668.21,-168.2 380.43,-168.2"/>
+<text text-anchor="start" x="385.43" y="-178.4" font-family="Helvetica,sans-Serif" text-decoration="underline" font-size="14.00">id</text>
+<text text-anchor="start" x="396.33" y="-178.4" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="400.22" y="-178.4" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
+<text text-anchor="start" x="474.12" y="-178.4" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="380.43,-141.4 380.43,-168.2 668.21,-168.2 668.21,-141.4 380.43,-141.4"/>
+<text text-anchor="start" x="385.43" y="-151.6" font-family="Helvetica,sans-Serif" font-size="14.00">creation_time</text>
+<text text-anchor="start" x="469.48" y="-151.6" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="473.36" y="-151.6" font-family="Helvetica,sans-Serif" font-size="14.00"> [DATETIME]</text>
+<text text-anchor="start" x="555.81" y="-151.6" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="380.43,-114.6 380.43,-141.4 668.21,-141.4 668.21,-114.6 380.43,-114.6"/>
+<text text-anchor="start" x="385.43" y="-124.8" font-family="Helvetica,sans-Serif" font-size="14.00">ln_node_id</text>
+<text text-anchor="start" x="453.94" y="-124.8" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="457.83" y="-124.8" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
+<text text-anchor="start" x="531.73" y="-124.8" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="380.43,-87.8 380.43,-114.6 668.21,-114.6 668.21,-87.8 380.43,-87.8"/>
+<text text-anchor="start" x="385.43" y="-98" font-family="Helvetica,sans-Serif" font-size="14.00">payment_index</text>
+<text text-anchor="start" x="480.39" y="-98" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="484.27" y="-98" font-family="Helvetica,sans-Serif" font-size="14.00"> [BIGINT]</text>
+<text text-anchor="start" x="542.61" y="-98" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="380.43,-61 380.43,-87.8 668.21,-87.8 668.21,-61 380.43,-61"/>
+<text text-anchor="start" x="385.43" y="-71.2" font-family="Helvetica,sans-Serif" font-size="14.00">payment_request_id</text>
+<text text-anchor="start" x="512.3" y="-71.2" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="516.19" y="-71.2" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
+<text text-anchor="start" x="590.08" y="-71.2" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
 </g>
 <!-- ln_node&#45;&#45;ln_payment -->
 <g id="edge7" class="edge">
 <title>ln_node&#45;&#45;ln_payment</title>
-<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M151.86,-1488.45C165.48,-1287.1 228.57,-471.82 368.94,-264.6 371.14,-261.34 373.5,-258.18 375.99,-255.1"/>
-<text text-anchor="start" x="351.88" y="-259.3" font-family="Times,serif" font-size="14.00">0..N</text>
-<text text-anchor="start" x="151.86" y="-1475.85" font-family="Times,serif" font-size="14.00">1</text>
+<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M151.67,-1488.53C164.64,-1284.68 225.8,-449.71 368.94,-237.6 371.14,-234.34 373.49,-231.17 375.98,-228.09"/>
+<text text-anchor="start" x="351.87" y="-232.29" font-family="Times,serif" font-size="14.00">0..N</text>
+<text text-anchor="start" x="144.67" y="-1475.93" font-family="Times,serif" font-size="14.00">1</text>
 </g>
 <!-- ln_invoice -->
 <g id="node8" class="node">
 <title>ln_invoice</title>
-<polygon fill="none" stroke="black" points="397.57,-464.8 397.57,-494 651.07,-494 651.07,-464.8 397.57,-464.8"/>
-<text text-anchor="start" x="485.19" y="-475.6" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="16.00">ln_invoice</text>
-<polygon fill="none" stroke="black" points="397.57,-438 397.57,-464.8 651.07,-464.8 651.07,-438 397.57,-438"/>
-<text text-anchor="start" x="402.57" y="-448.2" font-family="Helvetica,sans-Serif" text-decoration="underline" font-size="14.00">id</text>
-<text text-anchor="start" x="413.46" y="-448.2" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="417.35" y="-448.2" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
-<text text-anchor="start" x="491.25" y="-448.2" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
-<polygon fill="none" stroke="black" points="397.57,-411.2 397.57,-438 651.07,-438 651.07,-411.2 397.57,-411.2"/>
-<text text-anchor="start" x="402.57" y="-421.4" font-family="Helvetica,sans-Serif" font-size="14.00">add_index</text>
-<text text-anchor="start" x="467.18" y="-421.4" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="471.07" y="-421.4" font-family="Helvetica,sans-Serif" font-size="14.00"> [BIGINT]</text>
-<text text-anchor="start" x="529.41" y="-421.4" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
-<polygon fill="none" stroke="black" points="397.57,-384.4 397.57,-411.2 651.07,-411.2 651.07,-384.4 397.57,-384.4"/>
-<text text-anchor="start" x="402.57" y="-394.6" font-family="Helvetica,sans-Serif" font-size="14.00">creation_time</text>
-<text text-anchor="start" x="486.61" y="-394.6" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="490.5" y="-394.6" font-family="Helvetica,sans-Serif" font-size="14.00"> [DATETIME]</text>
-<text text-anchor="start" x="572.95" y="-394.6" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
-<polygon fill="none" stroke="black" points="397.57,-357.6 397.57,-384.4 651.07,-384.4 651.07,-357.6 397.57,-357.6"/>
-<text text-anchor="start" x="402.57" y="-367.8" font-family="Helvetica,sans-Serif" font-size="14.00">ln_node_id</text>
-<text text-anchor="start" x="471.08" y="-367.8" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="474.97" y="-367.8" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
-<text text-anchor="start" x="548.86" y="-367.8" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
-<polygon fill="none" stroke="black" points="397.57,-330.8 397.57,-357.6 651.07,-357.6 651.07,-330.8 397.57,-330.8"/>
-<text text-anchor="start" x="402.57" y="-341" font-family="Helvetica,sans-Serif" font-size="14.00">r_hash</text>
-<text text-anchor="start" x="445.38" y="-341" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="449.26" y="-341" font-family="Helvetica,sans-Serif" font-size="14.00"> [VARCHAR]</text>
-<text text-anchor="start" x="529.39" y="-341" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
-<polygon fill="none" stroke="black" points="397.57,-304 397.57,-330.8 651.07,-330.8 651.07,-304 397.57,-304"/>
-<text text-anchor="start" x="402.57" y="-314.2" font-family="Helvetica,sans-Serif" font-size="14.00">settle_index</text>
-<text text-anchor="start" x="477.29" y="-314.2" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="481.17" y="-314.2" font-family="Helvetica,sans-Serif" font-size="14.00"> [BIGINT]</text>
-<polygon fill="none" stroke="black" points="397.57,-277.2 397.57,-304 651.07,-304 651.07,-277.2 397.57,-277.2"/>
-<text text-anchor="start" x="402.57" y="-287.4" font-family="Helvetica,sans-Serif" font-size="14.00">value_msat</text>
-<text text-anchor="start" x="474.16" y="-287.4" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="478.05" y="-287.4" font-family="Helvetica,sans-Serif" font-size="14.00"> [BIGINT]</text>
-<text text-anchor="start" x="536.39" y="-287.4" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="397.57,-437.8 397.57,-467 651.07,-467 651.07,-437.8 397.57,-437.8"/>
+<text text-anchor="start" x="485.19" y="-448.6" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="16.00">ln_invoice</text>
+<polygon fill="none" stroke="black" points="397.57,-411 397.57,-437.8 651.07,-437.8 651.07,-411 397.57,-411"/>
+<text text-anchor="start" x="402.57" y="-421.2" font-family="Helvetica,sans-Serif" text-decoration="underline" font-size="14.00">id</text>
+<text text-anchor="start" x="413.46" y="-421.2" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="417.35" y="-421.2" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
+<text text-anchor="start" x="491.25" y="-421.2" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="397.57,-384.2 397.57,-411 651.07,-411 651.07,-384.2 397.57,-384.2"/>
+<text text-anchor="start" x="402.57" y="-394.4" font-family="Helvetica,sans-Serif" font-size="14.00">add_index</text>
+<text text-anchor="start" x="467.18" y="-394.4" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="471.07" y="-394.4" font-family="Helvetica,sans-Serif" font-size="14.00"> [BIGINT]</text>
+<text text-anchor="start" x="529.41" y="-394.4" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="397.57,-357.4 397.57,-384.2 651.07,-384.2 651.07,-357.4 397.57,-357.4"/>
+<text text-anchor="start" x="402.57" y="-367.6" font-family="Helvetica,sans-Serif" font-size="14.00">creation_time</text>
+<text text-anchor="start" x="486.61" y="-367.6" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="490.5" y="-367.6" font-family="Helvetica,sans-Serif" font-size="14.00"> [DATETIME]</text>
+<text text-anchor="start" x="572.95" y="-367.6" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="397.57,-330.6 397.57,-357.4 651.07,-357.4 651.07,-330.6 397.57,-330.6"/>
+<text text-anchor="start" x="402.57" y="-340.8" font-family="Helvetica,sans-Serif" font-size="14.00">ln_node_id</text>
+<text text-anchor="start" x="471.08" y="-340.8" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="474.97" y="-340.8" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
+<text text-anchor="start" x="548.86" y="-340.8" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="397.57,-303.8 397.57,-330.6 651.07,-330.6 651.07,-303.8 397.57,-303.8"/>
+<text text-anchor="start" x="402.57" y="-314" font-family="Helvetica,sans-Serif" font-size="14.00">r_hash</text>
+<text text-anchor="start" x="445.38" y="-314" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="449.26" y="-314" font-family="Helvetica,sans-Serif" font-size="14.00"> [VARCHAR]</text>
+<text text-anchor="start" x="529.39" y="-314" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="397.57,-277 397.57,-303.8 651.07,-303.8 651.07,-277 397.57,-277"/>
+<text text-anchor="start" x="402.57" y="-287.2" font-family="Helvetica,sans-Serif" font-size="14.00">settle_index</text>
+<text text-anchor="start" x="477.29" y="-287.2" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="481.17" y="-287.2" font-family="Helvetica,sans-Serif" font-size="14.00"> [BIGINT]</text>
+<polygon fill="none" stroke="black" points="397.57,-250.2 397.57,-277 651.07,-277 651.07,-250.2 397.57,-250.2"/>
+<text text-anchor="start" x="402.57" y="-260.4" font-family="Helvetica,sans-Serif" font-size="14.00">value_msat</text>
+<text text-anchor="start" x="474.16" y="-260.4" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="478.05" y="-260.4" font-family="Helvetica,sans-Serif" font-size="14.00"> [BIGINT]</text>
+<text text-anchor="start" x="536.39" y="-260.4" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
 </g>
 <!-- ln_node&#45;&#45;ln_invoice -->
 <g id="edge8" class="edge">
 <title>ln_node&#45;&#45;ln_invoice</title>
-<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M148.1,-1488.33C147.26,-1336.89 161.31,-838.87 368.94,-506.6 374.98,-496.93 382.09,-487.71 389.88,-479"/>
-<text text-anchor="start" x="365.77" y="-466.4" font-family="Times,serif" font-size="14.00">0..N</text>
-<text text-anchor="start" x="141.1" y="-1475.73" font-family="Times,serif" font-size="14.00">1</text>
+<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M154.25,-1488.21C175.68,-1309.36 260.25,-654.56 368.94,-479.6 374.96,-469.91 382.05,-460.68 389.82,-451.97"/>
+<text text-anchor="start" x="365.71" y="-439.37" font-family="Times,serif" font-size="14.00">0..N</text>
+<text text-anchor="start" x="154.25" y="-1475.61" font-family="Times,serif" font-size="14.00">1</text>
 </g>
 <!-- ln_htlc_event -->
 <g id="node9" class="node">
@@ -565,23 +570,23 @@
 <!-- ln_channel_static&#45;&#45;ln_channel_liquidity -->
 <g id="edge14" class="edge">
 <title>ln_channel_static&#45;&#45;ln_channel_liquidity</title>
-<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M660.32,-1884.37C667.42,-1875.77 673.98,-1866.83 679.7,-1857.6 746.61,-1749.79 679.4,-1685.17 752.7,-1581.6 754.92,-1578.47 757.25,-1575.41 759.69,-1572.41"/>
-<text text-anchor="start" x="759.69" y="-1576.61" font-family="Times,serif" font-size="14.00">0..N</text>
-<text text-anchor="start" x="660.32" y="-1871.77" font-family="Times,serif" font-size="14.00">1</text>
+<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M660.61,-1883.91C667.59,-1875.45 674.04,-1866.66 679.7,-1857.6 745.54,-1752.16 680.61,-1688.87 752.7,-1587.6 754.92,-1584.48 757.27,-1581.42 759.72,-1578.42"/>
+<text text-anchor="start" x="759.72" y="-1582.62" font-family="Times,serif" font-size="14.00">0..N</text>
+<text text-anchor="start" x="660.61" y="-1871.31" font-family="Times,serif" font-size="14.00">1</text>
 </g>
 <!-- ln_channel_static&#45;&#45;ln_channel_policy -->
 <g id="edge15" class="edge">
 <title>ln_channel_static&#45;&#45;ln_channel_policy</title>
-<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M660.62,-1919.36C691.16,-1902.82 723.82,-1885.14 755.14,-1868.19"/>
-<text text-anchor="start" x="731.03" y="-1855.59" font-family="Times,serif" font-size="14.00">0..N</text>
-<text text-anchor="start" x="660.62" y="-1906.76" font-family="Times,serif" font-size="14.00">1</text>
+<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M660.62,-1921.46C691.16,-1905.4 723.82,-1888.23 755.14,-1871.76"/>
+<text text-anchor="start" x="731.03" y="-1859.16" font-family="Times,serif" font-size="14.00">0..N</text>
+<text text-anchor="start" x="660.62" y="-1908.86" font-family="Times,serif" font-size="14.00">1</text>
 </g>
 <!-- ln_channel_static&#45;&#45;pid_result -->
 <g id="edge16" class="edge">
 <title>ln_channel_static&#45;&#45;pid_result</title>
-<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M660.62,-2061.29C695.61,-2079.05 733.39,-2098.24 768.75,-2116.19"/>
-<text text-anchor="start" x="744.64" y="-2120.39" font-family="Times,serif" font-size="14.00">0..N</text>
-<text text-anchor="start" x="660.62" y="-2048.69" font-family="Times,serif" font-size="14.00">1</text>
+<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M660.62,-2063.39C695.61,-2081.7 733.39,-2101.47 768.75,-2119.97"/>
+<text text-anchor="start" x="744.64" y="-2124.17" font-family="Times,serif" font-size="14.00">0..N</text>
+<text text-anchor="start" x="660.62" y="-2050.79" font-family="Times,serif" font-size="14.00">1</text>
 </g>
 <!-- ln_operation_transaction -->
 <g id="node18" class="node">
@@ -602,9 +607,9 @@
 <!-- ln_transaction&#45;&#45;ln_operation_transaction -->
 <g id="edge22" class="edge">
 <title>ln_transaction&#45;&#45;ln_operation_transaction</title>
-<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M666.74,-903.23C671.21,-906.23 675.55,-909.36 679.7,-912.6 721.4,-945.14 709.71,-975.78 752.7,-1006.6 761.35,-1012.8 770.76,-1018.35 780.53,-1023.31"/>
+<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M667.05,-902.6C671.41,-905.85 675.64,-909.18 679.7,-912.6 720.18,-946.65 709.71,-975.78 752.7,-1006.6 761.35,-1012.8 770.76,-1018.35 780.53,-1023.31"/>
 <text text-anchor="start" x="773.53" y="-1010.71" font-family="Times,serif" font-size="14.00">1</text>
-<text text-anchor="start" x="659.74" y="-907.43" font-family="Times,serif" font-size="14.00">1</text>
+<text text-anchor="start" x="660.05" y="-906.8" font-family="Times,serif" font-size="14.00">1</text>
 </g>
 <!-- ln_forward -->
 <g id="node19" class="node">
@@ -635,9 +640,9 @@
 <!-- ln_transaction&#45;&#45;ln_forward -->
 <g id="edge23" class="edge">
 <title>ln_transaction&#45;&#45;ln_forward</title>
-<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M673.07,-785.84C699.29,-777 726.57,-768.78 752.7,-762.6 891.8,-729.7 930.77,-746.2 1072.07,-724.6 1100.68,-720.23 1131.27,-714.91 1160.24,-709.58"/>
+<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M679.44,-780.63C703.78,-773.86 728.8,-767.56 752.7,-762.6 892.66,-733.57 930.77,-746.2 1072.07,-724.6 1100.68,-720.23 1131.27,-714.91 1160.24,-709.58"/>
 <text text-anchor="start" x="1153.24" y="-696.98" font-family="Times,serif" font-size="14.00">1</text>
-<text text-anchor="start" x="666.07" y="-773.24" font-family="Times,serif" font-size="14.00">1</text>
+<text text-anchor="start" x="679.44" y="-768.03" font-family="Times,serif" font-size="14.00">1</text>
 </g>
 <!-- ln_htlc_payment -->
 <g id="node27" class="node">
@@ -663,9 +668,9 @@
 <!-- ln_payment&#45;&#45;ln_htlc_payment -->
 <g id="edge43" class="edge">
 <title>ln_payment&#45;&#45;ln_htlc_payment</title>
-<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M676.16,-250.62C701.55,-263.65 727.75,-276.75 752.7,-288.6 764.07,-294 775.98,-299.46 787.95,-304.81"/>
-<text text-anchor="start" x="763.84" y="-292.21" font-family="Times,serif" font-size="14.00">0..N</text>
-<text text-anchor="start" x="676.16" y="-238.02" font-family="Times,serif" font-size="14.00">1</text>
+<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M665.24,-228.2C670.13,-231.35 674.97,-234.49 679.7,-237.6 712.79,-259.31 718.11,-269.37 752.7,-288.6 763.97,-294.86 775.92,-300.94 788.02,-306.72"/>
+<text text-anchor="start" x="763.91" y="-294.12" font-family="Times,serif" font-size="14.00">0..N</text>
+<text text-anchor="start" x="658.24" y="-232.4" font-family="Times,serif" font-size="14.00">1</text>
 </g>
 <!-- ln_payment_resolve_info -->
 <g id="node37" class="node">
@@ -701,9 +706,9 @@
 <!-- ln_payment&#45;&#45;ln_payment_resolve_info -->
 <g id="edge44" class="edge">
 <title>ln_payment&#45;&#45;ln_payment_resolve_info</title>
-<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M675.96,-136.82C704.95,-130.52 735.29,-123.92 764.16,-117.63"/>
-<text text-anchor="start" x="757.16" y="-105.03" font-family="Times,serif" font-size="14.00">1</text>
-<text text-anchor="start" x="675.96" y="-124.22" font-family="Times,serif" font-size="14.00">1</text>
+<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M675.96,-120.36C704.95,-116.08 735.29,-111.6 764.16,-107.34"/>
+<text text-anchor="start" x="757.16" y="-94.74" font-family="Times,serif" font-size="14.00">1</text>
+<text text-anchor="start" x="675.96" y="-107.76" font-family="Times,serif" font-size="14.00">1</text>
 </g>
 <!-- ln_htlc_invoice -->
 <g id="node28" class="node">
@@ -724,39 +729,39 @@
 <!-- ln_invoice&#45;&#45;ln_htlc_invoice -->
 <g id="edge53" class="edge">
 <title>ln_invoice&#45;&#45;ln_htlc_invoice</title>
-<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M659,-326.59C689.61,-313.64 722.14,-300.3 752.7,-288.6 765.75,-283.61 779.48,-278.59 793.18,-273.73"/>
-<text text-anchor="start" x="769.07" y="-261.13" font-family="Times,serif" font-size="14.00">0..N</text>
-<text text-anchor="start" x="659" y="-313.99" font-family="Times,serif" font-size="14.00">1</text>
+<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M658.99,-315.67C702.57,-301.67 750.61,-286.24 792.98,-272.63"/>
+<text text-anchor="start" x="768.87" y="-276.83" font-family="Times,serif" font-size="14.00">0..N</text>
+<text text-anchor="start" x="658.99" y="-303.07" font-family="Times,serif" font-size="14.00">1</text>
 </g>
 <!-- ln_channel_peer -->
 <g id="node12" class="node">
 <title>ln_channel_peer</title>
-<polygon fill="none" stroke="black" points="25.49,-2202.8 25.49,-2232 270.45,-2232 270.45,-2202.8 25.49,-2202.8"/>
-<text text-anchor="start" x="84.83" y="-2213.6" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="16.00">ln_channel_peer</text>
-<polygon fill="none" stroke="black" points="25.49,-2176 25.49,-2202.8 270.45,-2202.8 270.45,-2176 25.49,-2176"/>
-<text text-anchor="start" x="30.49" y="-2186.2" font-family="Helvetica,sans-Serif" text-decoration="underline" font-size="14.00">id</text>
-<text text-anchor="start" x="41.38" y="-2186.2" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="45.27" y="-2186.2" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
-<text text-anchor="start" x="119.17" y="-2186.2" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
-<polygon fill="none" stroke="black" points="25.49,-2149.2 25.49,-2176 270.45,-2176 270.45,-2149.2 25.49,-2149.2"/>
-<text text-anchor="start" x="30.49" y="-2159.4" font-family="Helvetica,sans-Serif" font-size="14.00">pub_key</text>
-<text text-anchor="start" x="83.42" y="-2159.4" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="87.31" y="-2159.4" font-family="Helvetica,sans-Serif" font-size="14.00"> [VARCHAR(66)]</text>
-<text text-anchor="start" x="192.33" y="-2159.4" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="25.49,-2147.8 25.49,-2177 270.45,-2177 270.45,-2147.8 25.49,-2147.8"/>
+<text text-anchor="start" x="84.83" y="-2158.6" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="16.00">ln_channel_peer</text>
+<polygon fill="none" stroke="black" points="25.49,-2121 25.49,-2147.8 270.45,-2147.8 270.45,-2121 25.49,-2121"/>
+<text text-anchor="start" x="30.49" y="-2131.2" font-family="Helvetica,sans-Serif" text-decoration="underline" font-size="14.00">id</text>
+<text text-anchor="start" x="41.38" y="-2131.2" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="45.27" y="-2131.2" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
+<text text-anchor="start" x="119.17" y="-2131.2" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="25.49,-2094.2 25.49,-2121 270.45,-2121 270.45,-2094.2 25.49,-2094.2"/>
+<text text-anchor="start" x="30.49" y="-2104.4" font-family="Helvetica,sans-Serif" font-size="14.00">pub_key</text>
+<text text-anchor="start" x="83.42" y="-2104.4" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="87.31" y="-2104.4" font-family="Helvetica,sans-Serif" font-size="14.00"> [VARCHAR(66)]</text>
+<text text-anchor="start" x="192.33" y="-2104.4" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
 </g>
 <!-- ln_channel_peer&#45;&#45;ln_channel_static -->
 <g id="edge12" class="edge">
 <title>ln_channel_peer&#45;&#45;ln_channel_static</title>
-<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M234.38,-2145.42C279.81,-2121.4 336.72,-2091.3 388,-2064.17"/>
-<text text-anchor="start" x="363.89" y="-2051.57" font-family="Times,serif" font-size="14.00">0..N</text>
-<text text-anchor="start" x="227.38" y="-2132.82" font-family="Times,serif" font-size="14.00">1</text>
+<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M267.67,-2090.26C306.01,-2075.61 348.78,-2059.27 388.21,-2044.21"/>
+<text text-anchor="start" x="364.1" y="-2031.61" font-family="Times,serif" font-size="14.00">0..N</text>
+<text text-anchor="start" x="260.67" y="-2077.66" font-family="Times,serif" font-size="14.00">1</text>
 </g>
 <!-- ln_channel_peer&#45;&#45;pid_spread_controller -->
 <g id="edge13" class="edge">
 <title>ln_channel_peer&#45;&#45;pid_spread_controller</title>
-<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M278.37,-2218.66C308.06,-2224.65 339.53,-2230.66 368.94,-2235.6 506.33,-2258.69 544.62,-2242.53 679.7,-2276.6 707.24,-2283.55 735.97,-2292.76 763.46,-2302.61"/>
-<text text-anchor="start" x="739.35" y="-2306.81" font-family="Times,serif" font-size="14.00">0..N</text>
-<text text-anchor="start" x="278.37" y="-2206.06" font-family="Times,serif" font-size="14.00">1</text>
+<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M233.18,-2180.97C273.25,-2200.7 322.46,-2222.29 368.94,-2235.6 502.87,-2273.96 545.01,-2241.01 679.7,-2276.6 707.3,-2283.89 736,-2293.64 763.42,-2304.1"/>
+<text text-anchor="start" x="739.31" y="-2308.3" font-family="Times,serif" font-size="14.00">0..N</text>
+<text text-anchor="start" x="226.18" y="-2185.17" font-family="Times,serif" font-size="14.00">1</text>
 </g>
 <!-- pid_ewma_controller -->
 <g id="node16" class="node">
@@ -857,9 +862,9 @@
 <!-- pid_ewma_controller&#45;&#45;pid_spread_controller -->
 <g id="edge20" class="edge">
 <title>pid_ewma_controller&#45;&#45;pid_spread_controller</title>
-<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M666.34,-2479.49C697.89,-2464.69 731.45,-2448.96 763.29,-2434.03"/>
-<text text-anchor="start" x="739.18" y="-2421.43" font-family="Times,serif" font-size="14.00">0..N</text>
-<text text-anchor="start" x="666.34" y="-2466.89" font-family="Times,serif" font-size="14.00">1</text>
+<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M666.34,-2481.68C697.89,-2467.37 731.45,-2452.16 763.29,-2437.73"/>
+<text text-anchor="start" x="739.18" y="-2425.13" font-family="Times,serif" font-size="14.00">0..N</text>
+<text text-anchor="start" x="666.34" y="-2469.08" font-family="Times,serif" font-size="14.00">1</text>
 </g>
 <!-- pid_mr_controller -->
 <g id="node17" class="node">
@@ -900,9 +905,9 @@
 <!-- pid_mr_controller&#45;&#45;pid_margin_controller -->
 <g id="edge21" class="edge">
 <title>pid_mr_controller&#45;&#45;pid_margin_controller</title>
-<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M653.57,-1285.7C663.63,-1295.67 672.62,-1306.64 679.7,-1318.6 831.66,-1575.19 566.14,-1752.95 752.7,-1985.6 758.8,-1993.21 766.02,-1999.74 773.96,-2005.37"/>
-<text text-anchor="start" x="749.85" y="-1992.77" font-family="Times,serif" font-size="14.00">0..N</text>
-<text text-anchor="start" x="653.57" y="-1273.1" font-family="Times,serif" font-size="14.00">1</text>
+<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M653.58,-1285.69C663.64,-1295.67 672.62,-1306.64 679.7,-1318.6 832.89,-1577.55 564.59,-1756.79 752.7,-1991.6 758.8,-1999.21 766.01,-2005.75 773.96,-2011.37"/>
+<text text-anchor="start" x="749.85" y="-1998.77" font-family="Times,serif" font-size="14.00">0..N</text>
+<text text-anchor="start" x="653.58" y="-1273.09" font-family="Times,serif" font-size="14.00">1</text>
 </g>
 <!-- ln_forward_resolve_info -->
 <g id="node42" class="node">
@@ -1022,51 +1027,51 @@
 <!-- ln_htlc -->
 <g id="node24" class="node">
 <title>ln_htlc</title>
-<polygon fill="none" stroke="black" points="388.61,-734.2 388.61,-763.4 660.03,-763.4 660.03,-734.2 388.61,-734.2"/>
-<text text-anchor="start" x="498.54" y="-745" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="16.00">ln_htlc</text>
-<polygon fill="none" stroke="black" points="388.61,-707.4 388.61,-734.2 660.03,-734.2 660.03,-707.4 388.61,-707.4"/>
-<text text-anchor="start" x="393.61" y="-717.6" font-family="Helvetica,sans-Serif" text-decoration="underline" font-size="14.00">id</text>
-<text text-anchor="start" x="404.51" y="-717.6" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="408.4" y="-717.6" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
-<text text-anchor="start" x="482.3" y="-717.6" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
-<polygon fill="none" stroke="black" points="388.61,-680.6 388.61,-707.4 660.03,-707.4 660.03,-680.6 388.61,-680.6"/>
-<text text-anchor="start" x="393.61" y="-690.8" font-family="Helvetica,sans-Serif" font-size="14.00">amt_msat</text>
-<text text-anchor="start" x="455.08" y="-690.8" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="458.96" y="-690.8" font-family="Helvetica,sans-Serif" font-size="14.00"> [BIGINT]</text>
-<polygon fill="none" stroke="black" points="388.61,-653.8 388.61,-680.6 660.03,-680.6 660.03,-653.8 388.61,-653.8"/>
-<text text-anchor="start" x="393.61" y="-664" font-family="Helvetica,sans-Serif" font-size="14.00">attempt_time</text>
-<text text-anchor="start" x="474.54" y="-664" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="478.43" y="-664" font-family="Helvetica,sans-Serif" font-size="14.00"> [DATETIME]</text>
-<polygon fill="none" stroke="black" points="388.61,-627 388.61,-653.8 660.03,-653.8 660.03,-627 388.61,-627"/>
-<text text-anchor="start" x="393.61" y="-637.2" font-family="Helvetica,sans-Serif" font-size="14.00">channel_id</text>
-<text text-anchor="start" x="461.34" y="-637.2" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="465.23" y="-637.2" font-family="Helvetica,sans-Serif" font-size="14.00"> [VARCHAR]</text>
-<text text-anchor="start" x="545.35" y="-637.2" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
-<polygon fill="none" stroke="black" points="388.61,-600.2 388.61,-627 660.03,-627 660.03,-600.2 388.61,-600.2"/>
-<text text-anchor="start" x="393.61" y="-610.4" font-family="Helvetica,sans-Serif" font-size="14.00">direction_type</text>
-<text text-anchor="start" x="480.78" y="-610.4" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="484.67" y="-610.4" font-family="Helvetica,sans-Serif" font-size="14.00"> [VARCHAR(8)]</text>
-<text text-anchor="start" x="581.9" y="-610.4" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
-<polygon fill="none" stroke="black" points="388.61,-573.4 388.61,-600.2 660.03,-600.2 660.03,-573.4 388.61,-573.4"/>
-<text text-anchor="start" x="393.61" y="-583.6" font-family="Helvetica,sans-Serif" font-size="14.00">htlc_index</text>
-<text text-anchor="start" x="456.65" y="-583.6" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="460.54" y="-583.6" font-family="Helvetica,sans-Serif" font-size="14.00"> [BIGINT]</text>
-<polygon fill="none" stroke="black" points="388.61,-546.6 388.61,-573.4 660.03,-573.4 660.03,-546.6 388.61,-546.6"/>
-<text text-anchor="start" x="393.61" y="-556.8" font-family="Helvetica,sans-Serif" font-size="14.00">htlc_type</text>
-<text text-anchor="start" x="449.65" y="-556.8" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="453.54" y="-556.8" font-family="Helvetica,sans-Serif" font-size="14.00"> [VARCHAR(7)]</text>
-<text text-anchor="start" x="550.77" y="-556.8" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
-<polygon fill="none" stroke="black" points="388.61,-519.8 388.61,-546.6 660.03,-546.6 660.03,-519.8 388.61,-519.8"/>
-<text text-anchor="start" x="393.61" y="-530" font-family="Helvetica,sans-Serif" font-size="14.00">timelock</text>
-<text text-anchor="start" x="444.96" y="-530" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="448.85" y="-530" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
+<polygon fill="none" stroke="black" points="388.61,-707.2 388.61,-736.4 660.03,-736.4 660.03,-707.2 388.61,-707.2"/>
+<text text-anchor="start" x="498.54" y="-718" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="16.00">ln_htlc</text>
+<polygon fill="none" stroke="black" points="388.61,-680.4 388.61,-707.2 660.03,-707.2 660.03,-680.4 388.61,-680.4"/>
+<text text-anchor="start" x="393.61" y="-690.6" font-family="Helvetica,sans-Serif" text-decoration="underline" font-size="14.00">id</text>
+<text text-anchor="start" x="404.51" y="-690.6" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="408.4" y="-690.6" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
+<text text-anchor="start" x="482.3" y="-690.6" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="388.61,-653.6 388.61,-680.4 660.03,-680.4 660.03,-653.6 388.61,-653.6"/>
+<text text-anchor="start" x="393.61" y="-663.8" font-family="Helvetica,sans-Serif" font-size="14.00">amt_msat</text>
+<text text-anchor="start" x="455.08" y="-663.8" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="458.96" y="-663.8" font-family="Helvetica,sans-Serif" font-size="14.00"> [BIGINT]</text>
+<polygon fill="none" stroke="black" points="388.61,-626.8 388.61,-653.6 660.03,-653.6 660.03,-626.8 388.61,-626.8"/>
+<text text-anchor="start" x="393.61" y="-637" font-family="Helvetica,sans-Serif" font-size="14.00">attempt_time</text>
+<text text-anchor="start" x="474.54" y="-637" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="478.43" y="-637" font-family="Helvetica,sans-Serif" font-size="14.00"> [DATETIME]</text>
+<polygon fill="none" stroke="black" points="388.61,-600 388.61,-626.8 660.03,-626.8 660.03,-600 388.61,-600"/>
+<text text-anchor="start" x="393.61" y="-610.2" font-family="Helvetica,sans-Serif" font-size="14.00">channel_id</text>
+<text text-anchor="start" x="461.34" y="-610.2" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="465.23" y="-610.2" font-family="Helvetica,sans-Serif" font-size="14.00"> [VARCHAR]</text>
+<text text-anchor="start" x="545.35" y="-610.2" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="388.61,-573.2 388.61,-600 660.03,-600 660.03,-573.2 388.61,-573.2"/>
+<text text-anchor="start" x="393.61" y="-583.4" font-family="Helvetica,sans-Serif" font-size="14.00">direction_type</text>
+<text text-anchor="start" x="480.78" y="-583.4" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="484.67" y="-583.4" font-family="Helvetica,sans-Serif" font-size="14.00"> [VARCHAR(8)]</text>
+<text text-anchor="start" x="581.9" y="-583.4" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="388.61,-546.4 388.61,-573.2 660.03,-573.2 660.03,-546.4 388.61,-546.4"/>
+<text text-anchor="start" x="393.61" y="-556.6" font-family="Helvetica,sans-Serif" font-size="14.00">htlc_index</text>
+<text text-anchor="start" x="456.65" y="-556.6" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="460.54" y="-556.6" font-family="Helvetica,sans-Serif" font-size="14.00"> [BIGINT]</text>
+<polygon fill="none" stroke="black" points="388.61,-519.6 388.61,-546.4 660.03,-546.4 660.03,-519.6 388.61,-519.6"/>
+<text text-anchor="start" x="393.61" y="-529.8" font-family="Helvetica,sans-Serif" font-size="14.00">htlc_type</text>
+<text text-anchor="start" x="449.65" y="-529.8" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="453.54" y="-529.8" font-family="Helvetica,sans-Serif" font-size="14.00"> [VARCHAR(7)]</text>
+<text text-anchor="start" x="550.77" y="-529.8" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="388.61,-492.8 388.61,-519.6 660.03,-519.6 660.03,-492.8 388.61,-492.8"/>
+<text text-anchor="start" x="393.61" y="-503" font-family="Helvetica,sans-Serif" font-size="14.00">timelock</text>
+<text text-anchor="start" x="444.96" y="-503" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="448.85" y="-503" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
 </g>
 <!-- ln_htlc&#45;&#45;ln_ledger_event_htlc -->
 <g id="edge28" class="edge">
 <title>ln_htlc&#45;&#45;ln_ledger_event_htlc</title>
-<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M667.97,-763.15C672.02,-767.6 675.94,-772.09 679.7,-776.6 720.2,-825.1 703.56,-858.88 752.7,-898.6 767.75,-910.77 785.69,-920.25 804,-927.64"/>
-<text text-anchor="start" x="797" y="-915.04" font-family="Times,serif" font-size="14.00">1</text>
-<text text-anchor="start" x="667.97" y="-750.55" font-family="Times,serif" font-size="14.00">1</text>
+<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M667.77,-734.92C671.92,-739.75 675.91,-744.65 679.7,-749.6 724.56,-808.13 697.34,-849.89 752.7,-898.6 767.45,-911.58 785.45,-921.46 803.97,-928.99"/>
+<text text-anchor="start" x="796.97" y="-916.39" font-family="Times,serif" font-size="14.00">1</text>
+<text text-anchor="start" x="667.77" y="-739.12" font-family="Times,serif" font-size="14.00">1</text>
 </g>
 <!-- ln_htlc_forward -->
 <g id="node25" class="node">
@@ -1082,9 +1087,9 @@
 <!-- ln_htlc&#45;&#45;ln_htlc_forward -->
 <g id="edge29" class="edge">
 <title>ln_htlc&#45;&#45;ln_htlc_forward</title>
-<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M667.98,-657.12C712.87,-662 761.67,-667.31 803.71,-671.89"/>
-<text text-anchor="start" x="796.71" y="-659.29" font-family="Times,serif" font-size="14.00">1</text>
-<text text-anchor="start" x="667.98" y="-644.52" font-family="Times,serif" font-size="14.00">1</text>
+<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M667.98,-640.1C712.87,-648.12 761.67,-656.84 803.71,-664.36"/>
+<text text-anchor="start" x="796.71" y="-651.76" font-family="Times,serif" font-size="14.00">1</text>
+<text text-anchor="start" x="667.98" y="-627.5" font-family="Times,serif" font-size="14.00">1</text>
 </g>
 <!-- ln_htlc_receive -->
 <g id="node26" class="node">
@@ -1100,23 +1105,23 @@
 <!-- ln_htlc&#45;&#45;ln_htlc_receive -->
 <g id="edge30" class="edge">
 <title>ln_htlc&#45;&#45;ln_htlc_receive</title>
-<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M668,-548.65C695.41,-533.18 724.41,-518.37 752.7,-506.6 768.86,-499.88 786.41,-494.02 803.75,-489"/>
-<text text-anchor="start" x="796.75" y="-476.4" font-family="Times,serif" font-size="14.00">1</text>
-<text text-anchor="start" x="668" y="-536.05" font-family="Times,serif" font-size="14.00">1</text>
+<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M667.9,-541.81C695.63,-529.11 724.77,-516.74 752.7,-506.6 769.02,-500.68 786.57,-495.25 803.84,-490.42"/>
+<text text-anchor="start" x="796.84" y="-477.82" font-family="Times,serif" font-size="14.00">1</text>
+<text text-anchor="start" x="667.9" y="-529.21" font-family="Times,serif" font-size="14.00">1</text>
 </g>
 <!-- ln_htlc&#45;&#45;ln_htlc_payment -->
 <g id="edge31" class="edge">
 <title>ln_htlc&#45;&#45;ln_htlc_payment</title>
-<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M667.69,-518.31C671.77,-514.39 675.78,-510.48 679.7,-506.6 714.36,-472.25 713.11,-453.11 752.7,-424.6 763.65,-416.72 775.65,-409.51 787.99,-402.97"/>
-<text text-anchor="start" x="780.99" y="-407.17" font-family="Times,serif" font-size="14.00">1</text>
-<text text-anchor="start" x="667.69" y="-505.71" font-family="Times,serif" font-size="14.00">1</text>
+<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M668.02,-489.83C702,-461.41 733.85,-436.17 752.7,-424.6 763.81,-417.78 775.73,-411.31 787.86,-405.28"/>
+<text text-anchor="start" x="780.86" y="-409.48" font-family="Times,serif" font-size="14.00">1</text>
+<text text-anchor="start" x="668.02" y="-477.23" font-family="Times,serif" font-size="14.00">1</text>
 </g>
 <!-- ln_htlc&#45;&#45;ln_htlc_invoice -->
 <g id="edge32" class="edge">
 <title>ln_htlc&#45;&#45;ln_htlc_invoice</title>
-<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M667.97,-522.77C672.12,-517.48 676.05,-512.08 679.7,-506.6 736.35,-421.57 680.63,-361.03 752.7,-288.6 764.09,-277.15 778.01,-268.13 792.81,-261.02"/>
-<text text-anchor="start" x="785.81" y="-248.42" font-family="Times,serif" font-size="14.00">1</text>
-<text text-anchor="start" x="667.97" y="-522.77" font-family="Times,serif" font-size="14.00">1</text>
+<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M668.02,-495.14C672.13,-490.04 676.04,-484.86 679.7,-479.6 731.66,-405.04 687.26,-351.66 752.7,-288.6 764.23,-277.49 778.12,-268.67 792.84,-261.65"/>
+<text text-anchor="start" x="785.84" y="-249.05" font-family="Times,serif" font-size="14.00">1</text>
+<text text-anchor="start" x="668.02" y="-499.34" font-family="Times,serif" font-size="14.00">1</text>
 </g>
 <!-- ln_htlc_resolve_info -->
 <g id="node29" class="node">
@@ -1142,9 +1147,9 @@
 <!-- ln_htlc&#45;&#45;ln_htlc_resolve_info -->
 <g id="edge33" class="edge">
 <title>ln_htlc&#45;&#45;ln_htlc_resolve_info</title>
-<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M667.98,-711.44C708.58,-731.31 752.37,-752.75 791.46,-771.89"/>
-<text text-anchor="start" x="784.46" y="-759.29" font-family="Times,serif" font-size="14.00">1</text>
-<text text-anchor="start" x="667.98" y="-698.84" font-family="Times,serif" font-size="14.00">1</text>
+<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M667.98,-694.42C713.84,-720.07 763.78,-748.01 806.42,-771.87"/>
+<text text-anchor="start" x="799.42" y="-759.27" font-family="Times,serif" font-size="14.00">1</text>
+<text text-anchor="start" x="667.98" y="-681.82" font-family="Times,serif" font-size="14.00">1</text>
 </g>
 <!-- ln_htlc_forward&#45;&#45;ln_forward -->
 <g id="edge34" class="edge">
@@ -1429,29 +1434,29 @@
 <!-- ln_payment_request -->
 <g id="node36" class="node">
 <title>ln_payment_request</title>
-<polygon fill="none" stroke="black" points="18.48,-195.2 18.48,-224.4 277.46,-224.4 277.46,-195.2 18.48,-195.2"/>
-<text text-anchor="start" x="70.16" y="-206" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="16.00">ln_payment_request</text>
-<polygon fill="none" stroke="black" points="18.48,-168.4 18.48,-195.2 277.46,-195.2 277.46,-168.4 18.48,-168.4"/>
-<text text-anchor="start" x="23.48" y="-178.6" font-family="Helvetica,sans-Serif" text-decoration="underline" font-size="14.00">id</text>
-<text text-anchor="start" x="34.38" y="-178.6" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="38.27" y="-178.6" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
-<text text-anchor="start" x="112.16" y="-178.6" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
-<polygon fill="none" stroke="black" points="18.48,-141.6 18.48,-168.4 277.46,-168.4 277.46,-141.6 18.48,-141.6"/>
-<text text-anchor="start" x="23.48" y="-151.8" font-family="Helvetica,sans-Serif" font-size="14.00">payment_hash</text>
-<text text-anchor="start" x="115.32" y="-151.8" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="119.21" y="-151.8" font-family="Helvetica,sans-Serif" font-size="14.00"> [VARCHAR]</text>
-<text text-anchor="start" x="199.33" y="-151.8" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
-<polygon fill="none" stroke="black" points="18.48,-114.8 18.48,-141.6 277.46,-141.6 277.46,-114.8 18.48,-114.8"/>
-<text text-anchor="start" x="23.48" y="-125" font-family="Helvetica,sans-Serif" font-size="14.00">payment_request</text>
-<text text-anchor="start" x="131.66" y="-125" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<text text-anchor="start" x="135.55" y="-125" font-family="Helvetica,sans-Serif" font-size="14.00"> [VARCHAR]</text>
+<polygon fill="none" stroke="black" points="18.48,-168.2 18.48,-197.4 277.46,-197.4 277.46,-168.2 18.48,-168.2"/>
+<text text-anchor="start" x="70.16" y="-179" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="16.00">ln_payment_request</text>
+<polygon fill="none" stroke="black" points="18.48,-141.4 18.48,-168.2 277.46,-168.2 277.46,-141.4 18.48,-141.4"/>
+<text text-anchor="start" x="23.48" y="-151.6" font-family="Helvetica,sans-Serif" text-decoration="underline" font-size="14.00">id</text>
+<text text-anchor="start" x="34.38" y="-151.6" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="38.27" y="-151.6" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
+<text text-anchor="start" x="112.16" y="-151.6" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="18.48,-114.6 18.48,-141.4 277.46,-141.4 277.46,-114.6 18.48,-114.6"/>
+<text text-anchor="start" x="23.48" y="-124.8" font-family="Helvetica,sans-Serif" font-size="14.00">payment_hash</text>
+<text text-anchor="start" x="115.32" y="-124.8" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="119.21" y="-124.8" font-family="Helvetica,sans-Serif" font-size="14.00"> [VARCHAR]</text>
+<text text-anchor="start" x="199.33" y="-124.8" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
+<polygon fill="none" stroke="black" points="18.48,-87.8 18.48,-114.6 277.46,-114.6 277.46,-87.8 18.48,-87.8"/>
+<text text-anchor="start" x="23.48" y="-98" font-family="Helvetica,sans-Serif" font-size="14.00">payment_request</text>
+<text text-anchor="start" x="131.66" y="-98" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<text text-anchor="start" x="135.55" y="-98" font-family="Helvetica,sans-Serif" font-size="14.00"> [VARCHAR]</text>
 </g>
 <!-- ln_payment_request&#45;&#45;ln_payment -->
 <g id="edge42" class="edge">
 <title>ln_payment_request&#45;&#45;ln_payment</title>
-<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M285.44,-169.6C313.76,-169.6 343.74,-169.6 372.54,-169.6"/>
-<text text-anchor="start" x="348.43" y="-157" font-family="Times,serif" font-size="14.00">0..N</text>
-<text text-anchor="start" x="285.44" y="-157" font-family="Times,serif" font-size="14.00">1</text>
+<path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M285.44,-142.6C313.76,-142.6 343.74,-142.6 372.54,-142.6"/>
+<text text-anchor="start" x="348.43" y="-130" font-family="Times,serif" font-size="14.00">0..N</text>
+<text text-anchor="start" x="285.44" y="-130" font-family="Times,serif" font-size="14.00">1</text>
 </g>
 <!-- ln_graph_node -->
 <g id="node38" class="node">
@@ -1474,14 +1479,14 @@
 <title>ln_graph_node&#45;&#45;ln_payment_hop</title>
 <path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M1410.27,-806.92C1442.86,-806.08 1478.67,-805.89 1512.75,-806.34"/>
 <text text-anchor="start" x="1488.63" y="-793.74" font-family="Times,serif" font-size="14.00">0..N</text>
-<text text-anchor="start" x="1410.27" y="-794.32" font-family="Times,serif" font-size="14.00">1</text>
+<text text-anchor="start" x="1410.27" y="-794.32" font-family="Times,serif" font-size="14.00">{0,1}</text>
 </g>
 <!-- ln_graph_node&#45;&#45;ln_payment_hop -->
 <g id="edge46" class="edge">
 <title>ln_graph_node&#45;&#45;ln_payment_hop</title>
 <path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M1410.27,-819.6C1442.86,-819.6 1478.67,-819.6 1512.75,-819.6"/>
 <text text-anchor="start" x="1488.63" y="-823.8" font-family="Times,serif" font-size="14.00">0..N</text>
-<text text-anchor="start" x="1410.27" y="-823.8" font-family="Times,serif" font-size="14.00">{0,1}</text>
+<text text-anchor="start" x="1410.27" y="-823.8" font-family="Times,serif" font-size="14.00">1</text>
 </g>
 <!-- ln_graph_node&#45;&#45;ln_payment_hop -->
 <g id="edge47" class="edge">
