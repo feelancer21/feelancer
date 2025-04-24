@@ -280,8 +280,7 @@ def delete_failed_htlc_attempts(
     """
 
     return delete(HtlcPayment).where(
-        HtlcPayment.id == PaymentHtlcResolveInfo.htlc_id,
-        HtlcPayment.htlc_id == Htlc.id,
+        HtlcPayment.htlc_id == PaymentHtlcResolveInfo.htlc_id,
         HtlcPayment.attempt_time < deletion_cutoff,
         PaymentHtlcResolveInfo.status == HTLCStatus.FAILED,
     )
