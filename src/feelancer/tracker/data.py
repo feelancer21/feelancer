@@ -280,6 +280,7 @@ def delete_failed_htlc_attempts(
     """
 
     return delete(HtlcPayment).where(
+        Htlc.id == HtlcPayment.htlc_id,
         HtlcPayment.htlc_id == PaymentHtlcResolveInfo.htlc_id,
         HtlcPayment.attempt_time < deletion_cutoff,
         PaymentHtlcResolveInfo.status == HTLCStatus.FAILED,
@@ -293,7 +294,8 @@ def delete_failed_payments(deletion_cutoff: datetime) -> Delete[tuple[Payment]]:
     """
 
     return delete(Payment).where(
-        Payment.id == PaymentResolveInfo.payment_id,
+        Transaction.id == Payment.tx_id,
+        Payment.tx_id == PaymentResolveInfo.payment_id,
         Payment.creation_time < deletion_cutoff,
         PaymentResolveInfo.status == PaymentStatus.FAILED,
     )

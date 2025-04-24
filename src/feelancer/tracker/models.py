@@ -289,13 +289,13 @@ class HtlcPayment(Htlc):
     htlc: Mapped[Htlc] = relationship(Htlc, uselist=False)
 
     payment_id: Mapped[BigInteger] = mapped_column(
-        ForeignKey("ln_payment.id", ondelete="CASCADE"), nullable=False, index=True
+        ForeignKey("ln_payment.tx_id", ondelete="CASCADE"), nullable=False, index=True
     )
 
     payment: Mapped[Payment] = relationship("Payment", back_populates="attempts")
 
     # The unique attempt ID of lnd that is used for this attempt.
-    attempt_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    attempt_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
 
     route: Mapped[Route] = relationship(
         "Route", uselist=False, back_populates="htlc_attempt"
@@ -530,32 +530,20 @@ class PaymentRequest(Base):
     )
 
 
-class Payment(Base):
+class Payment(Transaction):
     __tablename__ = "ln_payment"
-    __table_args__ = (UniqueConstraint("payment_index", "ln_node_id"),)
 
-    # unique identifier of the payment
-    id: Mapped[int] = mapped_column(autoincrement=True, primary_key=True)
-
-    # the id of the local lightning node. Not at payment request because a request
-    # can theoretical be tried to be paid by multiple nodes.
-    ln_node_id: Mapped[int] = mapped_column(
-        ForeignKey("ln_node.id", ondelete="CASCADE"), nullable=False
+    tx_id = mapped_column(
+        ForeignKey("ln_transaction.id", ondelete="CASCADE"), primary_key=True
     )
 
-    # the local lightning node
-    ln_node: Mapped[DBLnNode] = relationship(DBLnNode)
+    transaction: Mapped[Transaction] = relationship(Transaction, uselist=False)
 
     payment_request_id: Mapped[int] = mapped_column(
         ForeignKey("ln_payment_request.id", ondelete="CASCADE"), index=True
     )
     payment_request: Mapped[PaymentRequest] = relationship(
         PaymentRequest, uselist=False, back_populates="payments"
-    )
-
-    # The time in UNIX nanoseconds at which the payment was created
-    creation_time: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
     )
 
     attempts: Mapped[list[HtlcPayment]] = relationship(
@@ -571,12 +559,14 @@ class Payment(Base):
     # older versions of lnd.
     payment_index: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
+    __mapper_args__ = {"polymorphic_identity": TransactionType.LN_PAYMENT}
+
 
 class PaymentResolveInfo(Base):
     __tablename__ = "ln_payment_resolve_info"
 
     payment_id: Mapped[BigInteger] = mapped_column(
-        ForeignKey("ln_payment.id", ondelete="CASCADE"), primary_key=True
+        ForeignKey("ln_payment.tx_id", ondelete="CASCADE"), primary_key=True
     )
 
     payment: Mapped[Payment] = relationship(
