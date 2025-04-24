@@ -93,9 +93,9 @@ class OperationTransaction(Base):
     # Modelling the operation as attribute of the transaction has led to a
     # circular dependency. So we need a separate table for the link.
     __tablename__ = "ln_operation_transaction"
-    __table_args__ = (UniqueConstraint("operation_id", "transaction_id"),)
+    __table_args__ = (UniqueConstraint("op_id", "tx_id"),)
 
-    operation_id: Mapped[int] = mapped_column(
+    op_id: Mapped[int] = mapped_column(
         ForeignKey("ln_operation.id", ondelete="CASCADE"), nullable=False, index=True
     )
 
@@ -103,7 +103,7 @@ class OperationTransaction(Base):
         "Operation", uselist=False, back_populates="operation_transactions"
     )
 
-    transaction_id: Mapped[int] = mapped_column(
+    tx_id: Mapped[int] = mapped_column(
         ForeignKey("ln_transaction.id", ondelete="CASCADE"), primary_key=True
     )
 
@@ -118,10 +118,10 @@ class OperationLedgerEvent(Base):
     """
 
     __tablename__ = "ln_operation_ledger_event"
-    __table_args__ = (UniqueConstraint("operation_id", "ledger_event_id"),)
+    __table_args__ = (UniqueConstraint("op_id", "ledger_event_id"),)
 
     # The id of the associated operation
-    operation_id: Mapped[int] = mapped_column(
+    op_id: Mapped[int] = mapped_column(
         ForeignKey("ln_operation.id", ondelete="CASCADE"), nullable=False, index=True
     )
 
@@ -321,7 +321,9 @@ class HtlcInvoice(Htlc):
 
     # The invoice id
     invoice_id: Mapped[int] = mapped_column(
-        ForeignKey("ln_invoice.id", ondelete="CASCADE"), nullable=False, index=True
+        ForeignKey("ln_invoice.tx_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
 
     invoice: Mapped[Invoice] = relationship("Invoice", back_populates="invoice_htlcs")
@@ -751,27 +753,17 @@ class Hop(Base):
     )
 
 
-class Invoice(Base):
+class Invoice(Transaction):
     __tablename__ = "ln_invoice"
-    __table_args__ = (UniqueConstraint("add_index", "ln_node_id"),)
-    __table_args__ = (UniqueConstraint("settle_index", "ln_node_id"),)
 
-    # unique identifier of the invoice
-    id: Mapped[int] = mapped_column(autoincrement=True, primary_key=True)
-
-    ln_node_id: Mapped[int] = mapped_column(
-        ForeignKey("ln_node.id", ondelete="CASCADE"), nullable=False
+    tx_id: Mapped[int] = mapped_column(
+        ForeignKey("ln_transaction.id", ondelete="CASCADE"), primary_key=True
     )
 
-    # the local lightning node
-    ln_node: Mapped[DBLnNode] = relationship(DBLnNode)
+    transaction: Mapped[Transaction] = relationship(Transaction, uselist=False)
 
     # The payment hash
     r_hash: Mapped[str] = mapped_column(String, nullable=False, index=True, unique=True)
-
-    creation_time: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
 
     # The value of the invoice in milli-satoshis
     value_msat: Mapped[int] = mapped_column(BigInteger, nullable=False)
@@ -783,7 +775,9 @@ class Invoice(Base):
 
     add_index: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
-    settle_index: Mapped[int] = mapped_column(BigInteger, nullable=True)
+    settle_index: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+    __mapper_args__ = {"polymorphic_identity": TransactionType.LN_INVOICE}
 
 
 class InvoiceHTLCState(PyEnum):
@@ -866,7 +860,7 @@ class HtlcEvent(Base):
 class Forward(Transaction):
     __tablename__ = "ln_forward"
 
-    transaction_id: Mapped[int] = mapped_column(
+    tx_id: Mapped[int] = mapped_column(
         ForeignKey("ln_transaction.id", ondelete="CASCADE"), primary_key=True
     )
 
@@ -910,7 +904,7 @@ class ForwardResolveInfo(Base):
     __tablename__ = "ln_forward_resolve_info"
 
     forward_id: Mapped[int] = mapped_column(
-        ForeignKey("ln_forward.transaction_id", ondelete="CASCADE"), primary_key=True
+        ForeignKey("ln_forward.tx_id", ondelete="CASCADE"), primary_key=True
     )
 
     forward: Mapped[Forward] = relationship(Forward, uselist=False)
