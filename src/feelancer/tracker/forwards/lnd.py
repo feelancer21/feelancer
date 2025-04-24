@@ -120,6 +120,9 @@ class LNDFwdTracker(LndBaseTracker):
             str(fwd.chan_id_in), str(fwd.chan_id_out), fwd.amt_in_msat, fwd.amt_out_msat
         )
         resolve_time = htlc_out.resolve_info.resolve_time
+        creation_time = (
+            htlc_in.attempt_time if htlc_in.attempt_time is not None else resolve_time
+        )
 
         return Forward(
             ln_node_id=self._store.ln_node_id,
@@ -127,6 +130,7 @@ class LNDFwdTracker(LndBaseTracker):
             htlc_out=htlc_out,
             fee_msat=fwd.fee_msat,
             resolve_info=self._create_forward_resolve_info(resolve_time),
+            creation_time=creation_time,
             transaction_type=TransactionType.LN_FORWARD,
         )
 
@@ -153,6 +157,7 @@ class LNDFwdTracker(LndBaseTracker):
             htlc_out=htlc_out,
             fee_msat=fwd.fee_msat,
             resolve_info=self._create_forward_resolve_info(resolve_time),
+            creation_time=resolve_time,
             transaction_type=TransactionType.LN_FORWARD,
         )
 

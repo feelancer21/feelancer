@@ -45,6 +45,11 @@ class Transaction(Base):
     # the local lightning node
     ln_node: Mapped[DBLnNode] = relationship(DBLnNode)
 
+    # When was the transaction created or first seen.
+    creation_time: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+
     # The type of the transaction
     transaction_type: Mapped[TransactionType] = mapped_column(
         Enum(TransactionType), nullable=False
