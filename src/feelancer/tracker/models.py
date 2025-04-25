@@ -328,10 +328,6 @@ class HtlcInvoice(Htlc):
 
     invoice: Mapped[Invoice] = relationship("Invoice", back_populates="invoice_htlcs")
 
-    resolve_info_invoice: Mapped[InvoiceHTLCResolveInfo] = relationship(
-        "InvoiceHTLCResolveInfo", uselist=False, back_populates="invoice_htlc"
-    )
-
     __mapper_args__ = {
         "polymorphic_identity": HtlcType.INVOICE,
     }
@@ -770,30 +766,30 @@ class Invoice(Transaction):
     __mapper_args__ = {"polymorphic_identity": TransactionType.LN_INVOICE}
 
 
-class InvoiceHTLCState(PyEnum):
-    ACCEPTED = 0
-    SETTLED = 1
-    CANCELED = 2
+# class InvoiceHTLCState(PyEnum):
+#     ACCEPTED = 0
+#     SETTLED = 1
+#     CANCELED = 2
 
 
-class InvoiceHTLCResolveInfo(Base):
-    __tablename__ = "ln_htlc_invoice_resolve_info"
+# class InvoiceHTLCResolveInfo(Base):
+#     __tablename__ = "ln_htlc_invoice_resolve_info"
 
-    invoice_htlc_id: Mapped[int] = mapped_column(
-        ForeignKey("ln_htlc_invoice.htlc_id", ondelete="CASCADE"), primary_key=True
-    )
+#     invoice_htlc_id: Mapped[int] = mapped_column(
+#         ForeignKey("ln_htlc_invoice.htlc_id", ondelete="CASCADE"), primary_key=True
+#     )
 
-    invoice_htlc: Mapped[HtlcInvoice] = relationship(
-        HtlcInvoice, uselist=False, back_populates="resolve_info_invoice"
-    )
+#     invoice_htlc: Mapped[HtlcInvoice] = relationship(
+#         HtlcInvoice, uselist=False, back_populates="resolve_info_invoice"
+#     )
 
-    resolve_time: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
+#     resolve_time: Mapped[datetime.datetime] = mapped_column(
+#         DateTime(timezone=True), nullable=False
+#     )
 
-    state: Mapped[InvoiceHTLCState] = mapped_column(
-        Enum(InvoiceHTLCState), nullable=False
-    )
+#     state: Mapped[InvoiceHTLCState] = mapped_column(
+#         Enum(InvoiceHTLCState), nullable=False
+#     )
 
 
 class HtlcEventType(PyEnum):
@@ -857,20 +853,20 @@ class Forward(Transaction):
     transaction: Mapped[Transaction] = relationship(Transaction, uselist=False)
 
     # id of incoming htlc
-    htlc_id_in: Mapped[int] = mapped_column(
+    htlc_in_id: Mapped[int] = mapped_column(
         ForeignKey("ln_htlc_forward.htlc_id"), nullable=False, index=True
     )
 
     # incming htlc
-    htlc_in: Mapped[Htlc] = relationship(HtlcForward, foreign_keys=[htlc_id_in])
+    htlc_in: Mapped[Htlc] = relationship(HtlcForward, foreign_keys=[htlc_in_id])
 
     # id of outgoing htlc
-    htlc_id_out: Mapped[int] = mapped_column(
+    htlc_out_id: Mapped[int] = mapped_column(
         ForeignKey("ln_htlc_forward.htlc_id"), nullable=False, index=True
     )
 
     # incming htlc
-    htlc_out: Mapped[Htlc] = relationship(HtlcForward, foreign_keys=[htlc_id_out])
+    htlc_out: Mapped[Htlc] = relationship(HtlcForward, foreign_keys=[htlc_out_id])
 
     # The total fee (in milli-satoshis) for this payment circuit
     fee_msat: Mapped[int] = mapped_column(BigInteger, nullable=False)
