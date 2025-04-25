@@ -5,20 +5,21 @@ import pytz
 
 from feelancer.grpc.client import StreamConverter
 from feelancer.lnd.grpc_generated import lightning_pb2 as ln
-from feelancer.tracker.data import InvoiceNotFound
+from feelancer.tracker.data import InvoiceNotFound, create_operation_from_htlcs
 from feelancer.tracker.lnd import LndBaseTracker
 from feelancer.tracker.models import (
     HtlcDirectionType,
     HtlcInvoice,
+    HtlcResolveInfoSettled,
+    HtlcResolveType,
     Invoice,
-    InvoiceHTLCResolveInfo,
-    InvoiceHTLCState,
+    Operation,
 )
 from feelancer.utils import bytes_to_str, sec_to_datetime
 
 RECON_TIME_INTERVAL = 30 * 24 * 3600  # 30 days in seconds
 
-type LndInvoiceReconSource = StreamConverter[Invoice, ln.Invoice]
+type LndInvoiceReconSource = StreamConverter[Operation, ln.Invoice]
 
 
 class LNDInvoiceTracker(LndBaseTracker):
@@ -44,7 +45,7 @@ class LNDInvoiceTracker(LndBaseTracker):
         self,
         item: ln.Invoice,
         recon_running: bool,
-    ) -> Generator[Invoice]:
+    ) -> Generator[Operation]:
 
         return self._process_invoice(item, recon_running)
 
@@ -62,13 +63,13 @@ class LNDInvoiceTracker(LndBaseTracker):
             paginator, lambda item: self._process_invoice(item, True)
         )
 
-    def _get_new_stream(self) -> Callable[..., Generator[Invoice]]:
+    def _get_new_stream(self) -> Callable[..., Generator[Operation]]:
         dispatcher = self._lnd.subscribe_invoices_dispatcher
         return self._get_new_stream_from_dispatcher(dispatcher)
 
     def _process_invoice(
         self, i: ln.Invoice, recon_running: bool
-    ) -> Generator[Invoice]:
+    ) -> Generator[Operation]:
         """
         Processes a single invoice.
         """
@@ -91,10 +92,10 @@ class LNDInvoiceTracker(LndBaseTracker):
 
         invoice = self._create_invoice(i)
 
-        for h in i.htlcs:
-            self._create_htlc(h, invoice)
-
-        yield invoice
+        yield create_operation_from_htlcs(
+            txs=[invoice],
+            htlcs=invoice.invoice_htlcs,
+        )
 
     def _create_invoice(self, invoice: ln.Invoice) -> Invoice:
         """
@@ -103,6 +104,9 @@ class LNDInvoiceTracker(LndBaseTracker):
 
         return Invoice(
             ln_node_id=self._store.ln_node_id,
+            invoice_htlcs=[
+                self._create_htlc(h, invoice.r_preimage) for h in invoice.htlcs
+            ],
             r_hash=bytes_to_str(invoice.r_hash),
             creation_time=sec_to_datetime(invoice.creation_date),
             value_msat=invoice.value_msat,
@@ -110,16 +114,16 @@ class LNDInvoiceTracker(LndBaseTracker):
             settle_index=invoice.settle_index,
         )
 
-    def _create_htlc(self, htlc: ln.InvoiceHTLC, invoice: Invoice) -> HtlcInvoice:
+    def _create_htlc(self, htlc: ln.InvoiceHTLC, preimage: bytes) -> HtlcInvoice:
 
-        resolve_info = InvoiceHTLCResolveInfo(
+        resolve_info = HtlcResolveInfoSettled(
             resolve_time=sec_to_datetime(htlc.resolve_time),
-            state=InvoiceHTLCState(htlc.state),
+            resolve_type=HtlcResolveType.SETTLED,
+            preimage=bytes_to_str(preimage),
         )
 
         return HtlcInvoice(
-            invoice=invoice,
-            resolve_info_invoice=resolve_info,
+            resolve_info=resolve_info,
             amt_msat=htlc.amt_msat,
             attempt_time=sec_to_datetime(htlc.accept_time),
             timelock=htlc.expiry_height,
