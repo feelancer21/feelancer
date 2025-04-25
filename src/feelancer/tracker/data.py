@@ -16,6 +16,7 @@ from .models import (
     Hop,
     Htlc,
     HtlcPayment,
+    HtlcResolveType,
     HTLCStatus,
     Invoice,
     LedgerEventHtlc,
@@ -52,12 +53,21 @@ class GraphPathNotFound(Exception): ...
 class InvoiceNotFound(Exception): ...
 
 
-def create_operation_from_htlcs(txs: list[Transaction], htlcs: list[Htlc]) -> Operation:
+def create_operation_from_htlcs(
+    txs: list[Transaction], htlcs: Sequence[Htlc]
+) -> Operation:
 
     op_txs = [OperationTransaction(transaction=tx) for tx in txs]
     op_events: list[OperationLedgerEvent] = []
 
     for htlc in htlcs:
+        # We only create a ledger event for settled htlcs
+        if htlc.resolve_info is None:
+            continue
+
+        if htlc.resolve_info.resolve_type != HtlcResolveType.SETTLED:
+            continue
+
         levent = LedgerEventHtlc(event_type=LedgerEventType.LN_HTLC_EVENT, htlc=htlc)
         op_events.append(OperationLedgerEvent(ledger_event=levent))
 
