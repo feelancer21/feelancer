@@ -1,9 +1,12 @@
-import logging
 import os
 import signal
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Protocol, TypeVar
+
+from feelancer.log import getLogger
+
+from .event import stop_event
 
 T = TypeVar("T")
 
@@ -56,7 +59,7 @@ class BaseServer:
     def __init__(self) -> None:
 
         # Logger for the server
-        self._logger: logging.Logger = logging.getLogger(self.__module__)
+        self._logger = getLogger(self.__module__)
 
         # Callables to be called synchronously during server start
         self._sync_start: list[Callable[..., None]] = []
@@ -69,9 +72,6 @@ class BaseServer:
 
         # Callables to be started during server stop concurrently
         self._concurrent_stop: list[Callable[..., None]] = []
-
-        # Flag to indicate if the server is stopped
-        self._is_stopped: bool = False
 
     def _register_sub_server(self, subserver: Server) -> None:
 
@@ -96,7 +96,9 @@ class BaseServer:
         If an error is raised by one thread, the stop method of the server is called.
         """
 
-        if self._is_stopped:
+        # Preventing start if stop occurred before start. It's more a workaround
+        # and safe in all cases.
+        if stop_event.is_set():
             return
 
         # If an error occurs, a SIGTERM signal is sent to the signal handler
@@ -108,7 +110,7 @@ class BaseServer:
             self._logger.info("Starting...")
             _run_sync(self._sync_start)
 
-            if not self._is_stopped:
+            if not stop_event.is_set():
                 _run_concurrent(self._concurrent_start, err_signal)
             self._logger.info("Finished")
 
@@ -124,8 +126,6 @@ class BaseServer:
         """
         Stops the server.
         """
-
-        self._is_stopped = True
 
         try:
             self._logger.info("Stopping...")

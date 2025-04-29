@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import threading
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
@@ -16,9 +15,11 @@ from apscheduler.triggers.interval import IntervalTrigger
 from feelancer.base import BaseServer
 from feelancer.config import FeelancerConfig
 from feelancer.data.db import FeelancerDB
+from feelancer.event import stop_event
 from feelancer.lightning.chan_updates import update_channel_policies
 from feelancer.lightning.data import LightningCache, LightningSessionCache
 from feelancer.lightning.models import DBRun
+from feelancer.log import getLogger
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
@@ -26,7 +27,7 @@ if TYPE_CHECKING:
     from feelancer.lightning.chan_updates import PolicyProposal
     from feelancer.lightning.client import LightningClient
 
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
 
 
 @dataclass
@@ -163,10 +164,13 @@ class TaskRunner(BaseServer):
         )
 
         # If config.seconds had changed we modify the trigger of the job.
-        if config.seconds != self.seconds:
+        if config.seconds != self.seconds and not stop_event.is_set():
             self.seconds = config.seconds
             logger.info(f"Interval changed; executing tasks every {self.seconds}s now")
-            self.job.modify(trigger=IntervalTrigger(seconds=self.seconds))
+            try:
+                self.job.modify(trigger=IntervalTrigger(seconds=self.seconds))
+            except Exception as e:
+                logger.error(f"Could not modify the job: {e}")
 
     def register_task(self, task: Callable[[RunnerRequest], RunnerResult]) -> None:
         """

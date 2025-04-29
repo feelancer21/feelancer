@@ -1,23 +1,17 @@
-import logging
-import threading
 from collections.abc import Callable
 from datetime import datetime, timedelta
 from functools import wraps
 
 import pytz
 
+from .event import stop_event
+from .log import getLogger
+
 DEFAULT_EXCEPTIONS_RETRY = (Exception,)
 DEFAULT_EXCEPTIONS_RAISE = ()
 DEFAULT_MAX_RETRIES = 5
 DEFAULT_DELAY = 300  # 5 minutes
 DEFAULT_MIN_TOLERANCE_DELTA = 900  # 15 minutes
-
-
-stop_event = threading.Event()
-
-
-def stop_retry():
-    stop_event.set()
 
 
 def create_retry_handler(
@@ -34,7 +28,7 @@ def create_retry_handler(
     """
 
     def retry_handler(func):
-        logger: logging.Logger = logging.getLogger(func.__module__)
+        logger = getLogger(func.__module__)
 
         @wraps(func)
         def wrapper(*args, **kwargs):
@@ -56,7 +50,7 @@ def create_retry_handler(
                     raise e
 
                 except exceptions_retry as e:
-                    logger.error(f"An error occurred: {e}; Check {retries_left=}")
+                    logger.warning(f"An error occurred: {e}; {retries_left=}")
                     if (
                         min_tolerence_time is not None
                         and datetime.now(pytz.utc) > min_tolerence_time
@@ -66,7 +60,6 @@ def create_retry_handler(
                     if retries_left == 0:
                         raise e
 
-                    logger.debug(f"{retries_left=}")
                     retries_left -= 1
                     if delay > 0:
                         logger.debug(f"Waiting {delay}s before retrying...")

@@ -1,28 +1,30 @@
 import functools
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from datetime import datetime
 
 from sqlalchemy import Delete, Float, Select, cast, delete, desc, func, select
 
 from feelancer.data.db import FeelancerDB
-from feelancer.lightning.data import LightningStore
 
 from .models import (
     Base,
+    Forward,
+    ForwardResolveInfo,
+    ForwardResolveType,
     GraphNode,
     GraphPath,
     Hop,
     HTLCAttempt,
-    HTLCResolveInfo,
     HTLCStatus,
+    Invoice,
     Payment,
+    PaymentHtlcResolveInfo,
     PaymentRequest,
     PaymentResolveInfo,
     PaymentStatus,
     Route,
 )
 
-CHUNK_SIZE = 1000
 CACHE_SIZE_PAYMENT_REQUEST_ID = 1000
 CACHE_SIZE_GRAPH_NODE_ID = 50000
 CACHE_SIZE_GRAPH_PATH = 100000
@@ -38,6 +40,9 @@ class GraphNodeNotFound(Exception): ...
 
 
 class GraphPathNotFound(Exception): ...
+
+
+class InvoiceNotFound(Exception): ...
 
 
 def query_payment_request(payment_hash: str) -> Select[tuple[PaymentRequest]]:
@@ -68,6 +73,28 @@ def query_graph_path(sha256_sum: str) -> Select[tuple[GraphPath]]:
     return qry
 
 
+def query_invoice(r_hash: str) -> Select[tuple[Invoice]]:
+    qry = select(Invoice).where(Invoice.r_hash == r_hash)
+    return qry
+
+
+def query_max_invoice_add_index(ln_node_id: int) -> Select[tuple[int]]:
+    qry = select(func.max(Invoice.add_index)).where(Invoice.ln_node_id == ln_node_id)
+    return qry
+
+
+def query_count_settled_forwarding_events(ln_node_id: int) -> Select[tuple[int]]:
+    qry = (
+        select(func.count(Forward.id))
+        .join(ForwardResolveInfo, Forward.id == ForwardResolveInfo.forward_id)
+        .filter(
+            Forward.ln_node_id == ln_node_id,
+            ForwardResolveInfo.resolve_type == ForwardResolveType.SETTLED,
+        )
+    )
+    return qry
+
+
 def query_average_node_speed(
     start_time: datetime, end_time: datetime, percentiles: Sequence[int]
 ) -> tuple[Select[tuple[str, float, int]], list[str]]:
@@ -78,10 +105,10 @@ def query_average_node_speed(
 
     # Calculate the time difference in seconds
     time_diff = func.extract(
-        "epoch", HTLCResolveInfo.resolve_time - HTLCAttempt.attempt_time
+        "epoch", PaymentHtlcResolveInfo.resolve_time - HTLCAttempt.attempt_time
     )
 
-    n = HTLCResolveInfo.num_hops_successful
+    n = PaymentHtlcResolveInfo.num_hops_successful
 
     # Calculate the average time per route
     time_per_route = time_diff / n
@@ -134,16 +161,16 @@ def query_average_node_speed(
             cast(func.sum(liquidity_locked), Float).label("liquidity_locked_sat"),
             func.count(HTLCAttempt.id).label("num_attempts"),
         )
-        .select_from(HTLCResolveInfo)
-        .join(HTLCAttempt, HTLCResolveInfo.htlc_attempt_id == HTLCAttempt.id)
+        .select_from(PaymentHtlcResolveInfo)
+        .join(HTLCAttempt, PaymentHtlcResolveInfo.htlc_attempt_id == HTLCAttempt.id)
         .join(Route, HTLCAttempt.id == Route.htlc_attempt_id)
         .join(Hop, Hop.htlc_attempt_id == Route.htlc_attempt_id)
         .join(GraphNode, GraphNode.id == Hop.node_id)
         .filter(
-            HTLCResolveInfo.resolve_time.between(start_time, end_time),
-            HTLCResolveInfo.num_hops_successful > 0,
+            PaymentHtlcResolveInfo.resolve_time.between(start_time, end_time),
+            PaymentHtlcResolveInfo.num_hops_successful > 0,
             Hop.position_id >= 1,
-            Hop.position_id <= HTLCResolveInfo.num_hops_successful,
+            Hop.position_id <= PaymentHtlcResolveInfo.num_hops_successful,
         )
         .group_by(GraphNode.pub_key)
         # First percentile of the list is used for ordering. Hence user can
@@ -170,7 +197,7 @@ def query_liquidity_locked_per_htlc(
 
     # Calculate the time difference in seconds
     time_diff = func.extract(
-        "epoch", HTLCResolveInfo.resolve_time - HTLCAttempt.attempt_time
+        "epoch", PaymentHtlcResolveInfo.resolve_time - HTLCAttempt.attempt_time
     )
 
     liquidity_locked = (
@@ -181,16 +208,16 @@ def query_liquidity_locked_per_htlc(
         select(
             HTLCAttempt.attempt_id,
             HTLCAttempt.attempt_time,
-            HTLCResolveInfo.resolve_time,
+            PaymentHtlcResolveInfo.resolve_time,
             time_diff,
             cast(liquidity_locked, Float).label("liquidity_locked_sat"),
         )
-        .select_from(HTLCResolveInfo)
-        .join(HTLCAttempt, HTLCResolveInfo.htlc_attempt_id == HTLCAttempt.id)
+        .select_from(PaymentHtlcResolveInfo)
+        .join(HTLCAttempt, PaymentHtlcResolveInfo.htlc_attempt_id == HTLCAttempt.id)
         .join(Route, HTLCAttempt.id == Route.htlc_attempt_id)
         .filter(
-            HTLCResolveInfo.resolve_time.between(start_time, end_time),
-            HTLCResolveInfo.num_hops_successful > 0,
+            PaymentHtlcResolveInfo.resolve_time.between(start_time, end_time),
+            PaymentHtlcResolveInfo.num_hops_successful > 0,
         )
         .order_by(desc("liquidity_locked_sat"))
     )
@@ -234,9 +261,9 @@ def delete_failed_htlc_attempts(
     """
 
     return delete(HTLCAttempt).where(
-        HTLCAttempt.id == HTLCResolveInfo.htlc_attempt_id,
+        HTLCAttempt.id == PaymentHtlcResolveInfo.htlc_attempt_id,
         HTLCAttempt.attempt_time < deletion_cutoff,
-        HTLCResolveInfo.status == HTLCStatus.FAILED,
+        PaymentHtlcResolveInfo.status == HTLCStatus.FAILED,
     )
 
 
@@ -261,30 +288,13 @@ def delete_orphaned_payment_requests() -> Delete[tuple[int]]:
     return delete(PaymentRequest).where(~PaymentRequest.payments.any())
 
 
-class PaymentTrackerStore:
+class TrackerStore:
 
-    def __init__(self, db: FeelancerDB, pubkey_local: str) -> None:
+    def __init__(self, db: FeelancerDB, ln_node_id: int) -> None:
         self.db = db
         self.db.create_base(Base)
 
-        ln_store = LightningStore(db, pubkey_local)
-        self.ln_node_id = ln_store.ln_node_id
-
-    def add_attempts(self, attempts: Iterable[HTLCAttempt]) -> None:
-        """
-        Adds a list of attempts to the database.
-        """
-
-        # TODO: We accept integrity errors because of this lnd issue
-        # https://github.com/lightningnetwork/lnd/issues/9542
-        self.db.add_all_from_iterable(attempts, True)
-
-    def add_attempt_chunks(self, attempts: Iterable[HTLCAttempt]) -> None:
-        """
-        Adds a list of attempts to the database in chunks.
-        """
-
-        self.db.add_chunks_from_iterable(attempts, CHUNK_SIZE)
+        self.ln_node_id = ln_node_id
 
     def add_graph_node(self, pub_key: str) -> int:
         """
@@ -300,7 +310,7 @@ class PaymentTrackerStore:
 
         return self.db.add_post(path, lambda p: p.id)
 
-    def delete_orphaned(self) -> None:
+    def delete_orphaned_payments(self) -> None:
         """
         Deletes all orphaned objects of this store. Atm only orphaned payment
         requests are deleted.
@@ -363,4 +373,32 @@ class PaymentTrackerStore:
 
         return self.db.query_first(
             query_max_payment_index(self.ln_node_id), lambda p: p, 0
+        )
+
+    def get_invoice_id(self, r_hash: str) -> int:
+        """
+        Returns the invoice for a given r_hash.
+        """
+
+        id = self.db.query_first(query_invoice(r_hash), lambda p: p.id)
+        if id is None:
+            raise InvoiceNotFound(f"Invoice with r_hash {r_hash} not found.")
+        return id
+
+    def get_max_invoice_add_index(self) -> int:
+        """
+        Returns the maximum invoice add index.
+        """
+
+        return self.db.query_first(
+            query_max_invoice_add_index(self.ln_node_id), lambda p: p, 0
+        )
+
+    def get_count_forwarding_events(self) -> int:
+        """
+        Returns the count of forwarding events.
+        """
+
+        return self.db.query_first(
+            query_count_settled_forwarding_events(self.ln_node_id), lambda p: p, 0
         )

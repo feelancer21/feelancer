@@ -1,20 +1,16 @@
-import logging
-from collections.abc import Callable, Iterable
 from datetime import timedelta
 
-from sqlalchemy import Delete, Select
-
-from feelancer.base import BaseServer
+from feelancer.log import getLogger
 from feelancer.tasks.runner import RunnerRequest, RunnerResult
+from feelancer.tracker.proto import TrackerBaseService
 
-from .data import (
+from ..data import (
     delete_failed_htlc_attempts,
     delete_failed_payments,
     query_average_node_speed,
     query_liquidity_locked_per_htlc,
     query_slow_nodes,
 )
-from .tracker import PaymentTracker
 
 DEFAULT_NODE_SPEED_WRITE_CSV = False
 DEFAULT_NODE_SPEED_CSV_FILE = "~/.feelancer/node_speed.csv"
@@ -32,7 +28,7 @@ DEFAULT_HTLC_LIQUIDITY_LOCKED_CSV_FILE = "~/.feelancer/htlc_liquidity_locked.csv
 
 DEFAULT_DELETE_FAILED = False
 DEFAULT_DELETE_FAILED_HOURS = 168
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
 
 
 def _validate_percentiles(percentiles: list[int]) -> None:
@@ -112,34 +108,17 @@ class PaytrackConfig:
             raise ValueError(f"Invalid config: {e}")
 
 
-class PaytrackService(BaseServer):
+class PaytrackService(TrackerBaseService[PaytrackConfig]):
     """
     Receiving of payment data from a stream and storing in the database.
     """
-
-    def __init__(
-        self,
-        payment_tracker: PaymentTracker,
-        get_paytrack_config: Callable[..., PaytrackConfig | None],
-        to_csv: Callable[[Select[tuple], str, list[str] | None], None],
-        delete_data: Callable[[Iterable[Delete[tuple]]], None],
-        **kwargs,
-    ) -> None:
-        super().__init__(**kwargs)
-        self._payment_tracker = payment_tracker
-        self._get_paytrack_config = get_paytrack_config
-        self._to_csv = to_csv
-        self._delete_data = delete_data
-
-        self._register_starter(self._start_server)
-        self._register_stopper(self._stop_server)
 
     def run(self, request: RunnerRequest) -> RunnerResult:
         """
         Creates the csv files with node speed and slow nodes.
         """
 
-        config = self._get_paytrack_config()
+        config = self._get_config()
         if config is None:
             return RunnerResult()
 
@@ -153,7 +132,7 @@ class PaytrackService(BaseServer):
                 end_time=request.timestamp,
                 percentiles=config.node_speed_percentiles,
             )
-            self._to_csv(qry, config.node_speed_csv_file, header)
+            self._db_to_csv(qry, config.node_speed_csv_file, header)
 
         if config.slow_nodes_write_csv:
             qry = query_slow_nodes(
@@ -164,7 +143,7 @@ class PaytrackService(BaseServer):
                 min_speed=config.slow_nodes_min_speed,
                 min_num_attempts=config.slow_nodes_min_attempts,
             )
-            self._to_csv(qry, config.slow_nodes_csv_file, None)
+            self._db_to_csv(qry, config.slow_nodes_csv_file, None)
 
         if config.htlc_liquidity_locked_write_csv:
             qry, header = query_liquidity_locked_per_htlc(
@@ -173,7 +152,7 @@ class PaytrackService(BaseServer):
                 end_time=request.timestamp,
             )
 
-            self._to_csv(qry, config.htlc_liquidity_locked_csv_file, header)
+            self._db_to_csv(qry, config.htlc_liquidity_locked_csv_file, header)
 
         # Housekeeping to delete failed htlc attempts
         if config.delete_failed:
@@ -187,20 +166,8 @@ class PaytrackService(BaseServer):
             queries.append(delete_failed_payments(deletion_cutoff))
             queries.append(delete_failed_htlc_attempts(deletion_cutoff))
 
-            self._delete_data(queries)
+            self._db_delete_data(queries)
 
         logger.info("Finished run...")
 
         return RunnerResult()
-
-    def _start_server(self) -> None:
-        """Start storing new payments."""
-
-        self._payment_tracker.start()
-
-    def _stop_server(self) -> None:
-        # Service ends when the incoming payment stream has exhausted.
-        # But we have to stop the pre sync with is started synchronously.
-
-        self._payment_tracker.pre_sync_stop()
-        return None
