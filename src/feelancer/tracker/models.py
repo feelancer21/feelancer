@@ -627,7 +627,7 @@ class PaymentHtlcResolveInfo(Base):
     status: Mapped[HTLCStatus] = mapped_column(Enum(HTLCStatus), nullable=False)
 
     failure: Mapped[Failure] = relationship(
-        "Failure", uselist=False, back_populates="htlc_attempt"
+        "Failure", uselist=False, back_populates="resolve_info"
     )
 
     # Number of hops that were successfully reached. The sender node is not included
@@ -650,7 +650,8 @@ class Failure(Base):
         ForeignKey("ln_payment_htlc_resolve_info.htlc_id", ondelete="CASCADE"),
         primary_key=True,
     )
-    htlc_attempt: Mapped[HtlcPayment] = relationship(
+
+    resolve_info: Mapped[PaymentHtlcResolveInfo] = relationship(
         PaymentHtlcResolveInfo, uselist=False, back_populates="failure"
     )
 
