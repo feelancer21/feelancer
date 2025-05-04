@@ -13,16 +13,17 @@ from feelancer.tracker.data import (
 )
 from feelancer.tracker.lnd import LndBaseTracker
 from feelancer.tracker.models import (
-    Failure,
     FailureCode,
     GraphPath,
     Hop,
     HtlcDirectionType,
     HtlcPayment,
-    HTLCStatus,
+    HtlcResolveInfo,
+    HtlcResolveInfoPaymentFailed,
+    HtlcResolveInfoSettled,
+    HtlcResolvePaymentInfo,
     Payment,
     PaymentFailureReason,
-    PaymentHtlcResolveInfo,
     PaymentRequest,
     PaymentResolveInfo,
     PaymentStatus,
@@ -162,8 +163,10 @@ class LNDPaymentTracker(LndBaseTracker):
 
         route, path = self._create_route(attempt.route)
 
-        resolve_info = self._create_htlc_resolve_info(
-            attempt, route.hops, last_used_hop_index, path
+        resolve_info = self._create_htlc_resolve_info(attempt, route.hops)
+
+        resolve_payment_info = self._create_htlc_resolve_payment_info(
+            last_used_hop_index, path
         )
 
         if len(attempt.route.hops) > 0:
@@ -180,7 +183,8 @@ class LNDPaymentTracker(LndBaseTracker):
             payment=payment,
             attempt_id=attempt.attempt_id,
             route=route,
-            resolve_info_payment=resolve_info,
+            resolve_info=resolve_info,
+            resolve_payment_info=resolve_payment_info,
         )
 
         return htlc
@@ -231,12 +235,8 @@ class LNDPaymentTracker(LndBaseTracker):
         return res_route, path
 
     def _create_htlc_resolve_info(
-        self,
-        attempt: ln.HTLCAttempt,
-        hops: list[Hop],
-        last_used_hop_index: int | None,
-        path: list[int],
-    ) -> PaymentHtlcResolveInfo | None:
+        self, attempt: ln.HTLCAttempt, hops: list[Hop]
+    ) -> HtlcResolveInfo | None:
         """
         Creates the resolve info object for the HTLCAttempt. This object is used
         to store the resolve information in the database.
@@ -262,9 +262,25 @@ class LNDPaymentTracker(LndBaseTracker):
                     f"Failure source index out of bounds: {attempt.failure.failure_source_index=}, ",
                     f"{attempt.attempt_id=}",
                 )
-            failure = self._create_failure(attempt.failure, source_hop)
+
+            return HtlcResolveInfoPaymentFailed(
+                resolve_time=resolve_time,
+                code=FailureCode(attempt.failure.code),
+                source_index=attempt.failure.failure_source_index,
+                source_hop=source_hop,
+            )
+
         else:
-            failure = None
+            return HtlcResolveInfoSettled(
+                resolve_time=resolve_time,
+                preimage=None,
+            )
+
+    def _create_htlc_resolve_payment_info(
+        self,
+        last_used_hop_index: int | None,
+        path: list[int],
+    ) -> HtlcResolvePaymentInfo:
 
         if last_used_hop_index is not None and last_used_hop_index >= 0:
             path_success = path[:last_used_hop_index]
@@ -272,19 +288,9 @@ class LNDPaymentTracker(LndBaseTracker):
         else:
             path_success_id = None
 
-        return PaymentHtlcResolveInfo(
-            resolve_time=resolve_time,
-            status=HTLCStatus(attempt.status),
-            failure=failure,
+        return HtlcResolvePaymentInfo(
             path_success_id=path_success_id,
             num_hops_successful=last_used_hop_index,
-        )
-
-    def _create_failure(self, failure: ln.Failure, source_hop: Hop | None) -> Failure:
-        return Failure(
-            code=FailureCode(failure.code),
-            source_index=failure.failure_source_index,
-            source_hop=source_hop,
         )
 
     def _get_graph_node_id(self, pub_key: str) -> int:

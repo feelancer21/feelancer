@@ -16,8 +16,9 @@ from .models import (
     Hop,
     Htlc,
     HtlcPayment,
+    HtlcResolveInfo,
+    HtlcResolvePaymentInfo,
     HtlcResolveType,
-    HTLCStatus,
     Invoice,
     LedgerEventHtlc,
     LedgerEventType,
@@ -25,7 +26,6 @@ from .models import (
     OperationLedgerEvent,
     OperationTransaction,
     Payment,
-    PaymentHtlcResolveInfo,
     PaymentRequest,
     PaymentResolveInfo,
     PaymentStatus,
@@ -134,10 +134,10 @@ def query_average_node_speed(
 
     # Calculate the time difference in seconds
     time_diff = func.extract(
-        "epoch", PaymentHtlcResolveInfo.resolve_time - HtlcPayment.attempt_time
+        "epoch", HtlcResolveInfo.resolve_time - HtlcPayment.attempt_time
     )
 
-    n = PaymentHtlcResolveInfo.num_hops_successful
+    n = HtlcResolvePaymentInfo.num_hops_successful
 
     # Calculate the average time per route
     time_per_route = time_diff / n
@@ -190,16 +190,20 @@ def query_average_node_speed(
             cast(func.sum(liquidity_locked), Float).label("liquidity_locked_sat"),
             func.count(HtlcPayment.id).label("num_attempts"),
         )
-        .select_from(PaymentHtlcResolveInfo)
-        .join(HtlcPayment, PaymentHtlcResolveInfo.htlc_id == HtlcPayment.id)
+        .select_from(HtlcResolveInfo)
+        .join(
+            HtlcResolvePaymentInfo,
+            HtlcResolveInfo.htlc_id == HtlcResolvePaymentInfo.htlc_id,
+        )
+        .join(HtlcPayment, HtlcResolvePaymentInfo.htlc_id == HtlcPayment.id)
         .join(Route, HtlcPayment.id == Route.htlc_id)
         .join(Hop, Hop.htlc_id == Route.htlc_id)
         .join(GraphNode, GraphNode.id == Hop.node_id)
         .filter(
-            PaymentHtlcResolveInfo.resolve_time.between(start_time, end_time),
-            PaymentHtlcResolveInfo.num_hops_successful > 0,
+            HtlcResolveInfo.resolve_time.between(start_time, end_time),
+            HtlcResolvePaymentInfo.num_hops_successful > 0,
             Hop.position_id >= 1,
-            Hop.position_id <= PaymentHtlcResolveInfo.num_hops_successful,
+            Hop.position_id <= HtlcResolvePaymentInfo.num_hops_successful,
         )
         .group_by(GraphNode.pub_key)
         # First percentile of the list is used for ordering. Hence user can
@@ -219,14 +223,14 @@ def query_average_node_speed(
 
 def query_liquidity_locked_per_htlc(
     start_time: datetime, end_time: datetime
-) -> tuple[Select[tuple[int, datetime, datetime | None, int, float]], list[str]]:
+) -> tuple[Select[tuple[int, datetime, datetime, int, float]], list[str]]:
     """
     Calculates the locked liquidity per HTLC over the given time window.
     """
 
     # Calculate the time difference in seconds
     time_diff = func.extract(
-        "epoch", PaymentHtlcResolveInfo.resolve_time - HtlcPayment.attempt_time
+        "epoch", HtlcResolveInfo.resolve_time - HtlcPayment.attempt_time
     )
 
     liquidity_locked = (
@@ -237,16 +241,20 @@ def query_liquidity_locked_per_htlc(
         select(
             HtlcPayment.attempt_id,
             HtlcPayment.attempt_time,
-            PaymentHtlcResolveInfo.resolve_time,
+            HtlcResolveInfo.resolve_time,
             time_diff,
             cast(liquidity_locked, Float).label("liquidity_locked_sat"),
         )
-        .select_from(PaymentHtlcResolveInfo)
-        .join(HtlcPayment, PaymentHtlcResolveInfo.htlc_id == HtlcPayment.id)
+        .select_from(HtlcResolveInfo)
+        .join(
+            HtlcResolvePaymentInfo,
+            HtlcResolveInfo.htlc_id == HtlcResolvePaymentInfo.htlc_id,
+        )
+        .join(HtlcPayment, HtlcResolvePaymentInfo.htlc_id == HtlcPayment.id)
         .join(Route, HtlcPayment.id == Route.htlc_id)
         .filter(
-            PaymentHtlcResolveInfo.resolve_time.between(start_time, end_time),
-            PaymentHtlcResolveInfo.num_hops_successful > 0,
+            HtlcResolveInfo.resolve_time.between(start_time, end_time),
+            HtlcResolvePaymentInfo.num_hops_successful > 0,
         )
         .order_by(desc("liquidity_locked_sat"))
     )
@@ -281,29 +289,29 @@ def query_slow_nodes(
     return qry
 
 
-def delete_failed_htlc_attempts(
+def delete_failed_htlc_payments(
     deletion_cutoff: datetime,
-) -> Delete[tuple[HtlcPayment]]:
+) -> Delete[tuple[Htlc]]:
     """
     Returns a query to delete all failed HTLC attempts that are older than the
     given time. Time is exclusive.
     """
 
-    return delete(HtlcPayment).where(
+    return delete(Htlc).where(
         Htlc.id == HtlcPayment.htlc_id,
-        HtlcPayment.htlc_id == PaymentHtlcResolveInfo.htlc_id,
+        HtlcPayment.htlc_id == HtlcResolveInfo.htlc_id,
         HtlcPayment.attempt_time < deletion_cutoff,
-        PaymentHtlcResolveInfo.status == HTLCStatus.FAILED,
+        HtlcResolveInfo.resolve_type == HtlcResolveType.PAYMENT_FAILED,
     )
 
 
-def delete_failed_payments(deletion_cutoff: datetime) -> Delete[tuple[Payment]]:
+def delete_failed_payments(deletion_cutoff: datetime) -> Delete[tuple[Transaction]]:
     """
     Returns a query to delete all failed payments that are older than the given
     time. Time is exclusive.
     """
 
-    return delete(Payment).where(
+    return delete(Transaction).where(
         Transaction.id == Payment.tx_id,
         Payment.tx_id == PaymentResolveInfo.payment_id,
         Payment.creation_time < deletion_cutoff,
