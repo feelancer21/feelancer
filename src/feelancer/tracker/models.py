@@ -301,8 +301,8 @@ class HtlcPayment(Htlc):
         "Route", uselist=False, back_populates="htlc_attempt"
     )
 
-    resolve_info_payment: Mapped[PaymentHtlcResolveInfo] = relationship(
-        "PaymentHtlcResolveInfo", uselist=False, back_populates="htlc_attempt"
+    resolve_payment_info: Mapped[HtlcResolvePaymentInfo] = relationship(
+        "HtlcResolvePaymentInfo", uselist=False, back_populates="htlc_payment"
     )
 
     __mapper_args__ = {
@@ -338,6 +338,7 @@ class HtlcResolveType(PyEnum):
     SETTLED = 1
     LINK_FAILED = 2
     FORWARD_FAILED = 3
+    PAYMENT_FAILED = 4
 
 
 class HtlcResolveInfo(Base):
@@ -396,30 +397,28 @@ class HtlcResolveInfoForwardFailed(HtlcResolveInfo):
     __mapper_args__ = {"polymorphic_identity": HtlcResolveType.FORWARD_FAILED}
 
 
-class FailureDetail(PyEnum):
-    UNKNOWN = 0
-    NO_DETAIL = 1
-    ONION_DECODE = 2
-    LINK_NOT_ELIGIBLE = 3
-    ON_CHAIN_TIMEOUT = 4
-    HTLC_EXCEEDS_MAX = 5
-    INSUFFICIENT_BALANCE = 6
-    INCOMPLETE_FORWARD = 7
-    HTLC_ADD_FAILED = 8
-    FORWARDS_DISABLED = 9
-    INVOICE_CANCELED = 10
-    INVOICE_UNDERPAID = 11
-    INVOICE_EXPIRY_TOO_SOON = 12
-    INVOICE_NOT_OPEN = 13
-    MPP_INVOICE_TIMEOUT = 14
-    ADDRESS_MISMATCH = 15
-    SET_TOTAL_MISMATCH = 16
-    SET_TOTAL_TOO_LOW = 17
-    SET_OVERPAID = 18
-    UNKNOWN_INVOICE = 19
-    INVALID_KEYSEND = 20
-    MPP_IN_PROGRESS = 21
-    CIRCULAR_ROUTE = 22
+class HtlcResolvePaymentInfo(Base):
+    __tablename__ = "ln_htlc_resolve_payment_info"
+
+    htlc_id: Mapped[BigInteger] = mapped_column(
+        ForeignKey("ln_htlc_payment.htlc_id", ondelete="CASCADE"), primary_key=True
+    )
+
+    htlc_payment: Mapped[HtlcPayment] = relationship(
+        HtlcPayment, uselist=False, back_populates="resolve_payment_info"
+    )
+
+    # Number of hops that were successfully reached. The sender node is not included
+    # in this count.
+    num_hops_successful: Mapped[int] = mapped_column(Integer, nullable=True)
+
+    path_success_id: Mapped[int] = mapped_column(
+        ForeignKey("ln_graph_path.id"), nullable=False, index=True
+    )
+
+    path_success: Mapped[GraphPath] = relationship(
+        "GraphPath", foreign_keys=[path_success_id]
+    )
 
 
 # Failure code as defined in the Lightning spec
@@ -455,6 +454,58 @@ class FailureCode(PyEnum):
     UNREADABLE_FAILURE = 999
 
 
+class HtlcResolveInfoPaymentFailed(HtlcResolveInfo):
+    __tablename__ = "ln_htlc_resolve_info_payment_fail"
+
+    htlc_id: Mapped[int] = mapped_column(
+        ForeignKey("ln_htlc_resolve_info.htlc_id", ondelete="CASCADE"), primary_key=True
+    )
+
+    resolve_info: Mapped[HtlcResolveInfo] = relationship(HtlcResolveInfo, uselist=False)
+
+    # Failure code as defined in the Lightning spec.
+    code: Mapped[FailureCode] = mapped_column(Enum(FailureCode), nullable=False)
+
+    # The position in the path of the intermediate or final node that generated
+    # the failure message. Position zero is the sender node.
+    source_index: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+    # source hops is added in an sql update after initial insert.
+    # That's why nullable is True.
+    source_hop_id: Mapped[BigInteger] = mapped_column(
+        ForeignKey("ln_payment_hop.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    source_hop: Mapped[Hop] = relationship("Hop", post_update=True)
+
+    __mapper_args__ = {"polymorphic_identity": HtlcResolveType.PAYMENT_FAILED}
+
+
+class FailureDetail(PyEnum):
+    UNKNOWN = 0
+    NO_DETAIL = 1
+    ONION_DECODE = 2
+    LINK_NOT_ELIGIBLE = 3
+    ON_CHAIN_TIMEOUT = 4
+    HTLC_EXCEEDS_MAX = 5
+    INSUFFICIENT_BALANCE = 6
+    INCOMPLETE_FORWARD = 7
+    HTLC_ADD_FAILED = 8
+    FORWARDS_DISABLED = 9
+    INVOICE_CANCELED = 10
+    INVOICE_UNDERPAID = 11
+    INVOICE_EXPIRY_TOO_SOON = 12
+    INVOICE_NOT_OPEN = 13
+    MPP_INVOICE_TIMEOUT = 14
+    ADDRESS_MISMATCH = 15
+    SET_TOTAL_MISMATCH = 16
+    SET_TOTAL_TOO_LOW = 17
+    SET_OVERPAID = 18
+    UNKNOWN_INVOICE = 19
+    INVALID_KEYSEND = 20
+    MPP_IN_PROGRESS = 21
+    CIRCULAR_ROUTE = 22
+
+
 class HtlcResolveInfoLinkFailed(HtlcResolveInfo):
     __tablename__ = "ln_htlc_resolve_info_link_fail"
 
@@ -482,12 +533,6 @@ class HtlcResolveInfoLinkFailed(HtlcResolveInfo):
     link_failed: Mapped[str] = mapped_column(String, nullable=True, index=True)
 
     __mapper_args__ = {"polymorphic_identity": HtlcResolveType.LINK_FAILED}
-
-
-class HTLCStatus(PyEnum):
-    IN_FLIGHT = 0
-    SUCCEEDED = 1
-    FAILED = 2
 
 
 class PaymentFailureReason(PyEnum):
@@ -606,70 +651,6 @@ class GraphPath(Base):
     )
 
 
-class PaymentHtlcResolveInfo(Base):
-    __tablename__ = "ln_payment_htlc_resolve_info"
-
-    htlc_id: Mapped[BigInteger] = mapped_column(
-        ForeignKey("ln_htlc_payment.htlc_id", ondelete="CASCADE"), primary_key=True
-    )
-
-    htlc_attempt: Mapped[HtlcPayment] = relationship(
-        HtlcPayment, uselist=False, back_populates="resolve_info_payment"
-    )
-
-    # The time in UNIX nanoseconds at which this HTLC was settled or failed.
-    # This field is nullable since it might not be set if the HTLC is still in flight.
-    resolve_time: Mapped[datetime.datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-
-    # The status of the HTLC.
-    status: Mapped[HTLCStatus] = mapped_column(Enum(HTLCStatus), nullable=False)
-
-    failure: Mapped[Failure] = relationship(
-        "Failure", uselist=False, back_populates="resolve_info"
-    )
-
-    # Number of hops that were successfully reached. The sender node is not included
-    # in this count.
-    num_hops_successful: Mapped[int] = mapped_column(Integer, nullable=True)
-
-    path_success_id: Mapped[int] = mapped_column(
-        ForeignKey("ln_graph_path.id"), nullable=False, index=True
-    )
-
-    path_success: Mapped[GraphPath] = relationship(
-        "GraphPath", foreign_keys=[path_success_id]
-    )
-
-
-class Failure(Base):
-    __tablename__ = "ln_payment_failure"
-
-    htlc_id: Mapped[BigInteger] = mapped_column(
-        ForeignKey("ln_payment_htlc_resolve_info.htlc_id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-
-    resolve_info: Mapped[PaymentHtlcResolveInfo] = relationship(
-        PaymentHtlcResolveInfo, uselist=False, back_populates="failure"
-    )
-
-    # Failure code as defined in the Lightning spec.
-    code: Mapped[FailureCode] = mapped_column(Enum(FailureCode), nullable=False)
-
-    # The position in the path of the intermediate or final node that generated
-    # the failure message. Position zero is the sender node.
-    source_index: Mapped[int] = mapped_column(BigInteger, nullable=False)
-
-    # source hops is added in an sql update after initial insert.
-    # That's why nullable is True.
-    source_hop_id: Mapped[BigInteger] = mapped_column(
-        ForeignKey("ln_payment_hop.id"), nullable=True, index=True
-    )
-    source_hop: Mapped[Hop] = relationship("Hop", post_update=True)
-
-
 class Route(Base):
     __tablename__ = "ln_payment_route"
 
@@ -765,32 +746,6 @@ class Invoice(Transaction):
     settle_index: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
     __mapper_args__ = {"polymorphic_identity": TransactionType.LN_INVOICE}
-
-
-# class InvoiceHTLCState(PyEnum):
-#     ACCEPTED = 0
-#     SETTLED = 1
-#     CANCELED = 2
-
-
-# class InvoiceHTLCResolveInfo(Base):
-#     __tablename__ = "ln_htlc_invoice_resolve_info"
-
-#     invoice_htlc_id: Mapped[int] = mapped_column(
-#         ForeignKey("ln_htlc_invoice.htlc_id", ondelete="CASCADE"), primary_key=True
-#     )
-
-#     invoice_htlc: Mapped[HtlcInvoice] = relationship(
-#         HtlcInvoice, uselist=False, back_populates="resolve_info_invoice"
-#     )
-
-#     resolve_time: Mapped[datetime.datetime] = mapped_column(
-#         DateTime(timezone=True), nullable=False
-#     )
-
-#     state: Mapped[InvoiceHTLCState] = mapped_column(
-#         Enum(InvoiceHTLCState), nullable=False
-#     )
 
 
 class HtlcEventType(PyEnum):
