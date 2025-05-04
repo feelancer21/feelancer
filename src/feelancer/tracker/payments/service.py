@@ -5,7 +5,7 @@ from feelancer.tasks.runner import RunnerRequest, RunnerResult
 from feelancer.tracker.proto import TrackerBaseService
 
 from ..data import (
-    delete_failed_htlc_attempts,
+    delete_failed_htlc_payments,
     delete_failed_payments,
     query_average_node_speed,
     query_liquidity_locked_per_htlc,
@@ -164,7 +164,7 @@ class PaytrackService(TrackerBaseService[PaytrackConfig]):
             # First we delete the failed payments, then the remaining failed
             # htlc attempts connected with success full the payments
             queries.append(delete_failed_payments(deletion_cutoff))
-            queries.append(delete_failed_htlc_attempts(deletion_cutoff))
+            queries.append(delete_failed_htlc_payments(deletion_cutoff))
 
             self._db_delete_data(queries)
 
