@@ -53,6 +53,7 @@ class LNDFwdTracker(LndBaseTracker):
     ):
         super().__init__(lnd, store)
         self._fwds_from_event_stream = fwds_from_event_stream
+        self._fwd_index = 0
 
     def _delete_orphaned_data(self) -> None:
         return None
@@ -61,7 +62,7 @@ class LNDFwdTracker(LndBaseTracker):
         return "forwards"
 
     def _pre_sync_source(self) -> LndForwardReconSource:
-        index_offset = self._store.get_count_forwarding_events()
+        index_offset = self._get_fwd_index()
         self._logger.debug(f"Starting from index {index_offset} for {self._pub_key}")
 
         paginator = self._lnd.paginate_forwarding_events(index_offset=index_offset)
@@ -87,8 +88,14 @@ class LNDFwdTracker(LndBaseTracker):
             lambda offset: self._lnd.paginate_forwarding_events(
                 index_offset=offset, blocking_sec=PAGINATOR_BLOCKING_INTERVAL
             ),
-            self._store.get_count_forwarding_events,
+            self._get_fwd_index,
         )
+
+    def _get_fwd_index(self) -> int:
+        """Get the current fwd index."""
+
+        self._fwd_index = self._store.get_count_forwarding_events()
+        return self._fwd_index
 
     def _process_forwarding_event(
         self, fwd: ln.ForwardingEvent, recon_running: bool
@@ -110,9 +117,11 @@ class LNDFwdTracker(LndBaseTracker):
             # we have from the ForwardingEvent.
             forward = self._forward_from_fwd_event(fwd)
 
+        forward.uuid = Forward.generate_uuid(forward.ln_node_id, self._fwd_index + 1)
         yield create_operation_from_htlcs(
             txs=[forward], htlcs=[forward.htlc_in, forward.htlc_out]
         )
+        self._fwd_index += 1
 
     def _forward_from_htlc_event(self, fwd: ln.ForwardingEvent) -> Forward:
 

@@ -34,8 +34,6 @@ from feelancer.utils import bytes_to_str, ns_to_datetime
 
 T = TypeVar("T", bound=Htlc)
 
-RECON_TIME_INTERVAL = 30 * 24 * 3600  # 30 days in seconds
-CHUNK_SIZE = 1000
 WAIT_TIME = 60
 
 # type for a an index of forwarding events. Two use cases:
@@ -307,7 +305,18 @@ class LNDHtlcTracker(LndBaseTracker):
                             htlc_info.incoming_amt_msat - htlc_info.outgoing_amt_msat
                         )
 
+                    uuid = Forward.generate_uuid(
+                        ln_node_id=self._store.ln_node_id,
+                        tx_index=[
+                            h_in.channel_id,
+                            h_in.htlc_index,
+                            h_out.channel_id,
+                            h_out.htlc_index,
+                        ],
+                    )
+
                     forward = Forward(
+                        uuid=uuid,
                         ln_node_id=self._store.ln_node_id,
                         htlc_in=h_in,
                         htlc_out=h_out,

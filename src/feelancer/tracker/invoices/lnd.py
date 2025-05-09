@@ -103,6 +103,7 @@ class LNDInvoiceTracker(LndBaseTracker):
         """
 
         return Invoice(
+            uuid=Invoice.generate_uuid(self._store.ln_node_id, invoice.add_index),
             ln_node_id=self._store.ln_node_id,
             invoice_htlcs=[
                 self._create_htlc(h, invoice.r_preimage) for h in invoice.htlcs
