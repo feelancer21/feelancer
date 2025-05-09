@@ -337,8 +337,9 @@ class StreamDispatcher(Generic[T], BaseServer):
 
             self._logger.info("Reconciliation stage 1 finished")
 
-            # We yield the messages from the stream until we got an exception.
-            while True:
+            # We yield the messages from the stream until we got an exception or
+            # the stop event is set.
+            while not stop_event.is_set():
                 m = q.get()
 
                 # If the service is stopped by the user we return early
