@@ -616,7 +616,7 @@ class Payment(Transaction):
     # The creation index of this payment. Each payment can be uniquely identified
     # by this index, which may not strictly increment by 1 for payments made in
     # older versions of lnd.
-    payment_index: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    payment_index: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
 
     __mapper_args__ = {"polymorphic_identity": TransactionType.LN_PAYMENT}
 
