@@ -143,6 +143,7 @@ class LNDPaymentTracker(LndBaseTracker):
         )
 
         return Payment(
+            uuid=Payment.generate_uuid(self._store.ln_node_id, payment.payment_index),
             ln_node_id=self._store.ln_node_id,
             creation_time=ns_to_datetime(payment.creation_time_ns),
             payment_index=payment.payment_index,

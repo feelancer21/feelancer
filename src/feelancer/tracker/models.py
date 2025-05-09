@@ -5,6 +5,7 @@ Database Model for PaymentTracker. Inspired by lnd payment protos.
 from __future__ import annotations
 
 import datetime
+import uuid
 from enum import Enum as PyEnum
 
 from sqlalchemy import (
@@ -17,10 +18,13 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from feelancer.lightning.models import Base, DBLnNode
+from feelancer.utils import SupportsStr
+
+NAMESPACE_TX = uuid.UUID("f3c4b0a2-5d8e-4b1c-9f6d-7a2e5f3b8c1d")
 
 
 class TransactionType(PyEnum):
@@ -32,9 +36,16 @@ class TransactionType(PyEnum):
 
 class Transaction(Base):
     __tablename__ = "ln_transaction"
+    __tx_type__ = TransactionType.UNKNOWN
 
     # unique identifier of the transaction
     id: Mapped[int] = mapped_column(autoincrement=True, primary_key=True)
+
+    # unique id of the transaction, generated from the transaction type and the
+    # transaction index. This is used to avoid duplicates in the database.
+    uuid: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), nullable=False, unique=True
+    )
 
     # The node which created the transaction. Can be NULL for
     # transactions not created by lightning nodes.
@@ -63,6 +74,12 @@ class Transaction(Base):
         "polymorphic_identity": TransactionType.UNKNOWN,
         "polymorphic_on": transaction_type,
     }
+
+    @classmethod
+    def generate_uuid(cls, ln_node_id: int | None, tx_index: SupportsStr) -> uuid.UUID:
+        args = [str(cls.__tx_type__), str(ln_node_id), str(tx_index)]
+        combined: str = "-".join(args)
+        return uuid.uuid5(NAMESPACE_TX, combined)
 
 
 class Operation(Base):
@@ -573,6 +590,7 @@ class PaymentRequest(Base):
 
 class Payment(Transaction):
     __tablename__ = "ln_payment"
+    __tx_type__ = TransactionType.LN_PAYMENT
 
     tx_id = mapped_column(
         ForeignKey("ln_transaction.id", ondelete="CASCADE"), primary_key=True
@@ -723,6 +741,7 @@ class Hop(Base):
 
 class Invoice(Transaction):
     __tablename__ = "ln_invoice"
+    __tx_type__ = TransactionType.LN_INVOICE
 
     tx_id: Mapped[int] = mapped_column(
         ForeignKey("ln_transaction.id", ondelete="CASCADE"), primary_key=True
@@ -801,6 +820,7 @@ class HtlcEvent(Base):
 
 class Forward(Transaction):
     __tablename__ = "ln_forward"
+    __tx_type__ = TransactionType.LN_FORWARD
 
     tx_id: Mapped[int] = mapped_column(
         ForeignKey("ln_transaction.id", ondelete="CASCADE"), primary_key=True
