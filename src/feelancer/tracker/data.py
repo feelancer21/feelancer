@@ -34,6 +34,8 @@ from .models import (
 )
 
 CACHE_SIZE_PAYMENT_REQUEST_ID = 1000
+CACHE_SIZE_PAYMENT_ID = 100000
+CACHE_SIZE_INVOICE_ID = 100000
 CACHE_SIZE_GRAPH_NODE_ID = 50000
 CACHE_SIZE_GRAPH_PATH = 100000
 
@@ -80,8 +82,10 @@ def query_payment_request(payment_hash: str) -> Select[tuple[PaymentRequest]]:
     return qry
 
 
-def query_payment(payment_index: int) -> Select[tuple[Payment]]:
-    qry = select(Payment).where(Payment.payment_index == payment_index)
+def query_payment(ln_node_id: int, payment_index: int) -> Select[tuple[Payment]]:
+    qry = select(Payment).where(
+        Payment.payment_index == payment_index, Payment.ln_node_id == ln_node_id
+    )
     return qry
 
 
@@ -102,8 +106,10 @@ def query_graph_path(sha256_sum: str) -> Select[tuple[GraphPath]]:
     return qry
 
 
-def query_invoice(r_hash: str) -> Select[tuple[Invoice]]:
-    qry = select(Invoice).where(Invoice.r_hash == r_hash)
+def query_invoice(ln_node_id: int, add_index: int) -> Select[tuple[Invoice]]:
+    qry = select(Invoice).where(
+        Invoice.ln_node_id == ln_node_id, Invoice.add_index == add_index
+    )
     return qry
 
 
@@ -358,14 +364,17 @@ class TrackerStore:
         # TODO: Delete orphaned graph paths and graph nodes
         self.db.core_delete(delete_orphaned_payment_requests())
 
+    @functools.lru_cache(maxsize=CACHE_SIZE_PAYMENT_ID)
     def get_payment_id(self, payment_index: int) -> int:
         """
         Returns the payment id for a given payment index.
         """
 
-        id = self.db.query_first(query_payment(payment_index), lambda p: p.id)
+        id = self.db.query_first(
+            query_payment(self.ln_node_id, payment_index), lambda p: p.id
+        )
         if id is None:
-            raise PaymentNotFound(f"Payment with index {payment_index} not found.")
+            raise PaymentNotFound(f"Payment with {payment_index=} not found.")
         return id
 
     @functools.lru_cache(maxsize=CACHE_SIZE_PAYMENT_REQUEST_ID)
@@ -414,14 +423,17 @@ class TrackerStore:
             query_max_payment_index(self.ln_node_id), lambda p: p, 0
         )
 
-    def get_invoice_id(self, r_hash: str) -> int:
+    @functools.lru_cache(maxsize=CACHE_SIZE_INVOICE_ID)
+    def get_invoice_id(self, add_index: int) -> int:
         """
-        Returns the invoice for a given r_hash.
+        Returns the invoice for a given add_index.
         """
 
-        id = self.db.query_first(query_invoice(r_hash), lambda p: p.id)
+        id = self.db.query_first(
+            query_invoice(self.ln_node_id, add_index), lambda p: p.id
+        )
         if id is None:
-            raise InvoiceNotFound(f"Invoice with r_hash {r_hash} not found.")
+            raise InvoiceNotFound(f"Invoice with {add_index=} not found.")
         return id
 
     def get_max_invoice_add_index(self) -> int:
