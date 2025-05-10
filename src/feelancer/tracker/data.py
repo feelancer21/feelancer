@@ -17,7 +17,7 @@ from .models import (
     Htlc,
     HtlcPayment,
     HtlcResolveInfo,
-    HtlcResolvePaymentInfo,
+    HtlcResolveInfoPayment,
     HtlcResolveType,
     Invoice,
     LedgerEventHtlc,
@@ -143,7 +143,7 @@ def query_average_node_speed(
         "epoch", HtlcResolveInfo.resolve_time - HtlcPayment.attempt_time
     )
 
-    n = HtlcResolvePaymentInfo.num_hops_successful
+    n = HtlcResolveInfoPayment.num_hops_successful
 
     # Calculate the average time per route
     time_per_route = time_diff / n
@@ -198,18 +198,18 @@ def query_average_node_speed(
         )
         .select_from(HtlcResolveInfo)
         .join(
-            HtlcResolvePaymentInfo,
-            HtlcResolveInfo.htlc_id == HtlcResolvePaymentInfo.htlc_id,
+            HtlcResolveInfoPayment,
+            HtlcResolveInfo.htlc_id == HtlcResolveInfoPayment.htlc_id,
         )
-        .join(HtlcPayment, HtlcResolvePaymentInfo.htlc_id == HtlcPayment.id)
+        .join(HtlcPayment, HtlcResolveInfoPayment.htlc_id == HtlcPayment.id)
         .join(Route, HtlcPayment.id == Route.htlc_id)
         .join(Hop, Hop.htlc_id == Route.htlc_id)
         .join(GraphNode, GraphNode.id == Hop.node_id)
         .filter(
             HtlcResolveInfo.resolve_time.between(start_time, end_time),
-            HtlcResolvePaymentInfo.num_hops_successful > 0,
+            HtlcResolveInfoPayment.num_hops_successful > 0,
             Hop.position_id >= 1,
-            Hop.position_id <= HtlcResolvePaymentInfo.num_hops_successful,
+            Hop.position_id <= HtlcResolveInfoPayment.num_hops_successful,
         )
         .group_by(GraphNode.pub_key)
         # First percentile of the list is used for ordering. Hence user can
@@ -253,14 +253,14 @@ def query_liquidity_locked_per_htlc(
         )
         .select_from(HtlcResolveInfo)
         .join(
-            HtlcResolvePaymentInfo,
-            HtlcResolveInfo.htlc_id == HtlcResolvePaymentInfo.htlc_id,
+            HtlcResolveInfoPayment,
+            HtlcResolveInfo.htlc_id == HtlcResolveInfoPayment.htlc_id,
         )
-        .join(HtlcPayment, HtlcResolvePaymentInfo.htlc_id == HtlcPayment.id)
+        .join(HtlcPayment, HtlcResolveInfoPayment.htlc_id == HtlcPayment.id)
         .join(Route, HtlcPayment.id == Route.htlc_id)
         .filter(
             HtlcResolveInfo.resolve_time.between(start_time, end_time),
-            HtlcResolvePaymentInfo.num_hops_successful > 0,
+            HtlcResolveInfoPayment.num_hops_successful > 0,
         )
         .order_by(desc("liquidity_locked_sat"))
     )

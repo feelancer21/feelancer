@@ -1151,11 +1151,11 @@
 <text text-anchor="start" x="1515.9" y="-1127.79" font-family="Times,serif" font-size="14.00">0..N</text>
 <text text-anchor="start" x="1401.96" y="-1127.61" font-family="Times,serif" font-size="14.00">1</text>
 </g>
-<!-- ln_htlc_resolve_payment_info -->
+<!-- ln_htlc_resolve_info_payment -->
 <g id="node30" class="node">
-<title>ln_htlc_resolve_payment_info</title>
+<title>ln_htlc_resolve_info_payment</title>
 <polygon fill="none" stroke="black" points="1529.43,-984.8 1529.43,-1014 1794.63,-1014 1794.63,-984.8 1529.43,-984.8"/>
-<text text-anchor="start" x="1547.33" y="-995.6" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="16.00">ln_htlc_resolve_payment_info</text>
+<text text-anchor="start" x="1547.33" y="-995.6" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="16.00">ln_htlc_resolve_info_payment</text>
 <polygon fill="none" stroke="black" points="1529.43,-958 1529.43,-984.8 1794.63,-984.8 1794.63,-958 1529.43,-958"/>
 <text text-anchor="start" x="1534.43" y="-968.2" font-family="Helvetica,sans-Serif" text-decoration="underline" font-size="14.00">htlc_id</text>
 <text text-anchor="start" x="1574.9" y="-968.2" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
@@ -1171,9 +1171,9 @@
 <text text-anchor="start" x="1642.61" y="-914.6" font-family="Helvetica,sans-Serif" font-size="14.00"> [INTEGER]</text>
 <text text-anchor="start" x="1716.51" y="-914.6" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
 </g>
-<!-- ln_htlc_payment&#45;&#45;ln_htlc_resolve_payment_info -->
+<!-- ln_htlc_payment&#45;&#45;ln_htlc_resolve_info_payment -->
 <g id="edge36" class="edge">
-<title>ln_htlc_payment&#45;&#45;ln_htlc_resolve_payment_info</title>
+<title>ln_htlc_payment&#45;&#45;ln_htlc_resolve_info_payment</title>
 <path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M1418.04,-991.68C1451.3,-987.23 1487.5,-982.39 1521.56,-977.84"/>
 <text text-anchor="start" x="1514.56" y="-965.24" font-family="Times,serif" font-size="14.00">1</text>
 <text text-anchor="start" x="1418.04" y="-979.08" font-family="Times,serif" font-size="14.00">1</text>
@@ -1428,14 +1428,14 @@
 <title>ln_graph_node&#45;&#45;ln_payment_hop</title>
 <path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M1780.03,-126.52C1812.61,-125.68 1848.43,-125.49 1882.5,-125.94"/>
 <text text-anchor="start" x="1858.39" y="-113.34" font-family="Times,serif" font-size="14.00">0..N</text>
-<text text-anchor="start" x="1780.03" y="-113.92" font-family="Times,serif" font-size="14.00">1</text>
+<text text-anchor="start" x="1780.03" y="-113.92" font-family="Times,serif" font-size="14.00">{0,1}</text>
 </g>
 <!-- ln_graph_node&#45;&#45;ln_payment_hop -->
 <g id="edge46" class="edge">
 <title>ln_graph_node&#45;&#45;ln_payment_hop</title>
 <path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M1780.03,-139.2C1812.61,-139.2 1848.43,-139.2 1882.5,-139.2"/>
 <text text-anchor="start" x="1858.39" y="-143.4" font-family="Times,serif" font-size="14.00">0..N</text>
-<text text-anchor="start" x="1780.03" y="-143.4" font-family="Times,serif" font-size="14.00">{0,1}</text>
+<text text-anchor="start" x="1780.03" y="-143.4" font-family="Times,serif" font-size="14.00">1</text>
 </g>
 <!-- ln_graph_node&#45;&#45;ln_payment_hop -->
 <g id="edge47" class="edge">
@@ -1472,9 +1472,9 @@
 <text text-anchor="start" x="1258.85" y="-529.6" font-family="Helvetica,sans-Serif" font-size="14.00"> [VARCHAR]</text>
 <text text-anchor="start" x="1338.97" y="-529.6" font-family="Helvetica,sans-Serif" font-size="14.00"> NOT NULL</text>
 </g>
-<!-- ln_graph_path&#45;&#45;ln_htlc_resolve_payment_info -->
+<!-- ln_graph_path&#45;&#45;ln_htlc_resolve_info_payment -->
 <g id="edge48" class="edge">
-<title>ln_graph_path&#45;&#45;ln_htlc_resolve_payment_info</title>
+<title>ln_graph_path&#45;&#45;ln_htlc_resolve_info_payment</title>
 <path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M1425.04,-627.68C1431,-632.18 1436.65,-637.01 1441.82,-642.2 1496.76,-697.24 1471.66,-736.52 1514.82,-801.2 1538.68,-836.95 1570.61,-872.46 1598.54,-900.74"/>
 <text text-anchor="start" x="1574.43" y="-888.14" font-family="Times,serif" font-size="14.00">0..N</text>
 <text text-anchor="start" x="1425.04" y="-615.08" font-family="Times,serif" font-size="14.00">1</text>
