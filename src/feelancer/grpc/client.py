@@ -20,7 +20,11 @@ DEFAULT_MESSAGE_SIZE_MB = 200 * 1024 * 1024
 DEFAULT_MAX_CONNECTION_IDLE_MS = 30000
 DEFAULT_KEEPALIVE_TIME_MS = 30000
 DEFAULT_KEEPALIVE_TIMEOUT_MS = 20000
+
+# seconds before we start the reconciliation
 SLEEP_RECON = 5
+# seconds blocking waiting for the next item of a queue
+QUEUE_BLOCKING_TIMEOUT = 15
 
 
 T = TypeVar("T", bound=Message)
@@ -306,7 +310,6 @@ class StreamDispatcher(Generic[T], BaseServer):
         """Returns a generator for all new incoming messages converted to V."""
 
         while True:
-
             # Blocking until we know that the dispatcher is receiving messages
             # from the source. Otherwise reconciliation would start too
             # early.
@@ -337,10 +340,15 @@ class StreamDispatcher(Generic[T], BaseServer):
 
             self._logger.info("Reconciliation stage 1 finished")
 
-            # We yield the messages from the stream until we got an exception or
+            # We yield the messages from the stream until we get an exception or
             # the stop event is set.
             while not stop_event.is_set():
-                m = q.get()
+                try:
+                    # Timeout for safety reasons. Usually we should get an
+                    # exception if the stream is closed.
+                    m = q.get(block=True, timeout=QUEUE_BLOCKING_TIMEOUT)
+                except queue.Empty:
+                    continue
 
                 # If the service is stopped by the user we return early
                 if isinstance(m, LocallyCancelled):
@@ -382,6 +390,11 @@ class StreamDispatcher(Generic[T], BaseServer):
 
             self._start_stream(stream_initializer)
 
+            # If the stream was closed by the user, an LocallyCancelled exception
+            # is raised. But sometimes this is not the case (e.g. SubscribeInvoice).
+            # In this case we raise an exception here.
+            raise Exception("Stream closed unexpected and not raised an error.")
+
         # Unexpected errors are raised
         except Exception as e:
 
@@ -392,6 +405,7 @@ class StreamDispatcher(Generic[T], BaseServer):
                 # User ended the stream.
                 self._logger.debug(f"Stream cancelled: {e}")
 
+                # We end the method gracefully.
                 return None
 
             raise e
