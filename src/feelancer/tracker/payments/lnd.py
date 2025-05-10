@@ -21,9 +21,9 @@ from feelancer.tracker.models import (
     HtlcDirectionType,
     HtlcPayment,
     HtlcResolveInfo,
+    HtlcResolveInfoPayment,
     HtlcResolveInfoPaymentFailed,
     HtlcResolveInfoSettled,
-    HtlcResolvePaymentInfo,
     Payment,
     PaymentFailureReason,
     PaymentRequest,
@@ -315,7 +315,7 @@ class LNDPaymentTracker(LndBaseTracker):
         self,
         last_used_hop_index: int | None,
         path: list[int],
-    ) -> HtlcResolvePaymentInfo:
+    ) -> HtlcResolveInfoPayment:
 
         if last_used_hop_index is not None and last_used_hop_index >= 0:
             path_success = path[:last_used_hop_index]
@@ -323,7 +323,7 @@ class LNDPaymentTracker(LndBaseTracker):
         else:
             path_success_id = None
 
-        return HtlcResolvePaymentInfo(
+        return HtlcResolveInfoPayment(
             path_success_id=path_success_id,
             num_hops_successful=last_used_hop_index,
         )
