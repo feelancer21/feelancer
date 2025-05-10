@@ -750,7 +750,7 @@ class Invoice(Transaction):
     transaction: Mapped[Transaction] = relationship(Transaction, uselist=False)
 
     # The payment hash
-    r_hash: Mapped[str] = mapped_column(String, nullable=False, index=True, unique=True)
+    r_hash: Mapped[str] = mapped_column(String, nullable=False)
 
     # The value of the invoice in milli-satoshis
     value_msat: Mapped[int] = mapped_column(BigInteger, nullable=False)
@@ -760,7 +760,7 @@ class Invoice(Transaction):
         "HtlcInvoice", back_populates="invoice"
     )
 
-    add_index: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    add_index: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
 
     settle_index: Mapped[int] = mapped_column(BigInteger, nullable=False)
 

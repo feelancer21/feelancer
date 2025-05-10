@@ -4,12 +4,14 @@ from collections.abc import Callable, Generator
 import pytz
 
 from feelancer.grpc.client import StreamConverter
+from feelancer.lightning.lnd import LNDClient
 from feelancer.lnd.grpc_generated import lightning_pb2 as ln
 from feelancer.tracker.data import (
     GraphNodeNotFound,
     GraphPathNotFound,
     PaymentNotFound,
     PaymentRequestNotFound,
+    TrackerStore,
 )
 from feelancer.tracker.lnd import LndBaseTracker
 from feelancer.tracker.models import (
@@ -37,6 +39,13 @@ type LndPaymentReconSource = StreamConverter[HtlcPayment, ln.Payment]
 
 
 class LNDPaymentTracker(LndBaseTracker):
+    def __init__(self, lnd: LNDClient, store: TrackerStore):
+        super().__init__(lnd, store)
+
+        # payment index for start of the next recon. This is set during a recon
+        # and is the  payment_index of the first unsettled payment. If all
+        # payments are settled we use last payment_index.
+        self._next_recon_index: int = 0
 
     def _delete_orphaned_data(self) -> None:
         self._store.delete_orphaned_payments()
@@ -47,7 +56,9 @@ class LNDPaymentTracker(LndBaseTracker):
     def _pre_sync_source(self) -> LndPaymentReconSource:
 
         index_offset = self._store.get_max_payment_index()
-        self._logger.debug(f"Starting from index {index_offset} for {self._pub_key}")
+        self._logger.debug(
+            f"Starting pre sync from index {index_offset} for {self._pub_key}"
+        )
 
         paginator = self._lnd.paginate_payments(
             index_offset=index_offset, include_incomplete=True
@@ -67,17 +78,40 @@ class LNDPaymentTracker(LndBaseTracker):
 
     def _new_recon_source(self) -> LndPaymentReconSource:
 
+        self._logger.debug(
+            f"Starting recon from index {self._next_recon_index} for {self._pub_key}"
+        )
+
         recon_start = datetime.datetime.now(tz=pytz.utc) - datetime.timedelta(
             seconds=RECON_TIME_INTERVAL
         )
         paginator = self._lnd.paginate_payments(
             include_incomplete=True,
+            index_offset=self._next_recon_index,
             creation_date_start=int(recon_start.timestamp()),
         )
 
-        return StreamConverter(
-            paginator, lambda item: self._process_payment(item, True)
-        )
+        unsettled_found: bool = False
+
+        # Closure to update the next_recon_index until we found
+        # a unsettled payment. This accelerates the next recon process.
+        def process_payment(p: ln.Payment) -> Generator[HtlcPayment]:
+            nonlocal unsettled_found
+
+            # We have a unsettled payment.
+            if p.status not in [2, 3] and not unsettled_found:
+                self._logger.debug(
+                    f"Reconciliation found first unsettled payment {p.payment_index=}; "
+                    f"{self._next_recon_index=}"
+                )
+                unsettled_found = True
+
+            if not unsettled_found:
+                self._next_recon_index = p.payment_index
+
+            yield from self._process_payment(p, True)
+
+        return StreamConverter(paginator, process_payment)
 
     def _get_new_stream(self) -> Callable[..., Generator[HtlcPayment]]:
         dispatcher = self._lnd.track_payments_dispatcher
