@@ -4,9 +4,10 @@ from collections.abc import Callable, Generator
 import pytz
 
 from feelancer.grpc.client import StreamConverter
+from feelancer.lightning.lnd import LNDClient
 from feelancer.lnd.grpc_generated import lightning_pb2 as ln
 from feelancer.tracker.data import InvoiceNotFound, create_operation_from_htlcs
-from feelancer.tracker.lnd import LndBaseTracker
+from feelancer.tracker.lnd import LndBaseTracker, TrackerStore
 from feelancer.tracker.models import (
     HtlcDirectionType,
     HtlcInvoice,
@@ -23,6 +24,13 @@ type LndInvoiceReconSource = StreamConverter[Operation, ln.Invoice]
 
 
 class LNDInvoiceTracker(LndBaseTracker):
+    def __init__(self, lnd: LNDClient, store: TrackerStore):
+        super().__init__(lnd, store)
+
+        # add_index for start of the next recon. This is set during a recon
+        # and is the add_index of the first unsettled invoice. If all
+        # invoices are settled we use last add_index.
+        self._next_recon_index: int = 0
 
     def _delete_orphaned_data(self) -> None:
         return None
@@ -33,7 +41,9 @@ class LNDInvoiceTracker(LndBaseTracker):
     def _pre_sync_source(self) -> LndInvoiceReconSource:
 
         index_offset = self._store.get_max_invoice_add_index()
-        self._logger.debug(f"Starting from index {index_offset} for {self._pub_key}")
+        self._logger.debug(
+            f"Starting pre sync from index {index_offset} for {self._pub_key}"
+        )
 
         paginator = self._lnd.paginate_invoices(index_offset=index_offset)
 
@@ -51,17 +61,40 @@ class LNDInvoiceTracker(LndBaseTracker):
 
     def _new_recon_source(self) -> LndInvoiceReconSource:
 
+        self._logger.debug(
+            f"Starting recon from index {self._next_recon_index} for {self._pub_key}"
+        )
+
         recon_start = datetime.datetime.now(tz=pytz.utc) - datetime.timedelta(
             seconds=RECON_TIME_INTERVAL
         )
 
         paginator = self._lnd.paginate_invoices(
+            index_offset=self._next_recon_index,
             creation_date_start=int(recon_start.timestamp()),
         )
 
-        return StreamConverter(
-            paginator, lambda item: self._process_invoice(item, True)
-        )
+        unsettled_found: bool = False
+
+        # Closure to update the next_recon_index until we found
+        # a unsettled invoice. This accelerates the next recon process.
+        def process_invoice(i: ln.Invoice) -> Generator[Operation]:
+            nonlocal unsettled_found
+
+            # We have a unsettled invoice.
+            if i.state != 1 and not unsettled_found:
+                self._logger.debug(
+                    f"Reconciliation found first unsettled invoice {i.add_index=}; "
+                    f"{self._next_recon_index=}"
+                )
+                unsettled_found = True
+
+            if not unsettled_found:
+                self._next_recon_index = i.add_index
+
+            yield from self._process_invoice(i, True)
+
+        return StreamConverter(paginator, process_invoice)
 
     def _get_new_stream(self) -> Callable[..., Generator[Operation]]:
         dispatcher = self._lnd.subscribe_invoices_dispatcher
@@ -82,7 +115,7 @@ class LNDInvoiceTracker(LndBaseTracker):
             try:
                 # if the invoice is already in the database, we do not need to
                 # process it
-                self._store.get_invoice_id(bytes_to_str(i.r_hash))
+                self._store.get_invoice_id(i.add_index)
                 return None
             except InvoiceNotFound:
                 self._logger.debug(
