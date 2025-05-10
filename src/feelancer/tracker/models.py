@@ -318,8 +318,8 @@ class HtlcPayment(Htlc):
         "Route", uselist=False, back_populates="htlc_attempt"
     )
 
-    resolve_payment_info: Mapped[HtlcResolvePaymentInfo] = relationship(
-        "HtlcResolvePaymentInfo", uselist=False, back_populates="htlc_payment"
+    resolve_payment_info: Mapped[HtlcResolveInfoPayment] = relationship(
+        "HtlcResolveInfoPayment", uselist=False, back_populates="htlc_payment"
     )
 
     __mapper_args__ = {
@@ -414,8 +414,8 @@ class HtlcResolveInfoForwardFailed(HtlcResolveInfo):
     __mapper_args__ = {"polymorphic_identity": HtlcResolveType.FORWARD_FAILED}
 
 
-class HtlcResolvePaymentInfo(Base):
-    __tablename__ = "ln_htlc_resolve_payment_info"
+class HtlcResolveInfoPayment(Base):
+    __tablename__ = "ln_htlc_resolve_info_payment"
 
     htlc_id: Mapped[BigInteger] = mapped_column(
         ForeignKey("ln_htlc_payment.htlc_id", ondelete="CASCADE"), primary_key=True
