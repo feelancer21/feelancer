@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import base64
 import datetime
-import hashlib
 import os
-from collections.abc import Iterable
 from copy import deepcopy
 from dataclasses import dataclass, fields
 from typing import Protocol, TypeVar
@@ -91,16 +89,6 @@ def first_some(value1: U | None, value2: U) -> U:
 
 class SupportsStr(Protocol):
     def __str__(self) -> str: ...
-
-
-def sha256_supports_str(items: Iterable[SupportsStr], delim: str = ",") -> str:
-    """
-    Creates the sha256sum of the concatenation of the string representation
-    of the items. The items are separated by the delimiter.
-    """
-
-    string = delim.join([str(i) for i in items])
-    return hashlib.sha256(string.encode("utf-8")).hexdigest()
 
 
 def ns_to_datetime(ns: int) -> datetime.datetime:

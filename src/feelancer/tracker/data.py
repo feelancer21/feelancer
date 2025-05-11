@@ -1,5 +1,5 @@
 import functools
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from datetime import datetime
 
 from sqlalchemy import Delete, Float, Select, cast, delete, desc, func, select
@@ -101,8 +101,8 @@ def query_graph_node(pub_key: str) -> Select[tuple[GraphNode]]:
     return qry
 
 
-def query_graph_path(sha256_sum: str) -> Select[tuple[GraphPath]]:
-    qry = select(GraphPath).where(GraphPath.sha256_sum == sha256_sum)
+def query_graph_path(node_ids: Iterable[int]) -> Select[tuple[GraphPath]]:
+    qry = select(GraphPath).where(GraphPath.node_ids == node_ids)
     return qry
 
 
@@ -402,16 +402,15 @@ class TrackerStore:
         return id
 
     @functools.lru_cache(maxsize=CACHE_SIZE_GRAPH_PATH)
-    def get_graph_path_id(self, sha_256_sum: str) -> int:
+    def get_graph_path_id(self, node_ids: tuple[int]) -> int:
         """
-        Returns the graph path id for a given sha256 sum.
+        Returns the graph path id for a given tuple of node ids.
         """
+        # Using tuple because lis is not hashable
 
-        id = self.db.query_first(query_graph_path(sha_256_sum), lambda p: p.id)
+        id = self.db.query_first(query_graph_path(node_ids), lambda p: p.id)
         if id is None:
-            raise GraphPathNotFound(
-                f"Graph path with sha256 sum {sha_256_sum} not found."
-            )
+            raise GraphPathNotFound(f"Graph path with {node_ids=} not found.")
         return id
 
     def get_max_payment_index(self) -> int:
