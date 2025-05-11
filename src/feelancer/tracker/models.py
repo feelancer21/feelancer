@@ -70,6 +70,10 @@ class Transaction(Base):
         "OperationTransaction", uselist=False, back_populates="transaction"
     )
 
+    resolve_info: Mapped[TransactionResolveInfo] = relationship(
+        "TransactionResolveInfo", uselist=False, back_populates="transaction"
+    )
+
     __mapper_args__ = {
         "polymorphic_identity": TransactionType.UNKNOWN,
         "polymorphic_on": transaction_type,
@@ -80,6 +84,32 @@ class Transaction(Base):
         args = [str(cls.__tx_type__), str(ln_node_id), str(tx_index)]
         combined: str = "-".join(args)
         return uuid.uuid5(NAMESPACE_TX, combined)
+
+
+class TransactionResolveType(PyEnum):
+    UNKNOWN = 0
+    SETTLED = 2
+    FAILED = 3
+
+
+class TransactionResolveInfo(Base):
+    __tablename__ = "ln_transaction_resolve_info"
+
+    tx_id: Mapped[int] = mapped_column(
+        ForeignKey("ln_transaction.id", ondelete="CASCADE"), primary_key=True
+    )
+
+    transaction: Mapped[Transaction] = relationship(
+        Transaction, uselist=False, back_populates="resolve_info"
+    )
+
+    resolve_time: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+
+    resolve_type: Mapped[TransactionResolveType] = mapped_column(
+        Enum(TransactionResolveType), nullable=False
+    )
 
 
 class Operation(Base):
@@ -562,13 +592,6 @@ class PaymentFailureReason(PyEnum):
     FAILURE_REASON_CANCELED = 6
 
 
-class PaymentStatus(PyEnum):
-    IN_FLIGHT = 1
-    SUCCEEDED = 2
-    FAILED = 3
-    INITIATED = 4
-
-
 class PaymentRequest(Base):
     __tablename__ = "ln_payment_request"
 
@@ -609,7 +632,7 @@ class Payment(Transaction):
         "HtlcPayment", back_populates="payment"
     )
 
-    resolve_info: Mapped[PaymentResolveInfo] = relationship(
+    payment_resolve_info: Mapped[PaymentResolveInfo] = relationship(
         "PaymentResolveInfo", uselist=False, back_populates="payment"
     )
 
@@ -629,7 +652,7 @@ class PaymentResolveInfo(Base):
     )
 
     payment: Mapped[Payment] = relationship(
-        Payment, uselist=False, back_populates="resolve_info"
+        Payment, uselist=False, back_populates="payment_resolve_info"
     )
 
     # The value of the payment in milli-satoshis
@@ -637,8 +660,6 @@ class PaymentResolveInfo(Base):
 
     # The fee paid for this payment in milli-satoshis
     fee_msat: Mapped[int] = mapped_column(BigInteger, nullable=False)
-
-    status: Mapped[PaymentStatus] = mapped_column(Enum(PaymentStatus), nullable=False)
 
     failure_reason: Mapped[PaymentFailureReason] = mapped_column(
         Enum(PaymentFailureReason), nullable=False
@@ -844,34 +865,6 @@ class Forward(Transaction):
     # The total fee (in milli-satoshis) for this payment circuit
     fee_msat: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
-    resolve_info: Mapped[ForwardResolveInfo] = relationship(
-        "ForwardResolveInfo", uselist=False, back_populates="forward"
-    )
-
     __mapper_args__ = {
         "polymorphic_identity": TransactionType.LN_FORWARD,
     }
-
-
-class ForwardResolveType(PyEnum):
-    UNKNOWN = 0
-    SETTLED = 1
-    FAILED = 2
-
-
-class ForwardResolveInfo(Base):
-    __tablename__ = "ln_forward_resolve_info"
-
-    forward_id: Mapped[int] = mapped_column(
-        ForeignKey("ln_forward.tx_id", ondelete="CASCADE"), primary_key=True
-    )
-
-    forward: Mapped[Forward] = relationship(Forward, uselist=False)
-
-    resolve_time: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
-
-    resolve_type: Mapped[ForwardResolveType] = mapped_column(
-        Enum(ForwardResolveType), nullable=False
-    )
