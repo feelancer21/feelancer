@@ -15,6 +15,8 @@ from feelancer.tracker.models import (
     HtlcResolveType,
     Invoice,
     Operation,
+    TransactionResolveInfo,
+    TransactionResolveType,
 )
 from feelancer.utils import bytes_to_str, sec_to_datetime
 
@@ -135,6 +137,11 @@ class LNDInvoiceTracker(LndBaseTracker):
         Creates an invoice object.
         """
 
+        resolve_info = TransactionResolveInfo(
+            resolve_time=sec_to_datetime(invoice.settle_date),
+            resolve_type=TransactionResolveType.SETTLED,
+        )
+        # Create the invoice object
         return Invoice(
             uuid=Invoice.generate_uuid(self._store.ln_node_id, invoice.add_index),
             ln_node_id=self._store.ln_node_id,
@@ -146,6 +153,7 @@ class LNDInvoiceTracker(LndBaseTracker):
             value_msat=invoice.value_msat,
             add_index=invoice.add_index,
             settle_index=invoice.settle_index,
+            resolve_info=resolve_info,
         )
 
     def _create_htlc(self, htlc: ln.InvoiceHTLC, preimage: bytes) -> HtlcInvoice:
