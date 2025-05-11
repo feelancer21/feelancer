@@ -1435,14 +1435,14 @@
 <title>ln_graph_node&#45;&#45;ln_payment_hop</title>
 <path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M1780.03,-139.2C1812.61,-139.2 1848.43,-139.2 1882.5,-139.2"/>
 <text text-anchor="start" x="1858.39" y="-143.4" font-family="Times,serif" font-size="14.00">0..N</text>
-<text text-anchor="start" x="1780.03" y="-143.4" font-family="Times,serif" font-size="14.00">1</text>
+<text text-anchor="start" x="1780.03" y="-143.4" font-family="Times,serif" font-size="14.00">{0,1}</text>
 </g>
 <!-- ln_graph_node&#45;&#45;ln_payment_hop -->
 <g id="edge47" class="edge">
 <title>ln_graph_node&#45;&#45;ln_payment_hop</title>
 <path fill="none" stroke="#7f7f7f" stroke-dasharray="5,2" d="M1780.03,-151.88C1812.61,-152.72 1848.43,-152.91 1882.5,-152.46"/>
 <text text-anchor="start" x="1858.39" y="-156.66" font-family="Times,serif" font-size="14.00">0..N</text>
-<text text-anchor="start" x="1780.03" y="-156.08" font-family="Times,serif" font-size="14.00">{0,1}</text>
+<text text-anchor="start" x="1780.03" y="-156.08" font-family="Times,serif" font-size="14.00">1</text>
 </g>
 <!-- ln_payment_hop&#45;&#45;ln_htlc_resolve_info_payment_fail -->
 <g id="edge51" class="edge">
