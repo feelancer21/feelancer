@@ -241,8 +241,8 @@ class LNDPaymentTracker(LndBaseTracker):
             amt_to_forward_msat=route.total_amt_msat,
             fee_msat=0,
             node_id=node_id,
-            node_outgoing_id=None,
-            node_incoming_id=None,
+            outgoing_node_id=None,
+            incoming_node_id=None,
         )
         hops.append(hop_orm)
 
@@ -251,15 +251,15 @@ class LNDPaymentTracker(LndBaseTracker):
             node_id = self._get_graph_node_id(hop.pub_key)
             path.append(node_id)
 
-            hop_orm.node_outgoing_id = node_id
+            hop_orm.outgoing_node_id = node_id
             hop_orm = Hop(
                 position_id=i + 1,
                 expiry=hop.expiry,
                 amt_to_forward_msat=hop.amt_to_forward_msat,
                 fee_msat=hop.fee_msat,
                 node_id=node_id,
-                node_outgoing_id=None,
-                node_incoming_id=last_node_id,
+                outgoing_node_id=None,
+                incoming_node_id=last_node_id,
             )
             hops.append(hop_orm)
 
