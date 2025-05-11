@@ -33,7 +33,7 @@ from feelancer.tracker.models import (
     PaymentStatus,
     Route,
 )
-from feelancer.utils import ns_to_datetime, sha256_supports_str
+from feelancer.utils import ns_to_datetime
 
 RECON_TIME_INTERVAL = 30 * 24 * 3600  # 30 days in seconds
 
@@ -343,11 +343,10 @@ class LNDPaymentTracker(LndBaseTracker):
             return self._store.add_graph_node(pub_key)
 
     def _get_graph_path_id(self, path: list[int]) -> int:
-        sha_path = sha256_supports_str(path)
+
+        node_ids = tuple(path)
         try:
-            path_id = self._store.get_graph_path_id(sha_path)
+            path_id = self._store.get_graph_path_id(node_ids)
         except GraphPathNotFound:
-            path_id = self._store.add_graph_path(
-                GraphPath(sha256_sum=sha_path, node_ids=path)
-            )
+            path_id = self._store.add_graph_path(GraphPath(node_ids=node_ids))
         return path_id

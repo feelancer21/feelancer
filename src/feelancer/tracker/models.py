@@ -660,9 +660,6 @@ class GraphPath(Base):
 
     id: Mapped[int] = mapped_column(autoincrement=True, primary_key=True)
 
-    # The sha256sum of the concatenation of all ids separated by a comma.
-    sha256_sum: Mapped[str] = mapped_column(String, nullable=False, unique=True)
-
     # Use the ARRAY type to store a variable-length list of node ids
     node_ids: Mapped[list[int]] = mapped_column(
         ARRAY(Integer), unique=True, nullable=False
