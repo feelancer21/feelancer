@@ -724,18 +724,18 @@ class Hop(Base):
     # Fee in millisatoshis.
     fee_msat: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
-    node_outgoing_id: Mapped[int] = mapped_column(
+    outgoing_node_id: Mapped[int] = mapped_column(
         ForeignKey("ln_graph_node.id"), nullable=True, index=True
     )
     node_outgoing: Mapped[GraphNode] = relationship(
-        GraphNode, foreign_keys=[node_outgoing_id]
+        GraphNode, foreign_keys=[outgoing_node_id]
     )
 
-    node_incoming_id: Mapped[int] = mapped_column(
+    incoming_node_id: Mapped[int] = mapped_column(
         ForeignKey("ln_graph_node.id"), nullable=True, index=True
     )
     node_incoming: Mapped[GraphNode] = relationship(
-        GraphNode, foreign_keys=[node_incoming_id]
+        GraphNode, foreign_keys=[incoming_node_id]
     )
 
 
@@ -829,20 +829,20 @@ class Forward(Transaction):
     transaction: Mapped[Transaction] = relationship(Transaction, uselist=False)
 
     # id of incoming htlc
-    htlc_in_id: Mapped[int] = mapped_column(
+    incoming_htlc_id: Mapped[int] = mapped_column(
         ForeignKey("ln_htlc_forward.htlc_id"), nullable=False, index=True
     )
 
     # incming htlc
-    htlc_in: Mapped[Htlc] = relationship(HtlcForward, foreign_keys=[htlc_in_id])
+    htlc_in: Mapped[Htlc] = relationship(HtlcForward, foreign_keys=[incoming_htlc_id])
 
     # id of outgoing htlc
-    htlc_out_id: Mapped[int] = mapped_column(
+    outgoing_htlc_id: Mapped[int] = mapped_column(
         ForeignKey("ln_htlc_forward.htlc_id"), nullable=False, index=True
     )
 
     # incming htlc
-    htlc_out: Mapped[Htlc] = relationship(HtlcForward, foreign_keys=[htlc_out_id])
+    htlc_out: Mapped[Htlc] = relationship(HtlcForward, foreign_keys=[outgoing_htlc_id])
 
     # The total fee (in milli-satoshis) for this payment circuit
     fee_msat: Mapped[int] = mapped_column(BigInteger, nullable=False)
