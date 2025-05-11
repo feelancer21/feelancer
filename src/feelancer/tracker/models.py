@@ -624,7 +624,7 @@ class Payment(Transaction):
 class PaymentResolveInfo(Base):
     __tablename__ = "ln_payment_resolve_info"
 
-    payment_id: Mapped[BigInteger] = mapped_column(
+    tx_id: Mapped[BigInteger] = mapped_column(
         ForeignKey("ln_payment.tx_id", ondelete="CASCADE"), primary_key=True
     )
 

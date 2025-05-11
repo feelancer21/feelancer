@@ -319,7 +319,7 @@ def delete_failed_payments(deletion_cutoff: datetime) -> Delete[tuple[Transactio
 
     return delete(Transaction).where(
         Transaction.id == Payment.tx_id,
-        Payment.tx_id == PaymentResolveInfo.payment_id,
+        Payment.tx_id == PaymentResolveInfo.tx_id,
         Payment.creation_time < deletion_cutoff,
         PaymentResolveInfo.status == PaymentStatus.FAILED,
     )
@@ -367,7 +367,7 @@ class TrackerStore:
     @functools.lru_cache(maxsize=CACHE_SIZE_PAYMENT_ID)
     def get_payment_id(self, payment_index: int) -> int:
         """
-        Returns the payment id for a given payment index.
+        Returns the tx id for a given payment index.
         """
 
         id = self.db.query_first(
@@ -426,7 +426,7 @@ class TrackerStore:
     @functools.lru_cache(maxsize=CACHE_SIZE_INVOICE_ID)
     def get_invoice_id(self, add_index: int) -> int:
         """
-        Returns the invoice for a given add_index.
+        Returns the tx id for a given add_index.
         """
 
         id = self.db.query_first(
