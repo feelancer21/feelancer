@@ -309,7 +309,7 @@ class HtlcPayment(Htlc):
         ForeignKey("ln_payment.tx_id", ondelete="CASCADE"), nullable=False, index=True
     )
 
-    payment: Mapped[Payment] = relationship("Payment", back_populates="attempts")
+    payment: Mapped[Payment] = relationship("Payment", back_populates="htlcs")
 
     # The unique attempt ID of lnd that is used for this attempt.
     attempt_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
@@ -605,7 +605,7 @@ class Payment(Transaction):
         PaymentRequest, uselist=False, back_populates="payments"
     )
 
-    attempts: Mapped[list[HtlcPayment]] = relationship(
+    htlcs: Mapped[list[HtlcPayment]] = relationship(
         "HtlcPayment", back_populates="payment"
     )
 

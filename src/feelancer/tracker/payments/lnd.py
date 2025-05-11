@@ -12,6 +12,7 @@ from feelancer.tracker.data import (
     PaymentNotFound,
     PaymentRequestNotFound,
     TrackerStore,
+    create_operation_from_htlcs,
 )
 from feelancer.tracker.lnd import LndBaseTracker
 from feelancer.tracker.models import (
@@ -24,6 +25,7 @@ from feelancer.tracker.models import (
     HtlcResolveInfoPayment,
     HtlcResolveInfoPaymentFailed,
     HtlcResolveInfoSettled,
+    Operation,
     Payment,
     PaymentFailureReason,
     PaymentRequest,
@@ -35,7 +37,7 @@ from feelancer.utils import ns_to_datetime, sha256_supports_str
 
 RECON_TIME_INTERVAL = 30 * 24 * 3600  # 30 days in seconds
 
-type LndPaymentReconSource = StreamConverter[HtlcPayment, ln.Payment]
+type LndPaymentReconSource = StreamConverter[Operation, ln.Payment]
 
 
 class LNDPaymentTracker(LndBaseTracker):
@@ -72,7 +74,7 @@ class LNDPaymentTracker(LndBaseTracker):
         self,
         item: ln.Payment,
         recon_running: bool,
-    ) -> Generator[HtlcPayment]:
+    ) -> Generator[Operation]:
 
         return self._process_payment(item, recon_running)
 
@@ -95,7 +97,7 @@ class LNDPaymentTracker(LndBaseTracker):
 
         # Closure to update the next_recon_index until we found
         # a unsettled payment. This accelerates the next recon process.
-        def process_payment(p: ln.Payment) -> Generator[HtlcPayment]:
+        def process_payment(p: ln.Payment) -> Generator[Operation]:
             nonlocal unsettled_found
 
             # We have a unsettled payment.
@@ -119,7 +121,7 @@ class LNDPaymentTracker(LndBaseTracker):
 
     def _process_payment(
         self, p: ln.Payment, recon_running: bool
-    ) -> Generator[HtlcPayment]:
+    ) -> Generator[Operation]:
         """
         Callback function for the subscription. Converts the payment object
         to an Iterable of HTLCAttempt objects.
@@ -158,8 +160,10 @@ class LNDPaymentTracker(LndBaseTracker):
                 payment_request=p.payment_request if p.payment_request != "" else None,
             )
 
-        for h in p.htlcs:
-            yield self._create_htlc(h, payment)
+        yield create_operation_from_htlcs(
+            txs=[payment],
+            htlcs=payment.htlcs,
+        )
 
     def _create_payment(self, payment: ln.Payment) -> Payment:
         """
@@ -182,9 +186,10 @@ class LNDPaymentTracker(LndBaseTracker):
             creation_time=ns_to_datetime(payment.creation_time_ns),
             payment_index=payment.payment_index,
             resolve_info=resolve_info,
+            htlcs=[self._create_htlc(h) for h in payment.htlcs],
         )
 
-    def _create_htlc(self, attempt: ln.HTLCAttempt, payment: Payment) -> HtlcPayment:
+    def _create_htlc(self, attempt: ln.HTLCAttempt) -> HtlcPayment:
 
         # Determination of the index of the last used hop. It is the failure source
         # index if the attempt failed. If the attempt succeeded it is the receiver
@@ -215,7 +220,6 @@ class LNDPaymentTracker(LndBaseTracker):
             channel_id=chan_out,
             direction_type=HtlcDirectionType.OUTGOING,
             timelock=attempt.route.total_time_lock,
-            payment=payment,
             attempt_id=attempt.attempt_id,
             route=route,
             resolve_info=resolve_info,
