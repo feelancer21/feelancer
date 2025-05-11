@@ -9,8 +9,6 @@ from feelancer.data.db import FeelancerDB
 from .models import (
     Base,
     Forward,
-    ForwardResolveInfo,
-    ForwardResolveType,
     GraphNode,
     GraphPath,
     Hop,
@@ -27,10 +25,10 @@ from .models import (
     OperationTransaction,
     Payment,
     PaymentRequest,
-    PaymentResolveInfo,
-    PaymentStatus,
     Route,
     Transaction,
+    TransactionResolveInfo,
+    TransactionResolveType,
 )
 
 CACHE_SIZE_PAYMENT_REQUEST_ID = 1000
@@ -121,10 +119,10 @@ def query_max_invoice_add_index(ln_node_id: int) -> Select[tuple[int]]:
 def query_count_settled_forwarding_events(ln_node_id: int) -> Select[tuple[int]]:
     qry = (
         select(func.count(Forward.id))
-        .join(ForwardResolveInfo, Forward.id == ForwardResolveInfo.forward_id)
+        .join(TransactionResolveInfo, Forward.id == TransactionResolveInfo.tx_id)
         .filter(
             Forward.ln_node_id == ln_node_id,
-            ForwardResolveInfo.resolve_type == ForwardResolveType.SETTLED,
+            TransactionResolveInfo.resolve_type == TransactionResolveType.SETTLED,
         )
     )
     return qry
@@ -319,9 +317,9 @@ def delete_failed_payments(deletion_cutoff: datetime) -> Delete[tuple[Transactio
 
     return delete(Transaction).where(
         Transaction.id == Payment.tx_id,
-        Payment.tx_id == PaymentResolveInfo.tx_id,
+        Transaction.id == TransactionResolveInfo.tx_id,
         Payment.creation_time < deletion_cutoff,
-        PaymentResolveInfo.status == PaymentStatus.FAILED,
+        TransactionResolveInfo.resolve_type == TransactionResolveType.FAILED,
     )
 
 

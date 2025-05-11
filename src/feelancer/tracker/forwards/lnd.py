@@ -9,14 +9,14 @@ from feelancer.tracker.data import TrackerStore, create_operation_from_htlcs
 from feelancer.tracker.lnd import LndBaseTracker
 from feelancer.tracker.models import (
     Forward,
-    ForwardResolveInfo,
-    ForwardResolveType,
     HtlcDirectionType,
     HtlcForward,
     HtlcResolveInfoSettled,
     HtlcResolveType,
     HtlcType,
     Operation,
+    TransactionResolveInfo,
+    TransactionResolveType,
     TransactionType,
 )
 from feelancer.utils import ns_to_datetime
@@ -172,12 +172,12 @@ class LNDFwdTracker(LndBaseTracker):
 
         return forward
 
-    def _create_forward_resolve_info(self, time: datetime) -> ForwardResolveInfo:
+    def _create_forward_resolve_info(self, time: datetime) -> TransactionResolveInfo:
         """Create a resolve info for a forward."""
 
-        return ForwardResolveInfo(
+        return TransactionResolveInfo(
             resolve_time=time,
-            resolve_type=ForwardResolveType.SETTLED,
+            resolve_type=TransactionResolveType.SETTLED,
         )
 
     def _create_htlc_forward(

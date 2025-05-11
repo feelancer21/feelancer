@@ -15,8 +15,6 @@ from feelancer.tracker.models import (
     FailureCode,
     FailureDetail,
     Forward,
-    ForwardResolveInfo,
-    ForwardResolveType,
     Htlc,
     HtlcDirectionType,
     HtlcEvent,
@@ -29,6 +27,8 @@ from feelancer.tracker.models import (
     HtlcResolveType,
     HtlcType,
     Operation,
+    TransactionResolveInfo,
+    TransactionResolveType,
 )
 from feelancer.utils import bytes_to_str, ns_to_datetime
 
@@ -294,9 +294,9 @@ class LNDHtlcTracker(LndBaseTracker):
                         direction_failed=HtlcDirectionType.OUTGOING,
                     )
 
-                    fwd_resolve_info = ForwardResolveInfo(
+                    fwd_resolve_info = TransactionResolveInfo(
                         resolve_time=ns_to_datetime(final.timestamp_ns),
-                        resolve_type=ForwardResolveType.FAILED,
+                        resolve_type=TransactionResolveType.FAILED,
                     )
 
                     fee_mast = 0

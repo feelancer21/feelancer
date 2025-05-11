@@ -30,8 +30,9 @@ from feelancer.tracker.models import (
     PaymentFailureReason,
     PaymentRequest,
     PaymentResolveInfo,
-    PaymentStatus,
     Route,
+    TransactionResolveInfo,
+    TransactionResolveType,
 )
 from feelancer.utils import ns_to_datetime
 
@@ -115,7 +116,7 @@ class LNDPaymentTracker(LndBaseTracker):
 
         return StreamConverter(paginator, process_payment)
 
-    def _get_new_stream(self) -> Callable[..., Generator[HtlcPayment]]:
+    def _get_new_stream(self) -> Callable[..., Generator[Operation]]:
         dispatcher = self._lnd.track_payments_dispatcher
         return self._get_new_stream_from_dispatcher(dispatcher)
 
@@ -173,11 +174,17 @@ class LNDPaymentTracker(LndBaseTracker):
         # We are storing resolved payments at the moment. Hence we can create
         # the resolve info object directly. Maybe a TODO for the future if we
         # want to store unresolved payments too.
-        resolve_info = PaymentResolveInfo(
-            status=PaymentStatus(payment.status),
+        payment_resolve_info = PaymentResolveInfo(
             failure_reason=PaymentFailureReason(payment.failure_reason),
             value_msat=payment.value_msat,
             fee_msat=payment.fee_msat,
+        )
+
+        resolve_info = TransactionResolveInfo(
+            resolve_type=TransactionResolveType(payment.status),
+            resolve_time=ns_to_datetime(
+                max([h.resolve_time_ns for h in payment.htlcs])
+            ),
         )
 
         return Payment(
@@ -185,6 +192,7 @@ class LNDPaymentTracker(LndBaseTracker):
             ln_node_id=self._store.ln_node_id,
             creation_time=ns_to_datetime(payment.creation_time_ns),
             payment_index=payment.payment_index,
+            payment_resolve_info=payment_resolve_info,
             resolve_info=resolve_info,
             htlcs=[self._create_htlc(h) for h in payment.htlcs],
         )
