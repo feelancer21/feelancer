@@ -360,7 +360,7 @@ class TrackerStore:
         """
 
         # TODO: Delete orphaned graph paths and graph nodes
-        self.db.core_delete(delete_orphaned_payment_requests())
+        self.db.del_core(delete_orphaned_payment_requests())
 
     @functools.lru_cache(maxsize=CACHE_SIZE_PAYMENT_ID)
     def get_payment_id(self, payment_index: int) -> int:
@@ -368,7 +368,7 @@ class TrackerStore:
         Returns the tx id for a given payment index.
         """
 
-        id = self.db.query_first(
+        id = self.db.sel_first(
             query_payment(self.ln_node_id, payment_index), lambda p: p.id
         )
         if id is None:
@@ -381,7 +381,7 @@ class TrackerStore:
         Returns the payment id for a given payment hash.
         """
 
-        id = self.db.query_first(query_payment_request(payment_hash), lambda p: p.id)
+        id = self.db.sel_first(query_payment_request(payment_hash), lambda p: p.id)
         if id is None:
             raise PaymentRequestNotFound(
                 f"Payment request with hash {payment_hash} not found."
@@ -394,7 +394,7 @@ class TrackerStore:
         Returns the graph node id for a given pub key.
         """
 
-        id = self.db.query_first(query_graph_node(pub_key), lambda p: p.id)
+        id = self.db.sel_first(query_graph_node(pub_key), lambda p: p.id)
         if id is None:
             raise GraphNodeNotFound(f"Graph node with key {pub_key} not found.")
         return id
@@ -406,7 +406,7 @@ class TrackerStore:
         """
         # Using tuple because lis is not hashable
 
-        id = self.db.query_first(query_graph_path(node_ids), lambda p: p.id)
+        id = self.db.sel_first(query_graph_path(node_ids), lambda p: p.id)
         if id is None:
             raise GraphPathNotFound(f"Graph path with {node_ids=} not found.")
         return id
@@ -416,7 +416,7 @@ class TrackerStore:
         Returns the maximum payment index.
         """
 
-        return self.db.query_first(
+        return self.db.sel_first(
             query_max_payment_index(self.ln_node_id), lambda p: p, 0
         )
 
@@ -426,7 +426,7 @@ class TrackerStore:
         Returns the tx id for a given add_index.
         """
 
-        id = self.db.query_first(
+        id = self.db.sel_first(
             query_invoice(self.ln_node_id, add_index), lambda p: p.id
         )
         if id is None:
@@ -438,7 +438,7 @@ class TrackerStore:
         Returns the maximum invoice add index.
         """
 
-        return self.db.query_first(
+        return self.db.sel_first(
             query_max_invoice_add_index(self.ln_node_id), lambda p: p, 0
         )
 
@@ -447,6 +447,6 @@ class TrackerStore:
         Returns the count of forwarding events.
         """
 
-        return self.db.query_first(
+        return self.db.sel_first(
             query_count_settled_forwarding_events(self.ln_node_id), lambda p: p, 0
         )

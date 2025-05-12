@@ -303,8 +303,8 @@ class MainServer(BaseServer):
         if conf is not None:
             service = service_type(
                 get_config=get_config,
-                db_to_csv=self.cfg.db.query_all_to_csv,
-                db_delete_data=self.cfg.db.core_delete,
+                db_to_csv=self.cfg.db.sel_all_to_csv,
+                db_delete_data=self.cfg.db.del_core,
             )
             runner.register_task(service.run)
             self._register_tracker(tracker)

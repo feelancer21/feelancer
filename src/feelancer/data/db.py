@@ -160,7 +160,7 @@ class FeelancerDB:
 
                 raise e
 
-    def query_all_to_list(
+    def sel_all_to_list(
         self, qry: Select[tuple[T]], convert: Callable[[T], V]
     ) -> list[V]:
         """
@@ -178,7 +178,7 @@ class FeelancerDB:
 
         return self._execute(get_data, to_list)
 
-    def query_all_to_dict(
+    def sel_all_to_dict(
         self, qry: Select[tuple[T]], key: Callable[[T], V], value: Callable[[T], W]
     ) -> dict[V, W]:
         """
@@ -196,7 +196,7 @@ class FeelancerDB:
 
         return self._execute(get_data, to_dict)
 
-    def qry_all_to_field_dict_gen(self, qry: Select[tuple[T]]) -> Generator[dict]:
+    def sel_all_to_field_dict_gen(self, qry: Select[tuple[T]]) -> Generator[dict]:
         """
         Executes the query and returns a generator of dictionaries. Each dict
         contains all fields as key value pairs, including the joined load data.
@@ -208,7 +208,7 @@ class FeelancerDB:
 
         return self._execute(get_data, _create_dict_gen_call(qry))
 
-    def query_all_to_csv(
+    def sel_all_to_csv(
         self,
         qry: Select[tuple[T, ...]],
         file_path: str,
@@ -240,7 +240,7 @@ class FeelancerDB:
         # Atomically move the temporary file to the final destination
         os.replace(temp_path, path)
 
-    def query_first(
+    def sel_first(
         self, qry: Select[tuple[T]], convert: Callable[[T], V], default: W = None
     ) -> V | W:
         """
@@ -305,7 +305,7 @@ class FeelancerDB:
         for chunk in batched(iter, chunk_size):
             self.execute(lambda session: session.add_all(chunk))
 
-    def core_delete(self, queries: Iterable[Delete[tuple]] | Delete[tuple]) -> None:
+    def del_core(self, queries: Iterable[Delete[tuple]] | Delete[tuple]) -> None:
         """
         Deletes all data from the database using the core API. One can provide
         a single query or an iterable of queries. In the latter case all queries
@@ -333,7 +333,7 @@ class SessionExecutor:
     def __init__(self, session: Session) -> None:
         self.session = session
 
-    def query_all_to_list(
+    def sel_all_to_list(
         self, qry: Select[tuple[T]], convert: Callable[[T], V]
     ) -> list[V]:
         """
@@ -343,7 +343,7 @@ class SessionExecutor:
         """
         return [convert(r) for r in self.session.execute(qry).scalars().all()]
 
-    def query_all_to_dict(
+    def sel_all_to_dict(
         self, qry: Select[tuple[T]], key: Callable[[T], V], value: Callable[[T], W]
     ) -> dict[V, W]:
         """
@@ -352,7 +352,7 @@ class SessionExecutor:
         """
         return {key(r): value(r) for r in self.session.execute(qry).scalars().all()}
 
-    def query_first(
+    def sel_first(
         self, qry: Select[tuple[T]], convert: Callable[[T], V], default: W = None
     ) -> V | W:
         """
