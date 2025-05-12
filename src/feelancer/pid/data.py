@@ -486,7 +486,7 @@ class PidStore:
                 c.ewma_controller
             )
 
-        return self.db.query_first(qry, convert, (None, None))
+        return self.db.sel_first(qry, convert, (None, None))
 
     def ewma_params_by_pub_key(
         self, peer_pub_key: str
@@ -511,7 +511,7 @@ class PidStore:
                 c.ewma_controller.delta_time,
             )
 
-        return self.db.query_all_to_list(qry, convert)
+        return self.db.sel_all_to_list(qry, convert)
 
     def ewma_params_by_run(self, run_id: int) -> dict[str, EwmaControllerParams]:
         """
@@ -526,7 +526,7 @@ class PidStore:
         def pub_key(c: DBPidSpreadController) -> str:
             return c.peer.pub_key
 
-        return self.db.query_all_to_dict(qry, pub_key, _convert_spread_controller)
+        return self.db.sel_all_to_dict(qry, pub_key, _convert_spread_controller)
 
     def mr_params_by_run(self, run_id: int) -> MrControllerParams | None:
         """
@@ -535,7 +535,7 @@ class PidStore:
 
         qry = query_margin_controller(run_id=run_id, order_by_run_id_asc=True)
 
-        return self.db.query_first(qry, _convert_margin_controller)
+        return self.db.sel_first(qry, _convert_margin_controller)
 
     def mr_params_history(
         self,
@@ -553,7 +553,7 @@ class PidStore:
                 _convert_mr_controller(c.mr_controller),
             )
 
-        return self.db.query_all_to_list(qry, convert)
+        return self.db.sel_all_to_list(qry, convert)
 
     def pid_run_last(self) -> tuple[int, datetime] | tuple[None, None]:
 
@@ -562,7 +562,7 @@ class PidStore:
         def convert(r: DBPidRun) -> tuple[int, datetime]:
             return r.run_id, r.run.timestamp_start
 
-        return self.db.query_first(qry, convert, (None, None))
+        return self.db.sel_first(qry, convert, (None, None))
 
 
 class PidDictGen:
@@ -581,7 +581,7 @@ class PidDictGen:
 
         qry = query_spread_controller(order_by_run_id_asc=True)
 
-        return self.db.qry_all_to_field_dict_gen(qry)
+        return self.db.sel_all_to_field_dict_gen(qry)
 
     def margin_controller(self) -> Generator[dict]:
         """
@@ -590,4 +590,4 @@ class PidDictGen:
 
         qry = query_margin_controller(order_by_run_id_asc=True)
 
-        return self.db.qry_all_to_field_dict_gen(qry)
+        return self.db.sel_all_to_field_dict_gen(qry)

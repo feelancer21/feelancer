@@ -161,7 +161,7 @@ class LightningStore:
         """
 
         def get_local_node() -> DBLnNode | None:
-            return self.db.query_first(query_node(self.pubkey_local), lambda c: c)
+            return self.db.sel_first(query_node(self.pubkey_local), lambda c: c)
 
         ln_node: DBLnNode | None = get_local_node()
         if ln_node is None:
@@ -182,7 +182,7 @@ class LightningStore:
         def key(p: DBLnChannelPolicy) -> int:
             return p.static.chan_id
 
-        return self.db.query_all_to_dict(qry, key, _convert_channel_policy)
+        return self.db.sel_all_to_dict(qry, key, _convert_channel_policy)
 
 
 class LightningSessionCache:
@@ -216,7 +216,7 @@ class LightningSessionCache:
         if self._channel_peer:
             return self._channel_peer
 
-        self._channel_peer = self.exec.query_all_to_dict(
+        self._channel_peer = self.exec.sel_all_to_dict(
             query_channel_peers(), lambda c: c.pub_key, lambda c: c
         )
 
@@ -245,7 +245,7 @@ class LightningSessionCache:
             qry = query_channel_static(self.ln_node.id)
 
             # We transform the result to a dict with (node_id, chan_id) as key.
-            self._channel_static = self.exec.query_all_to_dict(
+            self._channel_static = self.exec.sel_all_to_dict(
                 qry, lambda c: (c.ln_node_id, c.chan_id), lambda c: c
             )
 
@@ -323,7 +323,7 @@ class LightningSessionCache:
     def _local_node(self) -> DBLnNode:
         pub_key = self.ln.pubkey_local
 
-        return self.exec.query_first(
+        return self.exec.sel_first(
             query_node(pub_key), lambda c: c, _new_ln_node(pub_key)
         )
 
