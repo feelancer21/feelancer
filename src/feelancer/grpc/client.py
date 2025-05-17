@@ -357,6 +357,9 @@ class StreamDispatcher(Generic[T], BaseServer):
                 # If there is an unknown exception we break here and start
                 # with a new reconciliation. Maybe data have been run out of sync.
                 if isinstance(m, Exception):
+                    self._logger.warning(
+                        f"New reconciliation needed; received exception: {m}"
+                    )
                     break
 
                 yield from convert(m, in_recon)
@@ -390,16 +393,8 @@ class StreamDispatcher(Generic[T], BaseServer):
 
             self._start_stream(stream_initializer)
 
-            # If the stream was closed by the user, an LocallyCancelled exception
-            # is raised. But sometimes this is not the case (e.g. SubscribeInvoice).
-            # In this case we raise an exception here.
-            raise Exception("Stream closed unexpected and not raised an error.")
-
         # Unexpected errors are raised
         except Exception as e:
-
-            # Signaling the end of the queue to the consumers.
-            self._put_to_queues(e)
 
             if isinstance(e, LocallyCancelled):
                 # User ended the stream.
@@ -416,14 +411,36 @@ class StreamDispatcher(Generic[T], BaseServer):
         # Creating a new stream in the grpc channel, decorates with an error handler
         self._stream = stream_initializer(self._request)
 
+        # Decorating the stream with an error handler.
+        handled_stream = self._handle_rpc_stream(self._stream)  # type: ignore
+
         self._logger.debug("Starting stream...")
         try:
+            # Fetching the first message from the stream. In case of an error
+            # we will not set the _is_receiving flag. This can be the case
+            # when the server is still unavailable.
+            self._put_to_queues(next(handled_stream))
+
             self._is_receiving.set()
-            # Receiving of the grp messages
-            for m in self._handle_rpc_stream(self._stream):  # type: ignore
+
+            # Receiving the grpc messages
+            for m in handled_stream:
                 self._put_to_queues(m)
 
+            # The normal case is that the stream is ended by an raised exception,
+            # either an LocallyCancelled (if the user closed the stream)
+            # or another exception. But sometimes the stream is closed without an
+            # error (e.g. SubscribeInvoice). In this case we have to raise an
+            # exception here.
+            raise Exception("Stream closed unexpected and not raised an error.")
+
         except Exception as e:
+            # Don't wanna trigger reconciliation if the exception _is_receiving
+            # flag is not set.
+            if self._is_receiving.is_set():
+                # Signaling the end of the queue to the consumers.
+                self._put_to_queues(e)
+
             raise e
 
         finally:
