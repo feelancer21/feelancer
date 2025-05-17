@@ -146,6 +146,11 @@ class LNDPaymentTracker(LndBaseTracker):
                 )
                 pass
 
+        # There are payment messages with no htlcs, which we are not interested in.
+        # We skip these messages to avoid handling of unnecessary exceptions.
+        if len(p.htlcs) == 0:
+            return
+
         payment = self._create_payment(p)
 
         # Check if we have already stored the payment request in the database.
