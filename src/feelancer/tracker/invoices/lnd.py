@@ -150,6 +150,7 @@ class LNDInvoiceTracker(LndBaseTracker):
                 self._create_htlc(h, invoice.r_preimage) for h in invoice.htlcs
             ],
             r_hash=bytes_to_str(invoice.r_hash),
+            payment_request=invoice.payment_request,
             creation_time=sec_to_datetime(invoice.creation_date),
             value_msat=invoice.value_msat,
             add_index=invoice.add_index,
