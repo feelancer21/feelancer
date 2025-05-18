@@ -1,5 +1,5 @@
 import functools
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from datetime import datetime
 
 from sqlalchemy import Delete, Float, Select, cast, delete, desc, func, select
@@ -36,21 +36,6 @@ CACHE_SIZE_PAYMENT_ID = 100000
 CACHE_SIZE_INVOICE_ID = 100000
 CACHE_SIZE_GRAPH_NODE_ID = 50000
 CACHE_SIZE_GRAPH_PATH = 100000
-
-
-class PaymentNotFound(Exception): ...
-
-
-class PaymentRequestNotFound(Exception): ...
-
-
-class GraphNodeNotFound(Exception): ...
-
-
-class GraphPathNotFound(Exception): ...
-
-
-class InvoiceNotFound(Exception): ...
 
 
 def create_operation_from_htlcs(
@@ -336,22 +321,34 @@ class TrackerStore:
     def __init__(self, db: FeelancerDB, ln_node_id: int) -> None:
         self.db = db
         self.db.create_base(Base)
-
         self.ln_node_id = ln_node_id
 
-    def add_graph_node(self, pub_key: str) -> int:
-        """
-        Adds a graph node to the database. Returns the id of the graph node.
-        """
+        self._get_graph_node_id_or_add = self.db.new_get_id_or_add(
+            get_qry=query_graph_node,
+            read_id=lambda p: p.id,
+        )
 
-        return self.db.add_post(GraphNode(pub_key=pub_key), lambda p: p.id)
+        self._get_graph_path_id_or_add = self.db.new_get_id_or_add(
+            get_qry=query_graph_path,
+            read_id=lambda p: p.id,
+        )
 
-    def add_graph_path(self, path: GraphPath) -> int:
-        """
-        Adds a graph path to the database. Returns the id of the graph path.
-        """
+        self._get_invoice_id: Callable[[int, None], int] = self.db.new_get_id_or_add(
+            get_qry=lambda index: query_invoice(self.ln_node_id, index),
+            read_id=lambda p: p.id,
+        )
 
-        return self.db.add_post(path, lambda p: p.id)
+        self._get_payment_id: Callable[[int, None], int] = self.db.new_get_id_or_add(
+            get_qry=lambda index: query_payment(self.ln_node_id, index),
+            read_id=lambda p: p.id,
+        )
+
+        self._get_payment_request_id: Callable[[str, None], int] = (
+            self.db.new_get_id_or_add(
+                get_qry=query_payment_request,
+                read_id=lambda p: p.id,
+            )
+        )
 
     def delete_orphaned_payments(self) -> None:
         """
@@ -362,18 +359,35 @@ class TrackerStore:
         # TODO: Delete orphaned graph paths and graph nodes
         self.db.del_core(delete_orphaned_payment_requests())
 
+    @functools.lru_cache(maxsize=CACHE_SIZE_GRAPH_NODE_ID)
+    def get_graph_node_id(self, pub_key: str) -> int:
+        """
+        Returns the id of the graph node for a given pub key. If the node does
+        not exist, it is added to the database.
+        """
+
+        return self._get_graph_node_id_or_add(
+            pub_key, lambda: GraphNode(pub_key=pub_key)
+        )
+
+    @functools.lru_cache(maxsize=CACHE_SIZE_GRAPH_PATH)
+    def get_graph_path_id(self, node_ids: tuple[int, ...]) -> int:
+        """
+        Returns the id of the graph path for a given tuple of node ids. If the
+        path does not exist, it is added to the database.
+        """
+
+        return self._get_graph_path_id_or_add(
+            node_ids, lambda: GraphPath(node_ids=node_ids)
+        )
+
     @functools.lru_cache(maxsize=CACHE_SIZE_PAYMENT_ID)
     def get_payment_id(self, payment_index: int) -> int:
         """
         Returns the tx id for a given payment index.
         """
 
-        id = self.db.sel_first(
-            query_payment(self.ln_node_id, payment_index), lambda p: p.id
-        )
-        if id is None:
-            raise PaymentNotFound(f"Payment with {payment_index=} not found.")
-        return id
+        return self._get_payment_id(payment_index, None)
 
     @functools.lru_cache(maxsize=CACHE_SIZE_PAYMENT_REQUEST_ID)
     def get_payment_request_id(self, payment_hash: str) -> int:
@@ -381,44 +395,7 @@ class TrackerStore:
         Returns the payment id for a given payment hash.
         """
 
-        id = self.db.sel_first(query_payment_request(payment_hash), lambda p: p.id)
-        if id is None:
-            raise PaymentRequestNotFound(
-                f"Payment request with hash {payment_hash} not found."
-            )
-        return id
-
-    @functools.lru_cache(maxsize=CACHE_SIZE_GRAPH_NODE_ID)
-    def get_graph_node_id(self, pub_key: str) -> int:
-        """
-        Returns the graph node id for a given pub key.
-        """
-
-        id = self.db.sel_first(query_graph_node(pub_key), lambda p: p.id)
-        if id is None:
-            raise GraphNodeNotFound(f"Graph node with key {pub_key} not found.")
-        return id
-
-    @functools.lru_cache(maxsize=CACHE_SIZE_GRAPH_PATH)
-    def get_graph_path_id(self, node_ids: tuple[int]) -> int:
-        """
-        Returns the graph path id for a given tuple of node ids.
-        """
-        # Using tuple because lis is not hashable
-
-        id = self.db.sel_first(query_graph_path(node_ids), lambda p: p.id)
-        if id is None:
-            raise GraphPathNotFound(f"Graph path with {node_ids=} not found.")
-        return id
-
-    def get_max_payment_index(self) -> int:
-        """
-        Returns the maximum payment index.
-        """
-
-        return self.db.sel_first(
-            query_max_payment_index(self.ln_node_id), lambda p: p, 0
-        )
+        return self._get_payment_request_id(payment_hash, None)
 
     @functools.lru_cache(maxsize=CACHE_SIZE_INVOICE_ID)
     def get_invoice_id(self, add_index: int) -> int:
@@ -426,12 +403,7 @@ class TrackerStore:
         Returns the tx id for a given add_index.
         """
 
-        id = self.db.sel_first(
-            query_invoice(self.ln_node_id, add_index), lambda p: p.id
-        )
-        if id is None:
-            raise InvoiceNotFound(f"Invoice with {add_index=} not found.")
-        return id
+        return self._get_invoice_id(add_index, None)
 
     def get_max_invoice_add_index(self) -> int:
         """
@@ -440,6 +412,15 @@ class TrackerStore:
 
         return self.db.sel_first(
             query_max_invoice_add_index(self.ln_node_id), lambda p: p, 0
+        )
+
+    def get_max_payment_index(self) -> int:
+        """
+        Returns the maximum payment index.
+        """
+
+        return self.db.sel_first(
+            query_max_payment_index(self.ln_node_id), lambda p: p, 0
         )
 
     def get_count_forwarding_events(self) -> int:
