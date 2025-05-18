@@ -3,21 +3,14 @@ from collections.abc import Callable, Generator
 
 import pytz
 
+from feelancer.data.db import GetIdException
 from feelancer.grpc.client import StreamConverter
 from feelancer.lightning.lnd import LNDClient
 from feelancer.lnd.grpc_generated import lightning_pb2 as ln
-from feelancer.tracker.data import (
-    GraphNodeNotFound,
-    GraphPathNotFound,
-    PaymentNotFound,
-    PaymentRequestNotFound,
-    TrackerStore,
-    create_operation_from_htlcs,
-)
+from feelancer.tracker.data import TrackerStore, create_operation_from_htlcs
 from feelancer.tracker.lnd import LndBaseTracker
 from feelancer.tracker.models import (
     FailureCode,
-    GraphPath,
     Hop,
     HtlcDirectionType,
     HtlcPayment,
@@ -140,7 +133,7 @@ class LNDPaymentTracker(LndBaseTracker):
             try:
                 self._store.get_payment_id(p.payment_index)
                 return
-            except PaymentNotFound:
+            except GetIdException:
                 self._logger.debug(
                     f"Payment reconciliation: {p.payment_index=} not found."
                 )
@@ -160,16 +153,13 @@ class LNDPaymentTracker(LndBaseTracker):
                 p.payment_hash
             )
 
-        except PaymentRequestNotFound:
+        except GetIdException:
             payment.payment_request = PaymentRequest(
                 payment_hash=p.payment_hash,
                 payment_request=p.payment_request if p.payment_request != "" else None,
             )
 
-        yield create_operation_from_htlcs(
-            txs=[payment],
-            htlcs=payment.htlcs,
-        )
+        yield create_operation_from_htlcs(txs=[payment], htlcs=payment.htlcs)
 
     def _create_payment(self, payment: ln.Payment) -> Payment:
         """
@@ -247,7 +237,7 @@ class LNDPaymentTracker(LndBaseTracker):
         path: list[int] = []
 
         # For data analysis we want to store the first hop as a separate entry.
-        node_id = self._get_graph_node_id(self._pub_key)
+        node_id = self._store.get_graph_node_id(self._pub_key)
         hop_orm = Hop(
             position_id=0,
             expiry=route.total_time_lock,
@@ -261,7 +251,7 @@ class LNDPaymentTracker(LndBaseTracker):
 
         for i, hop in enumerate(route.hops):
             last_node_id = node_id
-            node_id = self._get_graph_node_id(hop.pub_key)
+            node_id = self._store.get_graph_node_id(hop.pub_key)
             path.append(node_id)
 
             hop_orm.outgoing_node_id = node_id
@@ -345,21 +335,6 @@ class LNDPaymentTracker(LndBaseTracker):
             num_hops_successful=last_used_hop_index,
         )
 
-    def _get_graph_node_id(self, pub_key: str) -> int:
-        """
-        Returns the id of a graph node. If not found it will be added to the database.
-        """
-
-        try:
-            return self._store.get_graph_node_id(pub_key)
-        except GraphNodeNotFound:
-            return self._store.add_graph_node(pub_key)
-
     def _get_graph_path_id(self, path: list[int]) -> int:
 
-        node_ids = tuple(path)
-        try:
-            path_id = self._store.get_graph_path_id(node_ids)
-        except GraphPathNotFound:
-            path_id = self._store.add_graph_path(GraphPath(node_ids=node_ids))
-        return path_id
+        return self._store.get_graph_path_id(tuple(path))

@@ -30,6 +30,9 @@ MIN_TOLERANCE_DELTA = 60
 logger = getLogger(__name__)
 
 
+class GetIdException(Exception): ...
+
+
 def _fields_to_dict(result, relations: dict[str, dict]) -> dict:
     """
     Transforms all columns of a result to dictionary.
@@ -159,6 +162,43 @@ class FeelancerDB:
                     session.rollback()
 
                 raise e
+
+    def new_get_id_or_add(
+        self,
+        get_qry: Callable[[V], Select[tuple[T]]],
+        read_id: Callable[[T], int],
+    ) -> Callable[[V, Callable[[], T] | None], int]:
+        """
+        Returns a closure which can be used to get the id of an object or add it
+        to the database if it does not exist.
+        """
+
+        def get_id(qry: Select[tuple[T]]) -> int:
+            # Execute the query and reads the id of the first result.
+            if (id := self.sel_first(qry, read_id)) is None:
+                raise GetIdException()
+            return id
+
+        def get_id_or_add(key: V, get_new_obj: Callable[[], T] | None) -> int:
+            # We test if the object exists in the database. If it does not exist
+            # we create a new object and add it to the database, if get_new_obj
+            # is set.
+
+            qry = get_qry(key)
+            try:
+                return get_id(qry)
+            except GetIdException as e:
+                if get_new_obj is None:
+                    raise e
+
+                # If the object does not exist we add a new one. It there is
+                # was race with another thread, an IntegrityError is raised.
+                try:
+                    return self.add_post(get_new_obj(), read_id)
+                except IntegrityError:
+                    return get_id(qry)
+
+        return get_id_or_add
 
     def sel_all_to_list(
         self, qry: Select[tuple[T]], convert: Callable[[T], V]
