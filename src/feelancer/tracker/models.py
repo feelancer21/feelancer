@@ -592,25 +592,6 @@ class PaymentFailureReason(PyEnum):
     FAILURE_REASON_CANCELED = 6
 
 
-class PaymentRequest(Base):
-    __tablename__ = "ln_payment_request"
-
-    # unique identifier of the payment request
-    id: Mapped[int] = mapped_column(autoincrement=True, primary_key=True)
-
-    # The payment hash
-    payment_hash: Mapped[str] = mapped_column(
-        String, nullable=False, index=True, unique=True
-    )
-
-    # The optional payment request being fulfilled
-    payment_request: Mapped[str] = mapped_column(String, nullable=True)
-
-    payments: Mapped[list[Payment]] = relationship(
-        "Payment", back_populates="payment_request"
-    )
-
-
 class Payment(Transaction):
     __tablename__ = "ln_payment"
     __tx_type__ = TransactionType.LN_PAYMENT
@@ -621,12 +602,10 @@ class Payment(Transaction):
 
     transaction: Mapped[Transaction] = relationship(Transaction, uselist=False)
 
-    payment_request_id: Mapped[int] = mapped_column(
-        ForeignKey("ln_payment_request.id", ondelete="CASCADE"), index=True
-    )
-    payment_request: Mapped[PaymentRequest] = relationship(
-        PaymentRequest, uselist=False, back_populates="payments"
-    )
+    # The payment hash
+    payment_hash: Mapped[str] = mapped_column(String, nullable=False, index=True)
+
+    payment_request: Mapped[str] = mapped_column(String, nullable=True)
 
     htlcs: Mapped[list[HtlcPayment]] = relationship(
         "HtlcPayment", back_populates="payment"
@@ -769,6 +748,8 @@ class Invoice(Transaction):
 
     # The payment hash
     r_hash: Mapped[str] = mapped_column(String, nullable=False)
+
+    payment_request: Mapped[str] = mapped_column(String, nullable=True)
 
     # The value of the invoice in milli-satoshis
     value_msat: Mapped[int] = mapped_column(BigInteger, nullable=False)
