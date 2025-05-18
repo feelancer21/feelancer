@@ -3,10 +3,11 @@ from collections.abc import Callable, Generator
 
 import pytz
 
+from feelancer.data.db import GetIdException
 from feelancer.grpc.client import StreamConverter
 from feelancer.lightning.lnd import LNDClient
 from feelancer.lnd.grpc_generated import lightning_pb2 as ln
-from feelancer.tracker.data import InvoiceNotFound, create_operation_from_htlcs
+from feelancer.tracker.data import create_operation_from_htlcs
 from feelancer.tracker.lnd import LndBaseTracker, TrackerStore
 from feelancer.tracker.models import (
     HtlcDirectionType,
@@ -119,7 +120,7 @@ class LNDInvoiceTracker(LndBaseTracker):
                 # process it
                 self._store.get_invoice_id(i.add_index)
                 return None
-            except InvoiceNotFound:
+            except GetIdException:
                 self._logger.debug(
                     f"Invoice reconciliation: {i.add_index=}; {i.settle_index=} not found."
                 )

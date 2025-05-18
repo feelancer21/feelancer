@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
-from feelancer.data.db import SessionExecutor
+from feelancer.data.db import GetIdException, SessionExecutor
 from feelancer.lightning.client import ChannelPolicy, LightningClient
 from feelancer.lightning.models import (
     Base,
@@ -154,26 +154,23 @@ class LightningStore:
         self.db.create_base(Base)
         self.pubkey_local = pubkey_local
 
+        self._get_node_id_or_add = self.db.new_get_id_or_add(
+            get_qry=query_node, read_id=lambda n: n.id
+        )
+
     @property
     def ln_node_id(self) -> int:
         """
         Returns the id of the lightning node.
         """
 
-        def get_local_node() -> DBLnNode | None:
-            return self.db.sel_first(query_node(self.pubkey_local), lambda c: c)
-
-        ln_node: DBLnNode | None = get_local_node()
-        if ln_node is None:
-            ln_node = self.db.execute_post(
-                lambda s: s.add(_new_ln_node(self.pubkey_local)), lambda c: c
+        try:
+            # We try to get the node id from the database.
+            return self._get_node_id_or_add(
+                self.pubkey_local, lambda: _new_ln_node(self.pubkey_local)
             )
-            ln_node: DBLnNode | None = get_local_node()
-
-        if ln_node is None:
+        except GetIdException:
             raise Exception(f"Cannot get node.id for {self.pubkey_local=}")
-
-        return ln_node.id
 
     def local_policies(self, run_id: int, sequence_id: int) -> dict[int, ChannelPolicy]:
 
