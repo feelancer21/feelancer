@@ -24,7 +24,6 @@ from .models import (
     OperationLedgerEvent,
     OperationTransaction,
     Payment,
-    PaymentRequest,
     Route,
     Transaction,
     TransactionResolveInfo,
@@ -57,12 +56,6 @@ def create_operation_from_htlcs(
         op_events.append(OperationLedgerEvent(ledger_event=levent))
 
     return Operation(operation_transactions=op_txs, operation_ledger_events=op_events)
-
-
-def query_payment_request(payment_hash: str) -> Select[tuple[PaymentRequest]]:
-    qry = select(PaymentRequest).where(PaymentRequest.payment_hash == payment_hash)
-
-    return qry
 
 
 def query_payment(ln_node_id: int, payment_index: int) -> Select[tuple[Payment]]:
@@ -308,14 +301,6 @@ def delete_failed_payments(deletion_cutoff: datetime) -> Delete[tuple[Transactio
     )
 
 
-def delete_orphaned_payment_requests() -> Delete[tuple[int]]:
-    """
-    Returns a query to delete all orphaned payment requests.
-    """
-
-    return delete(PaymentRequest).where(~PaymentRequest.payments.any())
-
-
 class TrackerStore:
 
     def __init__(self, db: FeelancerDB, ln_node_id: int) -> None:
@@ -333,31 +318,27 @@ class TrackerStore:
             read_id=lambda p: p.id,
         )
 
-        self._get_invoice_id: Callable[[int, None], int] = self.db.new_get_id_or_add(
-            get_qry=lambda index: query_invoice(self.ln_node_id, index),
-            read_id=lambda p: p.id,
-        )
-
-        self._get_payment_id: Callable[[int, None], int] = self.db.new_get_id_or_add(
-            get_qry=lambda index: query_payment(self.ln_node_id, index),
-            read_id=lambda p: p.id,
-        )
-
-        self._get_payment_request_id: Callable[[str, None], int] = (
+        self._get_invoice_id_or_add: Callable[[int, None], int] = (
             self.db.new_get_id_or_add(
-                get_qry=query_payment_request,
+                get_qry=lambda index: query_invoice(self.ln_node_id, index),
+                read_id=lambda p: p.id,
+            )
+        )
+
+        self._get_payment_id_or_add: Callable[[int, None], int] = (
+            self.db.new_get_id_or_add(
+                get_qry=lambda index: query_payment(self.ln_node_id, index),
                 read_id=lambda p: p.id,
             )
         )
 
     def delete_orphaned_payments(self) -> None:
         """
-        Deletes all orphaned objects of this store. Atm only orphaned payment
-        requests are deleted.
+        Deletes all orphaned objects of this store.
         """
 
-        # TODO: Delete orphaned graph paths and graph nodes
-        self.db.del_core(delete_orphaned_payment_requests())
+        # Not needed at the moment
+        return None
 
     @functools.lru_cache(maxsize=CACHE_SIZE_GRAPH_NODE_ID)
     def get_graph_node_id(self, pub_key: str) -> int:
@@ -387,15 +368,7 @@ class TrackerStore:
         Returns the tx id for a given payment index.
         """
 
-        return self._get_payment_id(payment_index, None)
-
-    @functools.lru_cache(maxsize=CACHE_SIZE_PAYMENT_REQUEST_ID)
-    def get_payment_request_id(self, payment_hash: str) -> int:
-        """
-        Returns the payment id for a given payment hash.
-        """
-
-        return self._get_payment_request_id(payment_hash, None)
+        return self._get_payment_id_or_add(payment_index, None)
 
     @functools.lru_cache(maxsize=CACHE_SIZE_INVOICE_ID)
     def get_invoice_id(self, add_index: int) -> int:
@@ -403,7 +376,7 @@ class TrackerStore:
         Returns the tx id for a given add_index.
         """
 
-        return self._get_invoice_id(add_index, None)
+        return self._get_invoice_id_or_add(add_index, None)
 
     def get_max_invoice_add_index(self) -> int:
         """

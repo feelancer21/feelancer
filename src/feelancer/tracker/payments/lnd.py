@@ -21,7 +21,6 @@ from feelancer.tracker.models import (
     Operation,
     Payment,
     PaymentFailureReason,
-    PaymentRequest,
     PaymentResolveInfo,
     Route,
     TransactionResolveInfo,
@@ -146,19 +145,6 @@ class LNDPaymentTracker(LndBaseTracker):
 
         payment = self._create_payment(p)
 
-        # Check if we have already stored the payment request in the database.
-        # Maybe from the last run.
-        try:
-            payment.payment_request_id = self._store.get_payment_request_id(
-                p.payment_hash
-            )
-
-        except GetIdException:
-            payment.payment_request = PaymentRequest(
-                payment_hash=p.payment_hash,
-                payment_request=p.payment_request if p.payment_request != "" else None,
-            )
-
         yield create_operation_from_htlcs(txs=[payment], htlcs=payment.htlcs)
 
     def _create_payment(self, payment: ln.Payment) -> Payment:
@@ -186,6 +172,8 @@ class LNDPaymentTracker(LndBaseTracker):
             uuid=Payment.generate_uuid(self._store.ln_node_id, payment.payment_index),
             ln_node_id=self._store.ln_node_id,
             creation_time=ns_to_datetime(payment.creation_time_ns),
+            payment_hash=payment.payment_hash,
+            payment_request=payment.payment_request,
             payment_index=payment.payment_index,
             payment_resolve_info=payment_resolve_info,
             resolve_info=resolve_info,
