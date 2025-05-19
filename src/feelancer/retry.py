@@ -14,7 +14,7 @@ DEFAULT_DELAY = 300  # 5 minutes
 DEFAULT_MIN_TOLERANCE_DELTA = 900  # 15 minutes
 
 
-def create_retry_handler(
+def new_retry_handler(
     exceptions_retry: tuple[type[Exception], ...],
     exceptions_raise: tuple[type[Exception], ...],
     max_retries: int,
@@ -76,7 +76,7 @@ def create_retry_handler(
     return retry_handler
 
 
-default_retry_handler = create_retry_handler(
+default_retry_handler = new_retry_handler(
     exceptions_raise=DEFAULT_EXCEPTIONS_RAISE,
     exceptions_retry=DEFAULT_EXCEPTIONS_RETRY,
     max_retries=DEFAULT_MAX_RETRIES,

@@ -37,7 +37,7 @@ CACHE_SIZE_GRAPH_NODE_ID = 50000
 CACHE_SIZE_GRAPH_PATH = 100000
 
 
-def create_operation_from_htlcs(
+def new_operation_from_htlcs(
     txs: list[Transaction], htlcs: Sequence[Htlc]
 ) -> Operation:
 
@@ -305,7 +305,7 @@ class TrackerStore:
 
     def __init__(self, db: FeelancerDB, ln_node_id: int) -> None:
         self.db = db
-        self.db.create_base(Base)
+        self.db.new_base(Base)
         self.ln_node_id = ln_node_id
 
         self._get_graph_node_id_or_add = self.db.new_get_id_or_add(

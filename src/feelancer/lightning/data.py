@@ -151,7 +151,7 @@ class LightningStore:
 
     def __init__(self, db: FeelancerDB, pubkey_local: str) -> None:
         self.db = db
-        self.db.create_base(Base)
+        self.db.new_base(Base)
         self.pubkey_local = pubkey_local
 
         self._get_node_id_or_add = self.db.new_get_id_or_add(
@@ -248,7 +248,7 @@ class LightningSessionCache:
 
         # Creating DBLnChannelStatic for new channels
         for channel in self.ln.channels.values():
-            idx = self._create_chan_idx(channel)
+            idx = self._new_chan_idx(channel)
 
             if not (self._channel_static.get(idx)):
                 self._channel_static[idx] = _new_channel_static(
@@ -269,7 +269,7 @@ class LightningSessionCache:
 
         self._channel_liquidity = {}
         for channel in self.ln.channels.values():
-            idx = self._create_chan_idx(channel)
+            idx = self._new_chan_idx(channel)
 
             self._channel_liquidity[idx] = _new_channel_liquidity(
                 channel, self.channel_static_by(channel), self.ln_run
@@ -292,7 +292,7 @@ class LightningSessionCache:
 
         policies = self._channel_policies[pol_idx] = {}
         for channel in self.ln.channels_by_sequence(sequence_id).values():
-            idx = self._create_chan_idx(channel)
+            idx = self._new_chan_idx(channel)
             static = self.channel_static_by(channel)
             if local:
                 policy = channel.policy_local
@@ -315,7 +315,7 @@ class LightningSessionCache:
     def channel_static_by(self, channel: Channel) -> DBLnChannelStatic:
         """Returns DBLnChannelStatic for a given channel"""
 
-        return self.channel_static[self._create_chan_idx(channel)]
+        return self.channel_static[self._new_chan_idx(channel)]
 
     def _local_node(self) -> DBLnNode:
         pub_key = self.ln.pubkey_local
@@ -324,7 +324,7 @@ class LightningSessionCache:
             query_node(pub_key), lambda c: c, _new_ln_node(pub_key)
         )
 
-    def _create_chan_idx(self, channel: Channel) -> ChannelIDX:
+    def _new_chan_idx(self, channel: Channel) -> ChannelIDX:
         return (self.ln_node.id, channel.chan_id)
 
 

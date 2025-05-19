@@ -8,7 +8,7 @@ from typing import cast
 from unittest.mock import MagicMock
 
 from feelancer.config import FeelancerPeersConfig
-from feelancer.lightning.chan_updates import PolicyProposal, _create_update_policies
+from feelancer.lightning.chan_updates import PolicyProposal, _new_update_policies
 from feelancer.lightning.client import Channel, ChannelPolicy
 
 
@@ -714,12 +714,10 @@ class TestCreateUpdatePolicies(unittest.TestCase):
             )
         )
 
-    def test_create_update_policies(self):
+    def test_new_update_policies(self):
 
         for t in self.testcases:
-            res = _create_update_policies(
-                t.proposals, t.pub_key, t.peer_config, t.timenow
-            )
+            res = _new_update_policies(t.proposals, t.pub_key, t.peer_config, t.timenow)
             msg = f"failed testcase: {t=}, result: {res=}"
             self.assertIsInstance(res, dict)
 

@@ -7,7 +7,7 @@ from feelancer.data.db import GetIdException
 from feelancer.grpc.client import StreamConverter
 from feelancer.lightning.lnd import LNDClient
 from feelancer.lnd.grpc_generated import lightning_pb2 as ln
-from feelancer.tracker.data import TrackerStore, create_operation_from_htlcs
+from feelancer.tracker.data import TrackerStore, new_operation_from_htlcs
 from feelancer.tracker.lnd import LndBaseTracker
 from feelancer.tracker.models import (
     FailureCode,
@@ -143,11 +143,11 @@ class LNDPaymentTracker(LndBaseTracker):
         if len(p.htlcs) == 0:
             return
 
-        payment = self._create_payment(p)
+        payment = self._new_payment(p)
 
-        yield create_operation_from_htlcs(txs=[payment], htlcs=payment.htlcs)
+        yield new_operation_from_htlcs(txs=[payment], htlcs=payment.htlcs)
 
-    def _create_payment(self, payment: ln.Payment) -> Payment:
+    def _new_payment(self, payment: ln.Payment) -> Payment:
         """
         Converts a payment object from the LND gRPC API to a Payment
         """
@@ -177,10 +177,10 @@ class LNDPaymentTracker(LndBaseTracker):
             payment_index=payment.payment_index,
             payment_resolve_info=payment_resolve_info,
             resolve_info=resolve_info,
-            htlcs=[self._create_htlc(h) for h in payment.htlcs],
+            htlcs=[self._new_htlc(h) for h in payment.htlcs],
         )
 
-    def _create_htlc(self, attempt: ln.HTLCAttempt) -> HtlcPayment:
+    def _new_htlc(self, attempt: ln.HTLCAttempt) -> HtlcPayment:
 
         # Determination of the index of the last used hop. It is the failure source
         # index if the attempt failed. If the attempt succeeded it is the receiver
@@ -192,11 +192,11 @@ class LNDPaymentTracker(LndBaseTracker):
         else:
             last_used_hop_index = None
 
-        route, path = self._create_route(attempt.route)
+        route, path = self._new_route(attempt.route)
 
-        resolve_info = self._create_htlc_resolve_info(attempt, route.hops)
+        resolve_info = self._new_htlc_resolve_info(attempt, route.hops)
 
-        resolve_payment_info = self._create_htlc_resolve_payment_info(
+        resolve_payment_info = self._new_htlc_resolve_payment_info(
             last_used_hop_index, path
         )
 
@@ -219,7 +219,7 @@ class LNDPaymentTracker(LndBaseTracker):
 
         return htlc
 
-    def _create_route(self, route: ln.Route) -> tuple[Route, list[int]]:
+    def _new_route(self, route: ln.Route) -> tuple[Route, list[int]]:
 
         hops: list[Hop] = []
         path: list[int] = []
@@ -264,7 +264,7 @@ class LNDPaymentTracker(LndBaseTracker):
 
         return res_route, path
 
-    def _create_htlc_resolve_info(
+    def _new_htlc_resolve_info(
         self, attempt: ln.HTLCAttempt, hops: list[Hop]
     ) -> HtlcResolveInfo | None:
         """
@@ -306,7 +306,7 @@ class LNDPaymentTracker(LndBaseTracker):
                 preimage=None,
             )
 
-    def _create_htlc_resolve_payment_info(
+    def _new_htlc_resolve_payment_info(
         self,
         last_used_hop_index: int | None,
         path: list[int],
