@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from feelancer.log import getLogger
-from feelancer.retry import create_retry_handler
+from feelancer.retry import new_retry_handler
 
 if TYPE_CHECKING:
     from sqlalchemy import Delete, Select
@@ -61,7 +61,7 @@ def _explore_path(path: Sequence, rel_dict: dict[str, dict]) -> dict[str, dict]:
     return rel_dict
 
 
-def _create_dict_gen_call(
+def _new_dict_gen_call(
     qry: Select[tuple[T]],
 ) -> Callable[[Sequence], Generator[dict]]:
     """
@@ -91,7 +91,7 @@ def _create_dict_gen_call(
 
 # Retry handler for database operations. We are raising IntegrityError amd retrying
 # on all other exceptions.
-_retry_handler = create_retry_handler(
+_retry_handler = new_retry_handler(
     exceptions_retry=EXCEPTIONS_RETRY,
     exceptions_raise=EXCEPTIONS_RAISE,
     max_retries=MAX_RETRIES,
@@ -105,7 +105,7 @@ class FeelancerDB:
         self.engine = create_engine(url_database)
         self.session = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
 
-    def create_base(self, base: type[DeclarativeBase]):
+    def new_base(self, base: type[DeclarativeBase]):
         base.metadata.create_all(bind=self.engine)
 
     @classmethod
@@ -246,7 +246,7 @@ class FeelancerDB:
         def get_data(session: Session) -> Sequence[T]:
             return session.execute(qry).scalars().all()
 
-        return self._execute(get_data, _create_dict_gen_call(qry))
+        return self._execute(get_data, _new_dict_gen_call(qry))
 
     def sel_all_to_csv(
         self,

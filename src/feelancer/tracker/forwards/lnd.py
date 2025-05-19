@@ -4,8 +4,8 @@ from datetime import datetime
 from feelancer.grpc.client import StreamConverter
 from feelancer.lightning.lnd import LNDClient
 from feelancer.lnd.grpc_generated import lightning_pb2 as ln
-from feelancer.retry import create_retry_handler
-from feelancer.tracker.data import TrackerStore, create_operation_from_htlcs
+from feelancer.retry import new_retry_handler
+from feelancer.tracker.data import TrackerStore, new_operation_from_htlcs
 from feelancer.tracker.lnd import LndBaseTracker
 from feelancer.tracker.models import (
     Forward,
@@ -33,7 +33,7 @@ MIN_TOLERANCE_DELTA = None
 type LndForwardReconSource = StreamConverter[Operation, ln.ForwardingEvent]
 
 
-htlc_event_retry_handler = create_retry_handler(
+htlc_event_retry_handler = new_retry_handler(
     exceptions_retry=EXCEPTIONS_RETRY,
     exceptions_raise=EXCEPTIONS_RAISE,
     max_retries=MAX_RETRIES,
@@ -118,7 +118,7 @@ class LNDFwdTracker(LndBaseTracker):
             forward = self._forward_from_fwd_event(fwd)
 
         forward.uuid = Forward.generate_uuid(forward.ln_node_id, self._fwd_index + 1)
-        yield create_operation_from_htlcs(
+        yield new_operation_from_htlcs(
             txs=[forward], htlcs=[forward.htlc_in, forward.htlc_out]
         )
         self._fwd_index += 1
@@ -138,7 +138,7 @@ class LNDFwdTracker(LndBaseTracker):
             htlc_in=htlc_in,
             htlc_out=htlc_out,
             fee_msat=fwd.fee_msat,
-            resolve_info=self._create_forward_resolve_info(resolve_time),
+            resolve_info=self._new_forward_resolve_info(resolve_time),
             creation_time=creation_time,
             transaction_type=TransactionType.LN_FORWARD,
         )
@@ -147,13 +147,13 @@ class LNDFwdTracker(LndBaseTracker):
 
         resolve_time = ns_to_datetime(fwd.timestamp_ns)
 
-        htlc_in = self._create_htlc_forward(
+        htlc_in = self._new_htlc_forward(
             channel_id=str(fwd.chan_id_in),
             amt_msat=fwd.amt_in_msat,
             direction_type=HtlcDirectionType.INCOMING,
             resolve_time=resolve_time,
         )
-        htlc_out = self._create_htlc_forward(
+        htlc_out = self._new_htlc_forward(
             channel_id=str(fwd.chan_id_out),
             amt_msat=fwd.amt_out_msat,
             direction_type=HtlcDirectionType.OUTGOING,
@@ -165,14 +165,14 @@ class LNDFwdTracker(LndBaseTracker):
             htlc_in=htlc_in,
             htlc_out=htlc_out,
             fee_msat=fwd.fee_msat,
-            resolve_info=self._create_forward_resolve_info(resolve_time),
+            resolve_info=self._new_forward_resolve_info(resolve_time),
             creation_time=resolve_time,
             transaction_type=TransactionType.LN_FORWARD,
         )
 
         return forward
 
-    def _create_forward_resolve_info(self, time: datetime) -> TransactionResolveInfo:
+    def _new_forward_resolve_info(self, time: datetime) -> TransactionResolveInfo:
         """Create a resolve info for a forward."""
 
         return TransactionResolveInfo(
@@ -180,7 +180,7 @@ class LNDFwdTracker(LndBaseTracker):
             resolve_type=TransactionResolveType.SETTLED,
         )
 
-    def _create_htlc_forward(
+    def _new_htlc_forward(
         self,
         channel_id: str,
         amt_msat: int,
@@ -196,11 +196,11 @@ class LNDFwdTracker(LndBaseTracker):
             attempt_time=None,
             direction_type=direction_type,
             timelock=None,
-            resolve_info=self._create_resolve_info(resolve_time),
+            resolve_info=self._new_resolve_info(resolve_time),
             htlc_type=HtlcType.FORWARD,
         )
 
-    def _create_resolve_info(self, resolve_time: datetime) -> HtlcResolveInfoSettled:
+    def _new_resolve_info(self, resolve_time: datetime) -> HtlcResolveInfoSettled:
         """Create a resolve info for a htlc."""
 
         return HtlcResolveInfoSettled(

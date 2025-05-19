@@ -9,7 +9,7 @@ from google.protobuf.json_format import MessageToDict
 from feelancer.grpc.utils import convert_msg_to_dict
 from feelancer.lightning.lnd import LNDClient
 from feelancer.lnd.grpc_generated import router_pb2 as rt
-from feelancer.tracker.data import TrackerStore, create_operation_from_htlcs
+from feelancer.tracker.data import TrackerStore, new_operation_from_htlcs
 from feelancer.tracker.lnd import LndBaseTracker
 from feelancer.tracker.models import (
     FailureCode,
@@ -217,10 +217,10 @@ class LNDHtlcTracker(LndBaseTracker):
         h_in: Htlc | None = None
         h_out: Htlc | None = None
         if incoming_accepted.event_type == rt.HtlcEvent.EventType.RECEIVE:
-            h_in = self._create_incoming_htlc(HtlcReceive, htlc_info, incoming_accepted)
+            h_in = self._new_incoming_htlc(HtlcReceive, htlc_info, incoming_accepted)
 
             if incoming_accepted.HasField("link_fail_event"):
-                h_in.resolve_info = self._create_link_fail(
+                h_in.resolve_info = self._new_link_fail(
                     htlc=incoming_accepted,
                     resolve_time=ns_to_datetime(final.timestamp_ns),
                     direction_failed=HtlcDirectionType.INCOMING,
@@ -229,10 +229,10 @@ class LNDHtlcTracker(LndBaseTracker):
                 return None
 
         if incoming_accepted.event_type == rt.HtlcEvent.EventType.FORWARD:
-            h_in = self._create_incoming_htlc(HtlcForward, htlc_info, incoming_accepted)
+            h_in = self._new_incoming_htlc(HtlcForward, htlc_info, incoming_accepted)
 
             if incoming_accepted.HasField("link_fail_event"):
-                h_in.resolve_info = self._create_link_fail(
+                h_in.resolve_info = self._new_link_fail(
                     htlc=incoming_accepted,
                     resolve_time=ns_to_datetime(final.timestamp_ns),
                     direction_failed=HtlcDirectionType.OUTGOING,
@@ -243,7 +243,7 @@ class LNDHtlcTracker(LndBaseTracker):
             if incoming_accepted.HasField("forward_fail_event"):
                 # If forward faul event is the first message, we don't have an
                 # outgoing htlc and assume fail on the incoming channel
-                h_in.resolve_info = self._create_forward_fail(
+                h_in.resolve_info = self._new_forward_fail(
                     resolve_time=ns_to_datetime(final.timestamp_ns),
                     direction_failed=HtlcDirectionType.INCOMING,
                 )
@@ -251,19 +251,19 @@ class LNDHtlcTracker(LndBaseTracker):
                 return None
 
             if forward_resolved is not None:
-                h_out = self._create_outgoing_htlc(
+                h_out = self._new_outgoing_htlc(
                     HtlcForward, htlc_info, forward_resolved
                 )
 
                 if forward_resolved.HasField("settle_event"):
                     preimage = bytes_to_str(forward_resolved.settle_event.preimage)
 
-                    h_in.resolve_info = self._create_settle_info(
+                    h_in.resolve_info = self._new_settle_info(
                         resolve_time=ns_to_datetime(final.timestamp_ns),
                         preimage=preimage,
                     )
 
-                    h_out.resolve_info = self._create_settle_info(
+                    h_out.resolve_info = self._new_settle_info(
                         resolve_time=ns_to_datetime(forward_resolved.timestamp_ns),
                         preimage=preimage,
                     )
@@ -275,7 +275,7 @@ class LNDHtlcTracker(LndBaseTracker):
                     # It happens that the first message is of type FORWARD and
                     # the second message fails the link with type RECEIVE.
                     if forward_resolved.event_type == rt.HtlcEvent.EventType.RECEIVE:
-                        h_in.resolve_info = self._create_link_fail(
+                        h_in.resolve_info = self._new_link_fail(
                             htlc=forward_resolved,
                             resolve_time=ns_to_datetime(final.timestamp_ns),
                             direction_failed=HtlcDirectionType.INCOMING,
@@ -284,12 +284,12 @@ class LNDHtlcTracker(LndBaseTracker):
                         return None
 
                 elif forward_resolved.HasField("forward_fail_event"):
-                    h_in.resolve_info = self._create_forward_fail(
+                    h_in.resolve_info = self._new_forward_fail(
                         resolve_time=ns_to_datetime(final.timestamp_ns),
                         direction_failed=HtlcDirectionType.OUTGOING,
                     )
 
-                    h_out.resolve_info = self._create_forward_fail(
+                    h_out.resolve_info = self._new_forward_fail(
                         resolve_time=ns_to_datetime(forward_resolved.timestamp_ns),
                         direction_failed=HtlcDirectionType.OUTGOING,
                     )
@@ -325,14 +325,14 @@ class LNDHtlcTracker(LndBaseTracker):
                         creation_time=h_in.attempt_time,
                     )
 
-                    yield create_operation_from_htlcs([forward], [])
+                    yield new_operation_from_htlcs([forward], [])
                     return None
 
         # Raise an error message if our htlcs haven't matched to one of the
         # patterns above.
         raise ValueError(f"Cannot process htlc events for {_log_msg()}")
 
-    def _create_incoming_htlc(
+    def _new_incoming_htlc(
         self, cls: type[T], htlc_info: rt.HtlcInfo | None, htlc: rt.HtlcEvent
     ) -> T:
 
@@ -346,7 +346,7 @@ class LNDHtlcTracker(LndBaseTracker):
             htlc_type=HtlcType(htlc.event_type),
         )
 
-    def _create_outgoing_htlc(
+    def _new_outgoing_htlc(
         self, cls: type[T], htlc_info: rt.HtlcInfo | None, htlc: rt.HtlcEvent
     ) -> T:
 
@@ -360,7 +360,7 @@ class LNDHtlcTracker(LndBaseTracker):
             htlc_type=HtlcType(htlc.event_type),
         )
 
-    def _create_link_fail(
+    def _new_link_fail(
         self,
         htlc: rt.HtlcEvent,
         resolve_time: datetime,
@@ -384,7 +384,7 @@ class LNDHtlcTracker(LndBaseTracker):
             link_failed=link_failed,
         )
 
-    def _create_settle_info(
+    def _new_settle_info(
         self, resolve_time: datetime, preimage: str
     ) -> HtlcResolveInfoSettled:
         return HtlcResolveInfoSettled(
@@ -393,7 +393,7 @@ class LNDHtlcTracker(LndBaseTracker):
             preimage=preimage,
         )
 
-    def _create_forward_fail(
+    def _new_forward_fail(
         self, resolve_time: datetime, direction_failed: HtlcDirectionType
     ) -> HtlcResolveInfoForwardFailed:
         return HtlcResolveInfoForwardFailed(

@@ -386,7 +386,7 @@ class LndGrpc(SecureGrpcClient, BaseServer):
         req = rt.TrackPaymentsRequest()
         req.no_inflight_updates = no_inflight_updates
 
-        rpc_handler = lnd_resp_handler.create_handle_rpc_stream("TrackPayments")
+        rpc_handler = lnd_resp_handler.new_handle_rpc_stream("TrackPayments")
 
         return LndPaymentDispatcher(
             new_stream_initializer=lambda: self._router_stub.TrackPayments,
@@ -398,7 +398,7 @@ class LndGrpc(SecureGrpcClient, BaseServer):
 
         req = ln.InvoiceSubscription()
 
-        rpc_handler = lnd_resp_handler.create_handle_rpc_stream("SubscribeInvoices")
+        rpc_handler = lnd_resp_handler.new_handle_rpc_stream("SubscribeInvoices")
 
         return LndInvoiceDispatcher(
             new_stream_initializer=lambda: self._ln_stub.SubscribeInvoices,
@@ -410,7 +410,7 @@ class LndGrpc(SecureGrpcClient, BaseServer):
 
         req = rt.SubscribeHtlcEventsRequest()
 
-        rpc_handler = lnd_resp_handler.create_handle_rpc_stream("SubscribeHtlcEvents")
+        rpc_handler = lnd_resp_handler.new_handle_rpc_stream("SubscribeHtlcEvents")
 
         return LndHtlcEventDispatcher(
             new_stream_initializer=lambda: self._router_stub.SubscribeHtlcEvents,
