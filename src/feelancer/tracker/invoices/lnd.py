@@ -7,7 +7,7 @@ from feelancer.data.db import GetIdException
 from feelancer.grpc.client import StreamConverter
 from feelancer.lightning.lnd import LNDClient
 from feelancer.lnd.grpc_generated import lightning_pb2 as ln
-from feelancer.tracker.data import create_operation_from_htlcs
+from feelancer.tracker.data import new_operation_from_htlcs
 from feelancer.tracker.lnd import LndBaseTracker, TrackerStore
 from feelancer.tracker.models import (
     HtlcDirectionType,
@@ -126,14 +126,14 @@ class LNDInvoiceTracker(LndBaseTracker):
                 )
                 pass
 
-        invoice = self._create_invoice(i)
+        invoice = self._new_invoice(i)
 
-        yield create_operation_from_htlcs(
+        yield new_operation_from_htlcs(
             txs=[invoice],
             htlcs=invoice.invoice_htlcs,
         )
 
-    def _create_invoice(self, invoice: ln.Invoice) -> Invoice:
+    def _new_invoice(self, invoice: ln.Invoice) -> Invoice:
         """
         Creates an invoice object.
         """
@@ -147,7 +147,7 @@ class LNDInvoiceTracker(LndBaseTracker):
             uuid=Invoice.generate_uuid(self._store.ln_node_id, invoice.add_index),
             ln_node_id=self._store.ln_node_id,
             invoice_htlcs=[
-                self._create_htlc(h, invoice.r_preimage) for h in invoice.htlcs
+                self._new_htlc(h, invoice.r_preimage) for h in invoice.htlcs
             ],
             r_hash=bytes_to_str(invoice.r_hash),
             payment_request=invoice.payment_request,
@@ -158,7 +158,7 @@ class LNDInvoiceTracker(LndBaseTracker):
             resolve_info=resolve_info,
         )
 
-    def _create_htlc(self, htlc: ln.InvoiceHTLC, preimage: bytes) -> HtlcInvoice:
+    def _new_htlc(self, htlc: ln.InvoiceHTLC, preimage: bytes) -> HtlcInvoice:
 
         resolve_info = HtlcResolveInfoSettled(
             resolve_time=sec_to_datetime(htlc.resolve_time),

@@ -444,7 +444,7 @@ class PidStore:
     def __init__(self, db: FeelancerDB, pubkey_local: str) -> None:
         self.db = db
         self.pubkey_local = pubkey_local
-        self.db.create_base(Base)
+        self.db.new_base(Base)
 
     def ewma_params_last_by_peer(
         self, peer_pub_key: str

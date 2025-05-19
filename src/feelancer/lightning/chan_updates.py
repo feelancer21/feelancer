@@ -99,7 +99,7 @@ def _is_changed(
     return False
 
 
-def _create_update_policy(
+def _new_update_policy(
     policy: ChannelPolicy, proposal: PolicyProposal, info: PolicyUpdateInfo
 ) -> ChannelPolicy:
     """
@@ -219,7 +219,7 @@ def _check_value_restrictions(
     return info
 
 
-def _create_update_policies(
+def _new_update_policies(
     proposals: Iterable[PolicyProposal],
     pub_key: str,
     peer_config: FeelancerPeersConfig,
@@ -259,7 +259,7 @@ def _create_update_policies(
         if not p:
             continue
 
-        final_policies[r.channel.chan_point] = _create_update_policy(p, r, info)
+        final_policies[r.channel.chan_point] = _new_update_policy(p, r, info)
 
     return final_policies
 
@@ -277,7 +277,7 @@ def _update_channel_policies_peer(
     In the second step the lightning backend is updated with the new policies.
     """
 
-    update_policies = _create_update_policies(proposals, pub_key, peer_config, timenow)
+    update_policies = _new_update_policies(proposals, pub_key, peer_config, timenow)
 
     # Updating the final policies
     for chan_point, policy in update_policies.items():

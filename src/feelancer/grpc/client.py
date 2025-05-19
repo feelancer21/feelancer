@@ -14,7 +14,7 @@ from google.protobuf.message import Message
 from feelancer.base import BaseServer
 from feelancer.event import stop_event
 from feelancer.log import getLogger
-from feelancer.retry import create_retry_handler, default_retry_handler
+from feelancer.retry import default_retry_handler, new_retry_handler
 
 DEFAULT_MESSAGE_SIZE_MB = 50 * 1024 * 1024
 DEFAULT_MAX_CONNECTION_IDLE_MS = 30000
@@ -88,7 +88,7 @@ class RpcResponseHandler:
 
         return wrapper
 
-    def create_handle_rpc_stream(self, name) -> Callable[[Iterable[T]], Generator[T]]:
+    def new_handle_rpc_stream(self, name) -> Callable[[Iterable[T]], Generator[T]]:
         """
         Creates a callable which handles the errors during a stream rpc.
         """
@@ -195,7 +195,7 @@ class SecureGrpcClient:
 
 
 # Retrying using the same grpc channel.
-_channel_retry_handler = create_retry_handler(
+_channel_retry_handler = new_retry_handler(
     exceptions_retry=(Exception,),
     exceptions_raise=(LocallyCancelled,),
     max_retries=1,
