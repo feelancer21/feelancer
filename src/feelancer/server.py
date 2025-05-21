@@ -50,21 +50,34 @@ FAULTHANDLER_DUMP_FILE = "faulthandler_dump.txt"
 logger = getLogger(__name__)
 
 
+class Lnd:
+    def __init__(self, lndgrpc: LndGrpc, db: FeelancerDB) -> None:
+        self.lnclient: LightningClient = LNDClient(lndgrpc)
+        self.reconnector: Reconnector = LNDReconnector(lndgrpc)
+
+        pub_key = self.lnclient.pubkey_local
+        self.ln_store = LightningStore(db, pub_key)
+        self.tracker_store = TrackerStore(db, self.ln_store.ln_node_id)
+        self.payment_tracker: Tracker = LNDPaymentTracker(
+            self.lnclient, self.tracker_store
+        )
+        self.invoice_tracker: Tracker = LNDInvoiceTracker(
+            self.lnclient, self.tracker_store
+        )
+        self.htlc_tracker: Tracker = LNDHtlcTracker(self.lnclient, self.tracker_store)
+        self.fwd_tracker: Tracker = LNDFwdTracker(
+            self.lnclient, self.tracker_store, self.htlc_tracker.pop_settled_forwards
+        )
+
+
 @dataclass
 class MainConfig:
     db: FeelancerDB
-    lnclient: LightningClient
-    ln_store: LightningStore
+    lnd: Lnd
     config_file: str
     log_file: str | None
     log_level: str | None
     feelancer_cfg: FeelancerConfig
-    reconnector: Reconnector
-    payment_tracker: Tracker
-    invoice_tracker: Tracker
-    htlc_tracker: Tracker
-    fwd_tacker: Tracker
-    tracker_store: TrackerStore
     timeout: int
 
     @classmethod
@@ -79,19 +92,7 @@ class MainConfig:
             raise ValueError("'sqlalchemy' section is not included in config-file")
 
         if "lnd" in config_dict:
-            lndgrpc = LndGrpc.from_file(**config_dict["lnd"])
-            lnclient: LightningClient = LNDClient(lndgrpc)
-            reconnector: Reconnector = LNDReconnector(lndgrpc)
-
-            pub_key = lnclient.pubkey_local
-            ln_store = LightningStore(db, pub_key)
-            tracker_store = TrackerStore(db, ln_store.ln_node_id)
-            payment_tracker: Tracker = LNDPaymentTracker(lnclient, tracker_store)
-            invoice_tracker: Tracker = LNDInvoiceTracker(lnclient, tracker_store)
-            htlc_tracker: Tracker = LNDHtlcTracker(lnclient, tracker_store)
-            fwd_tracker: Tracker = LNDFwdTracker(
-                lnclient, tracker_store, htlc_tracker.pop_settled_forwards
-            )
+            lnd = Lnd(LndGrpc.from_file(**config_dict["lnd"]), db)
         else:
             raise ValueError("'lnd' section is not included in config-file")
 
@@ -115,22 +116,7 @@ class MainConfig:
         # TODO: Move FeelancerConfig to db and api. Then we can remove it.
         feelancer_config = FeelancerConfig(config_dict)
 
-        return cls(
-            db,
-            lnclient,
-            ln_store,
-            config_file,
-            logfile,
-            loglevel,
-            feelancer_config,
-            reconnector,
-            payment_tracker,
-            invoice_tracker,
-            htlc_tracker,
-            fwd_tracker,
-            tracker_store,
-            timeout,
-        )
+        return cls(db, lnd, config_file, logfile, loglevel, feelancer_config, timeout)
 
     @classmethod
     def from_config_file(cls, file_name: str) -> MainConfig:
@@ -241,12 +227,12 @@ class MainServer(BaseServer):
 
         # Adding callables for starting and stopping internal services of the
         # lnclient, e.g. dispatcher of streams.
-        self._register_sub_server(cfg.lnclient)
+        self._register_sub_server(cfg.lnd.lnclient)
 
         # We init a task runner which controls the scheduler for the job
         # execution.
         runner = TaskRunner(
-            self.cfg.lnclient,
+            self.cfg.lnd.lnclient,
             self.cfg.db,
             self.cfg.feelancer_cfg.seconds,
             self.cfg.feelancer_cfg.max_listener_attempts,
@@ -255,9 +241,9 @@ class MainServer(BaseServer):
         self._register_sub_server(runner)
 
         # pid service is responsible for updating the fees with the pid model.
-        pid_store = PidStore(self.cfg.db, self.cfg.lnclient.pubkey_local)
+        pid_store = PidStore(self.cfg.db, self.cfg.lnd.lnclient.pubkey_local)
         pid = PidService(
-            self.cfg.ln_store,
+            self.cfg.lnd.ln_store,
             pid_store,
             self._get_config_reader("pid", PidConfig),
         )
@@ -267,24 +253,24 @@ class MainServer(BaseServer):
         # reconnect service is responsible for reconnecting inactive channels
         # or channels with stuck htlcs.
         reconnect = ReconnectService(
-            cfg.reconnector, self._get_config_reader("reconnect", ReconnectConfig)
+            cfg.lnd.reconnector, self._get_config_reader("reconnect", ReconnectConfig)
         )
         runner.register_task(reconnect.run)
 
         self._register_tracker_service(
-            cfg.payment_tracker, runner, "paytrack", PaytrackConfig, PaytrackService
+            cfg.lnd.payment_tracker, runner, "paytrack", PaytrackConfig, PaytrackService
         )
 
         self._register_tracker_service(
-            cfg.invoice_tracker, runner, "invtrack", InvtrackConfig, InvtrackService
+            cfg.lnd.invoice_tracker, runner, "invtrack", InvtrackConfig, InvtrackService
         )
 
         self._register_tracker_service(
-            cfg.htlc_tracker, runner, "htlctrack", HtlctrackConfig, HtlctrackService
+            cfg.lnd.htlc_tracker, runner, "htlctrack", HtlctrackConfig, HtlctrackService
         )
 
         self._register_tracker_service(
-            cfg.fwd_tacker, runner, "fwdtrack", FwdtrackConfig, FwdtrackService
+            cfg.lnd.fwd_tracker, runner, "fwdtrack", FwdtrackConfig, FwdtrackService
         )
 
     def _register_tracker_service(
