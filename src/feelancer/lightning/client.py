@@ -90,15 +90,3 @@ class LightningClient(Protocol):
         Updates the channel policy for given chan point.
         """
         ...
-
-    def start(self) -> None:
-        """
-        Starts all dispatchers of the client.
-        """
-        ...
-
-    def stop(self) -> None:
-        """
-        Stops all dispatchers of the client.
-        """
-        ...
