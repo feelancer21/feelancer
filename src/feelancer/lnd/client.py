@@ -5,7 +5,6 @@ from collections.abc import Generator, Iterable, Sequence
 
 import grpc
 
-from feelancer.base import BaseServer
 from feelancer.grpc.client import (
     Paginator,
     RpcResponseHandler,
@@ -85,7 +84,7 @@ class LndInvoiceDispatcher(StreamDispatcher[ln.Invoice]): ...
 class LndHtlcEventDispatcher(StreamDispatcher[rt.HtlcEvent]): ...
 
 
-class LndGrpc(SecureGrpcClient, BaseServer):
+class LndGrpc(SecureGrpcClient):
 
     def __init__(
         self,
@@ -97,24 +96,14 @@ class LndGrpc(SecureGrpcClient, BaseServer):
     ) -> None:
         SecureGrpcClient.__init__(self, ip_address, credentials, **kwargs)
 
-        # Responsible for dispatching realtime streams form the grpc server
-        # to internal services.
-        BaseServer.__init__(self)
-
         self._pagintor_max_forwarding_events = paginator_max_forwarding_events
         self._pagintor_max_payments = paginator_max_payments
 
         self.track_payments_dispatcher = self._new_payments_dispatcher()
 
-        self._register_sub_server(self.track_payments_dispatcher)
-
         self.subscribe_invoices_dispatcher = self._new_invoice_dispatcher()
 
-        self._register_sub_server(self.subscribe_invoices_dispatcher)
-
         self.subscribe_htlc_events_dispatcher = self._new_htlc_event_dispatcher()
-
-        self._register_sub_server(self.subscribe_htlc_events_dispatcher)
 
     @property
     def _ln_stub(self) -> lnrpc.LightningStub:
