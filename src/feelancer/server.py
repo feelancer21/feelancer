@@ -52,6 +52,7 @@ logger = getLogger(__name__)
 
 class Lnd:
     def __init__(self, lndgrpc: LndGrpc, db: FeelancerDB) -> None:
+        self.lndgrpc: LndGrpc = lndgrpc
         self.lnclient: LightningClient = LNDClient(lndgrpc)
         self.reconnector: Reconnector = LNDReconnector(lndgrpc)
 
@@ -225,52 +226,70 @@ class MainServer(BaseServer):
         # Setting up the signal handler for SIGTERM and SIGINT.
         SignalHandler(self.stop, self.kill, self.cfg.timeout)
 
-        # Adding callables for starting and stopping internal services of the
-        # lnclient, e.g. dispatcher of streams.
-        self._register_sub_server(cfg.lnd.lnclient)
-
         # We init a task runner which controls the scheduler for the job
         # execution.
-        runner = TaskRunner(
+        self.runner = TaskRunner(
+            # TODO: Refactor to remove lnclient
             self.cfg.lnd.lnclient,
             self.cfg.db,
             self.cfg.feelancer_cfg.seconds,
             self.cfg.feelancer_cfg.max_listener_attempts,
             self.read_feelancer_cfg,
         )
-        self._register_sub_server(runner)
+        self._register_sub_server(self.runner)
+
+        self._register_lnd(self.cfg.lnd)
+
+    def _register_lnd(self, lnd: Lnd) -> None:
+        """
+        Registers the LND client and its services.
+        """
+
+        self._register_sub_server(lnd.lndgrpc.track_payments_dispatcher)
+        self._register_sub_server(lnd.lndgrpc.subscribe_invoices_dispatcher)
+        self._register_sub_server(lnd.lndgrpc.subscribe_htlc_events_dispatcher)
 
         # pid service is responsible for updating the fees with the pid model.
-        pid_store = PidStore(self.cfg.db, self.cfg.lnd.lnclient.pubkey_local)
+        pid_store = PidStore(self.cfg.db, lnd.lnclient.pubkey_local)
         pid = PidService(
-            self.cfg.lnd.ln_store,
-            pid_store,
-            self._get_config_reader("pid", PidConfig),
+            lnd.ln_store, pid_store, self._get_config_reader("pid", PidConfig)
         )
-        runner.register_task(pid.run)
-        runner.register_reset(pid.reset)
+        self.runner.register_task(pid.run)
+        self.runner.register_reset(pid.reset)
 
         # reconnect service is responsible for reconnecting inactive channels
         # or channels with stuck htlcs.
         reconnect = ReconnectService(
-            cfg.lnd.reconnector, self._get_config_reader("reconnect", ReconnectConfig)
+            lnd.reconnector, self._get_config_reader("reconnect", ReconnectConfig)
         )
-        runner.register_task(reconnect.run)
+        self.runner.register_task(reconnect.run)
 
         self._register_tracker_service(
-            cfg.lnd.payment_tracker, runner, "paytrack", PaytrackConfig, PaytrackService
-        )
-
-        self._register_tracker_service(
-            cfg.lnd.invoice_tracker, runner, "invtrack", InvtrackConfig, InvtrackService
-        )
-
-        self._register_tracker_service(
-            cfg.lnd.htlc_tracker, runner, "htlctrack", HtlctrackConfig, HtlctrackService
+            lnd.payment_tracker,
+            self.runner,
+            "paytrack",
+            PaytrackConfig,
+            PaytrackService,
         )
 
         self._register_tracker_service(
-            cfg.lnd.fwd_tracker, runner, "fwdtrack", FwdtrackConfig, FwdtrackService
+            lnd.invoice_tracker,
+            self.runner,
+            "invtrack",
+            InvtrackConfig,
+            InvtrackService,
+        )
+
+        self._register_tracker_service(
+            lnd.htlc_tracker,
+            self.runner,
+            "htlctrack",
+            HtlctrackConfig,
+            HtlctrackService,
+        )
+
+        self._register_tracker_service(
+            lnd.fwd_tracker, self.runner, "fwdtrack", FwdtrackConfig, FwdtrackService
         )
 
     def _register_tracker_service(
