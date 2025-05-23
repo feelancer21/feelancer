@@ -109,7 +109,7 @@ class LNDPaymentTracker(LndBaseTracker):
 
         return StreamConverter(paginator, process_payment)
 
-    def _get_new_stream(self) -> Callable[..., Generator[Operation]]:
+    def _get_new_stream(self) -> Callable[[], Generator[Operation]]:
         dispatcher = self._lnd.track_payments_dispatcher
         return self._get_new_stream_from_dispatcher(dispatcher)
 

@@ -128,8 +128,8 @@ class SignalHandler:
 
     def __init__(
         self,
-        sig_handler: Callable[..., None],
-        alarm_handler: Callable[..., None],
+        sig_handler: Callable[[], None],
+        alarm_handler: Callable[[], None],
         timeout: int,
     ) -> None:
         self._timeout = timeout
@@ -295,7 +295,7 @@ class MainServer(BaseServer):
 
         return self.cfg.feelancer_cfg
 
-    def _get_config_reader(self, name: str, type: type[T]) -> Callable[..., T | None]:
+    def _get_config_reader(self, name: str, type: type[T]) -> Callable[[], T | None]:
         def get_config() -> T | None:
             config_dict = self.cfg.feelancer_cfg.tasks_config.get(name)
             if config_dict is None:

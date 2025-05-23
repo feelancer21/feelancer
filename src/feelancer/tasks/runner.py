@@ -49,7 +49,7 @@ class TaskRunner(BaseServer):
         db: FeelancerDB,
         seconds: int,
         max_listener_attempts: int,
-        read_feelancer_cfg: Callable[..., FeelancerConfig],
+        read_feelancer_cfg: Callable[[], FeelancerConfig],
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -62,7 +62,7 @@ class TaskRunner(BaseServer):
         self.tasks: list[Callable[[RunnerRequest], RunnerResult]] = []
 
         # Empty list of callables which we have to call in an error case.
-        self.resets: list[Callable[..., None]] = []
+        self.resets: list[Callable[[], None]] = []
 
         # Lock to prevent a race between start() and stop(). The stop can only
         # be executed when the scheduler is running. If the start of the
@@ -178,7 +178,7 @@ class TaskRunner(BaseServer):
         """
         self.tasks.append(task)
 
-    def register_reset(self, reset: Callable[..., None]) -> None:
+    def register_reset(self, reset: Callable[[], None]) -> None:
         """
         Register a new reset task which has to be executed in the case of an
         error.

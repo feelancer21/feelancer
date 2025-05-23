@@ -21,7 +21,7 @@ class Server(Protocol):
 
 
 def _run_concurrent(
-    tasks: list[Callable[..., None]], err_signal: signal.Signals | None
+    tasks: list[Callable[[], None]], err_signal: signal.Signals | None
 ) -> None:
     """
     Starts the provided tasks concurrently. If an error is raised by one task,
@@ -44,7 +44,7 @@ def _run_concurrent(
                 raise e
 
 
-def _run_sync(tasks: list[Callable[..., None]]) -> None:
+def _run_sync(tasks: list[Callable[[], None]]) -> None:
     """Runs the tasks synchronously."""
 
     for task in tasks:
@@ -62,32 +62,32 @@ class BaseServer:
         self._logger = getLogger(self.__module__)
 
         # Callables to be called synchronously during server start
-        self._sync_start: list[Callable[..., None]] = []
+        self._sync_start: list[Callable[[], None]] = []
 
         # Callables to be called synchronously during server stop
-        self._sync_stop: list[Callable[..., None]] = []
+        self._sync_stop: list[Callable[[], None]] = []
 
         # Callables to be started during server start concurrently
-        self._concurrent_start: list[Callable[..., None]] = []
+        self._concurrent_start: list[Callable[[], None]] = []
 
         # Callables to be started during server stop concurrently
-        self._concurrent_stop: list[Callable[..., None]] = []
+        self._concurrent_stop: list[Callable[[], None]] = []
 
     def _register_sub_server(self, subserver: Server) -> None:
 
         self._register_starter(subserver.start)
         self._register_stopper(subserver.stop)
 
-    def _register_sync_starter(self, starter: Callable[..., None]) -> None:
+    def _register_sync_starter(self, starter: Callable[[], None]) -> None:
         self._sync_start.append(starter)
 
-    def _register_sync_stopper(self, stopper: Callable[..., None]) -> None:
+    def _register_sync_stopper(self, stopper: Callable[[], None]) -> None:
         self._sync_stop.append(stopper)
 
-    def _register_starter(self, starter: Callable[..., None]) -> None:
+    def _register_starter(self, starter: Callable[[], None]) -> None:
         self._concurrent_start.append(starter)
 
-    def _register_stopper(self, stopper: Callable[..., None]) -> None:
+    def _register_stopper(self, stopper: Callable[[], None]) -> None:
         self._concurrent_stop.append(stopper)
 
     def start(self) -> None:
