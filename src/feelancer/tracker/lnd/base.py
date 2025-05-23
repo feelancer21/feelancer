@@ -14,8 +14,7 @@ from feelancer.lightning.lnd import LNDClient
 # from feelancer.lnd.client import LndGrpc
 from feelancer.log import getLogger, stream_logger
 from feelancer.retry import default_retry_handler
-
-from .data import TrackerStore
+from feelancer.tracker.data import TrackerStore
 
 # ORM objects to be stored in the database
 T = TypeVar("T", bound=DeclarativeBase)
