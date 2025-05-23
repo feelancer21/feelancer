@@ -1,10 +1,12 @@
+from collections.abc import Callable, Iterable
 from datetime import timedelta
+
+from sqlalchemy import Delete, Select
 
 from feelancer.log import getLogger
 from feelancer.tasks.runner import RunnerRequest, RunnerResult
-from feelancer.tracker.proto import TrackerBaseService
 
-from ..data import (
+from .data import (
     delete_failed_htlc_payments,
     delete_failed_payments,
     query_average_node_speed,
@@ -37,8 +39,7 @@ def _validate_percentiles(percentiles: list[int]) -> None:
             raise ValueError(f"Invalid percentile {p=}. Must be between 0 and 100.")
 
 
-# A config. But it is only a dummy at the moment.
-class PaytrackConfig:
+class TrackerConfig:
     def __init__(self, config_dict: dict) -> None:
         """
         Validates the provided dictionary and stores values in variables.
@@ -108,10 +109,21 @@ class PaytrackConfig:
             raise ValueError(f"Invalid config: {e}")
 
 
-class PaytrackService(TrackerBaseService[PaytrackConfig]):
+class TrackerService:
     """
     Receiving of payment data from a stream and storing in the database.
     """
+
+    def __init__(
+        self,
+        get_config: Callable[[], TrackerConfig | None],
+        db_to_csv: Callable[[Select[tuple], str, list[str] | None], None],
+        db_delete_data: Callable[[Iterable[Delete[tuple]]], None],
+    ) -> None:
+
+        self._get_config = get_config
+        self._db_to_csv = db_to_csv
+        self._db_delete_data = db_delete_data
 
     def run(self, request: RunnerRequest) -> RunnerResult:
         """

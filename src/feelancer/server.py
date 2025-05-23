@@ -26,14 +26,11 @@ from .reconnect.reconnector import LNDReconnector
 from .reconnect.service import ReconnectConfig, ReconnectService
 from .tasks.runner import TaskRunner
 from .tracker.data import TrackerStore
-from .tracker.forwards.lnd import LNDFwdTracker
-from .tracker.forwards.service import FwdtrackConfig, FwdtrackService
-from .tracker.htlcs.lnd import LNDHtlcTracker
-from .tracker.htlcs.service import HtlctrackConfig, HtlctrackService
-from .tracker.invoices.lnd import LNDInvoiceTracker
-from .tracker.invoices.service import InvtrackConfig, InvtrackService
-from .tracker.payments.lnd import LNDPaymentTracker
-from .tracker.payments.service import PaytrackConfig, PaytrackService
+from .tracker.lnd.forwards import LNDFwdTracker
+from .tracker.lnd.htlcsevents import LNDHtlcTracker
+from .tracker.lnd.invoices import LNDInvoiceTracker
+from .tracker.lnd.payments import LNDPaymentTracker
+from .tracker.service import TrackerConfig, TrackerService
 from .utils import read_config_file
 
 T = TypeVar("T", bound=DictInitializedConfig)
@@ -41,7 +38,7 @@ T = TypeVar("T", bound=DictInitializedConfig)
 if TYPE_CHECKING:
     from feelancer.lightning.client import LightningClient
     from feelancer.reconnect.reconnector import Reconnector
-    from feelancer.tracker.proto import Tracker, TrackerService
+    from feelancer.tracker.proto import Tracker
 
 
 DEFAULT_TIMEOUT = 180
@@ -264,55 +261,18 @@ class MainServer(BaseServer):
         )
         self.runner.register_task(reconnect.run)
 
-        self._register_tracker_service(
-            lnd.payment_tracker,
-            self.runner,
-            "paytrack",
-            PaytrackConfig,
-            PaytrackService,
+        tracker = TrackerService(
+            self._get_config_reader("tracker", TrackerConfig),
+            self.cfg.db.sel_all_to_csv,
+            self.cfg.db.del_core,
         )
 
-        self._register_tracker_service(
-            lnd.invoice_tracker,
-            self.runner,
-            "invtrack",
-            InvtrackConfig,
-            InvtrackService,
-        )
+        self.runner.register_task(tracker.run)
 
-        self._register_tracker_service(
-            lnd.htlc_tracker,
-            self.runner,
-            "htlctrack",
-            HtlctrackConfig,
-            HtlctrackService,
-        )
-
-        self._register_tracker_service(
-            lnd.fwd_tracker, self.runner, "fwdtrack", FwdtrackConfig, FwdtrackService
-        )
-
-    def _register_tracker_service(
-        self,
-        tracker: Tracker,
-        runner: TaskRunner,
-        service_name: str,
-        conf_type: type[T],
-        service_type: type[TrackerService[T]],
-    ) -> None:
-
-        get_config = self._get_config_reader(service_name, conf_type)
-
-        # We only register the service and the tracker if we have a config for it.
-        conf = get_config()
-        if conf is not None:
-            service = service_type(
-                get_config=get_config,
-                db_to_csv=self.cfg.db.sel_all_to_csv,
-                db_delete_data=self.cfg.db.del_core,
-            )
-            runner.register_task(service.run)
-            self._register_tracker(tracker)
+        self._register_tracker(lnd.payment_tracker)
+        self._register_tracker(lnd.invoice_tracker)
+        self._register_tracker(lnd.fwd_tracker)
+        self._register_tracker(lnd.htlc_tracker)
 
     def _register_tracker(self, tracker: Tracker) -> None:
         self._register_sync_starter(tracker.pre_sync_start)
