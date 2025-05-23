@@ -83,7 +83,7 @@ class LNDFwdTracker(LndBaseTracker):
     def _new_recon_source(self) -> None:
         return None
 
-    def _get_new_stream(self) -> Callable[..., Generator[Forward]]:
+    def _get_new_stream(self) -> Callable[[], Generator[Forward]]:
 
         return self._get_new_stream_from_paginator(
             lambda offset: self._lnd.paginate_forwarding_events(

@@ -89,7 +89,7 @@ class LndBaseTracker(Generic[T, U, V], ABC):
         )
 
     @default_retry_handler
-    def _start_stream(self, get_new_stream: Callable[..., Generator[T]]) -> None:
+    def _start_stream(self, get_new_stream: Callable[[], Generator[T]]) -> None:
         """
         Fetches the items from the subscription and stores them in the database.
         """
@@ -106,14 +106,14 @@ class LndBaseTracker(Generic[T, U, V], ABC):
         self._store.db.add_all_from_iterable(stream(), True)
 
     @abstractmethod
-    def _get_new_stream(self) -> Callable[..., Generator[T]]:
+    def _get_new_stream(self) -> Callable[[], Generator[T]]:
         """
         Returns a new dispatcher for initializing a new data stream
         """
 
     def _get_new_stream_from_dispatcher(
         self, dispatcher: StreamDispatcher[V]
-    ) -> Callable[..., Generator[T]]:
+    ) -> Callable[[], Generator[T]]:
         """
         Returns a callable that returns a new stream from the dispatcher.
         """
@@ -123,8 +123,8 @@ class LndBaseTracker(Generic[T, U, V], ABC):
     def _get_new_stream_from_paginator(
         self,
         get_stream: Callable[[int], Generator[V]],
-        get_offset: Callable[..., int],
-    ) -> Callable[..., Generator[T]]:
+        get_offset: Callable[[], int],
+    ) -> Callable[[], Generator[T]]:
         """
         Returns a callable that returns a new stream from a paginator.
         """

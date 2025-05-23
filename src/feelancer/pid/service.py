@@ -24,12 +24,12 @@ class PidService:
         self,
         ln_store: LightningStore,
         pid_store: PidStore,
-        get_pid_config: Callable[..., PidConfig | None],
+        get_pid_config: Callable[[], PidConfig | None],
     ):
 
         self._ln_store = ln_store
         self._pid_store = pid_store
-        self._get_pid_config: Callable[..., PidConfig | None] = get_pid_config
+        self._get_pid_config: Callable[[], PidConfig | None] = get_pid_config
         self._pid_controller: PidController | None = None
 
     def run(self, request: RunnerRequest) -> RunnerResult:

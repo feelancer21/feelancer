@@ -34,7 +34,7 @@ class ReconnectService:
     def __init__(
         self,
         reconnector: Reconnector,
-        get_reconnect_config: Callable[..., ReconnectConfig | None],
+        get_reconnect_config: Callable[[], ReconnectConfig | None],
     ):
         self.reconnector = reconnector
         self.get_reconnect_config = get_reconnect_config

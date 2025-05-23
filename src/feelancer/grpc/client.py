@@ -252,7 +252,7 @@ class StreamDispatcher(Generic[T], BaseServer):
 
     def __init__(
         self,
-        new_stream_initializer: Callable[..., grpc.UnaryStreamMultiCallable],
+        new_stream_initializer: Callable[[], grpc.UnaryStreamMultiCallable],
         request: Message,
         handle_rpc_stream: Callable[[Iterable[T]], Generator[T]],
         **kwargs,
@@ -282,8 +282,8 @@ class StreamDispatcher(Generic[T], BaseServer):
     def subscribe(
         self,
         convert: Callable[[T, bool], Generator[V]],
-        get_recon_source: Callable[..., ReconSource[V] | None] = lambda: None,
-    ) -> Callable[..., Generator[V]]:
+        get_recon_source: Callable[[], ReconSource[V] | None] = lambda: None,
+    ) -> Callable[[], Generator[V]]:
         """
         Returns a callable which starts a stream of all received messages
         converted to the type V.
@@ -305,7 +305,7 @@ class StreamDispatcher(Generic[T], BaseServer):
         self,
         q: queue.Queue[T | Exception],
         convert: Callable[[T, bool], Generator[V]],
-        get_recon_source: Callable[..., ReconSource[V] | None],
+        get_recon_source: Callable[[], ReconSource[V] | None],
     ) -> Generator[V]:
         """Returns a generator for all new incoming messages converted to V."""
 
