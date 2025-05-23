@@ -7,8 +7,7 @@ from feelancer.data.db import GetIdException
 from feelancer.grpc.client import StreamConverter
 from feelancer.lightning.lnd import LNDClient
 from feelancer.lnd.grpc_generated import lightning_pb2 as ln
-from feelancer.tracker.data import new_operation_from_htlcs
-from feelancer.tracker.lnd import LndBaseTracker, TrackerStore
+from feelancer.tracker.data import TrackerStore, new_operation_from_htlcs
 from feelancer.tracker.models import (
     HtlcDirectionType,
     HtlcInvoice,
@@ -20,6 +19,8 @@ from feelancer.tracker.models import (
     TransactionResolveType,
 )
 from feelancer.utils import bytes_to_str, sec_to_datetime
+
+from .base import LndBaseTracker
 
 RECON_TIME_INTERVAL = 30 * 24 * 3600  # 30 days in seconds
 

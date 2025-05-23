@@ -10,7 +10,6 @@ from feelancer.grpc.utils import convert_msg_to_dict
 from feelancer.lightning.lnd import LNDClient
 from feelancer.lnd.grpc_generated import router_pb2 as rt
 from feelancer.tracker.data import TrackerStore, new_operation_from_htlcs
-from feelancer.tracker.lnd import LndBaseTracker
 from feelancer.tracker.models import (
     FailureCode,
     FailureDetail,
@@ -31,6 +30,8 @@ from feelancer.tracker.models import (
     TransactionResolveType,
 )
 from feelancer.utils import bytes_to_str, ns_to_datetime
+
+from .base import LndBaseTracker
 
 T = TypeVar("T", bound=Htlc)
 

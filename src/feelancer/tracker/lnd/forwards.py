@@ -6,7 +6,6 @@ from feelancer.lightning.lnd import LNDClient
 from feelancer.lnd.grpc_generated import lightning_pb2 as ln
 from feelancer.retry import new_retry_handler
 from feelancer.tracker.data import TrackerStore, new_operation_from_htlcs
-from feelancer.tracker.lnd import LndBaseTracker
 from feelancer.tracker.models import (
     Forward,
     HtlcDirectionType,
@@ -20,6 +19,8 @@ from feelancer.tracker.models import (
     TransactionType,
 )
 from feelancer.utils import ns_to_datetime
+
+from .base import LndBaseTracker
 
 RECON_TIME_INTERVAL = 30 * 24 * 3600  # 30 days in seconds
 PAGINATOR_BLOCKING_INTERVAL = 21  # 21 seconds
