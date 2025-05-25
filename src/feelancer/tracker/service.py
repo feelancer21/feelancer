@@ -7,8 +7,8 @@ from feelancer.log import getLogger
 from feelancer.tasks.runner import RunnerRequest, RunnerResult
 
 from .data import (
-    delete_failed_htlc_payments,
-    delete_failed_payments,
+    delete_failed_htlcs,
+    delete_failed_transactions,
     query_average_node_speed,
     query_liquidity_locked_per_htlc,
     query_slow_nodes,
@@ -173,10 +173,9 @@ class TrackerService:
             deletion_cutoff += timedelta(hours=-config.delete_failed_hours)
 
             queries = []
-            # First we delete the failed payments, then the remaining failed
-            # htlc attempts connected with success full the payments
-            queries.append(delete_failed_payments(deletion_cutoff))
-            queries.append(delete_failed_htlc_payments(deletion_cutoff))
+            # First we delete the failed transactions, then the failed htlcs.
+            queries.append(delete_failed_transactions(deletion_cutoff))
+            queries.append(delete_failed_htlcs(deletion_cutoff))
 
             self._db_delete_data(queries)
 
