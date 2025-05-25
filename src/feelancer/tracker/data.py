@@ -271,7 +271,7 @@ def query_slow_nodes(
     return qry
 
 
-def delete_failed_htlc_payments(
+def delete_failed_htlcs(
     deletion_cutoff: datetime,
 ) -> Delete[tuple[Htlc]]:
     """
@@ -280,24 +280,28 @@ def delete_failed_htlc_payments(
     """
 
     return delete(Htlc).where(
-        Htlc.id == HtlcPayment.htlc_id,
-        HtlcPayment.htlc_id == HtlcResolveInfo.htlc_id,
-        HtlcPayment.attempt_time < deletion_cutoff,
-        HtlcResolveInfo.resolve_type == HtlcResolveType.PAYMENT_FAILED,
+        Htlc.id == HtlcResolveInfo.htlc_id,
+        Htlc.attempt_time < deletion_cutoff,
+        HtlcResolveInfo.resolve_type.in_(
+            [
+                HtlcResolveType.PAYMENT_FAILED,
+                HtlcResolveType.FORWARD_FAILED,
+                HtlcResolveType.LINK_FAILED,
+            ]
+        ),
     )
 
 
-def delete_failed_payments(deletion_cutoff: datetime) -> Delete[tuple[Transaction]]:
+def delete_failed_transactions(deletion_cutoff: datetime) -> Delete[tuple[Transaction]]:
     """
     Returns a query to delete all failed payments that are older than the given
     time. Time is exclusive.
     """
 
     return delete(Transaction).where(
-        Transaction.id == Payment.tx_id,
         Transaction.id == TransactionResolveInfo.tx_id,
-        Payment.creation_time < deletion_cutoff,
-        TransactionResolveInfo.resolve_type == TransactionResolveType.FAILED,
+        Transaction.creation_time < deletion_cutoff,
+        TransactionResolveInfo.resolve_type.in_([TransactionResolveType.FAILED]),
     )
 
 
