@@ -50,8 +50,12 @@ def _incoming_htlc_index(htlc: rt.HtlcEvent) -> HtlcIndex:
 
 
 class LNDHtlcTracker(LndBaseTracker):
-    def __init__(self, lnd: LNDClient, store: TrackerStore):
+    def __init__(
+        self, lnd: LNDClient, store: TrackerStore, store_htlc_events: bool = False
+    ) -> None:
         super().__init__(lnd, store)
+
+        self._store_htlc_events = store_htlc_events
 
         self._fwd_lock = threading.Lock()
 
@@ -116,6 +120,9 @@ class LNDHtlcTracker(LndBaseTracker):
             # UNKNOWN should have a final htlc event, but we make a safety check
             if htlc.HasField("final_htlc_event"):
                 yield from self._gen_from_final_htlc(htlc)
+
+        if not self._store_htlc_events:
+            return None
 
         yield HtlcEvent(
             ln_node_id=self._store.ln_node_id,
@@ -455,3 +462,9 @@ class LNDHtlcTracker(LndBaseTracker):
                 del self._fwd_settled[fwd_amt_index]
 
         return res
+
+    def set_store_htlc_events(self, store: bool) -> None:
+        """
+        Set whether to store htlc events in the database.
+        """
+        self._store_htlc_events = store
