@@ -13,6 +13,7 @@ from .models import (
     GraphPath,
     Hop,
     Htlc,
+    HtlcEvent,
     HtlcPayment,
     HtlcResolveInfo,
     HtlcResolveInfoPayment,
@@ -303,6 +304,15 @@ def delete_failed_transactions(deletion_cutoff: datetime) -> Delete[tuple[Transa
         Transaction.creation_time < deletion_cutoff,
         TransactionResolveInfo.resolve_type.in_([TransactionResolveType.FAILED]),
     )
+
+
+def delete_htlc_events(deletion_cutoff: datetime) -> Delete[tuple[HtlcEvent]]:
+    """
+    Returns a query to delete all HTLC events that are older than the given time.
+    Time is exclusive.
+    """
+
+    return delete(HtlcEvent).where(HtlcEvent.timestamp < deletion_cutoff)
 
 
 class TrackerStore:

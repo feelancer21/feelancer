@@ -9,6 +9,7 @@ from feelancer.tasks.runner import RunnerRequest, RunnerResult
 from .data import (
     delete_failed_htlcs,
     delete_failed_transactions,
+    delete_htlc_events,
     query_average_node_speed,
     query_liquidity_locked_per_htlc,
     query_slow_nodes,
@@ -30,6 +31,11 @@ DEFAULT_HTLC_LIQUIDITY_LOCKED_CSV_FILE = "~/.feelancer/htlc_liquidity_locked.csv
 
 DEFAULT_DELETE_FAILED = False
 DEFAULT_DELETE_FAILED_HOURS = 168
+
+DEFAULT_STORE_HTLC_EVENTS = False
+DEFAULT_DELETE_HTLC_EVENTS = False
+DEFAULT_DELETE_HTLC_EVENTS_HOURS = 168
+
 logger = getLogger(__name__)
 
 
@@ -105,6 +111,18 @@ class TrackerConfig:
                 config_dict.get("delete_failed_hours", DEFAULT_DELETE_FAILED_HOURS)
             )
 
+            self.store_htlc_events = bool(
+                config_dict.get("store_htlc_events", DEFAULT_STORE_HTLC_EVENTS)
+            )
+            self.delete_htlc_events = bool(
+                config_dict.get("delete_htlc_events", DEFAULT_DELETE_HTLC_EVENTS)
+            )
+            self.delete_htlc_events_hours = int(
+                config_dict.get(
+                    "delete_htlc_events_hours", DEFAULT_DELETE_HTLC_EVENTS_HOURS
+                )
+            )
+
         except Exception as e:
             raise ValueError(f"Invalid config: {e}")
 
@@ -118,12 +136,17 @@ class TrackerService:
         self,
         get_config: Callable[[], TrackerConfig | None],
         db_to_csv: Callable[[Select[tuple], str, list[str] | None], None],
-        db_delete_data: Callable[[Iterable[Delete[tuple]]], None],
+        db_delete_data: Callable[[Iterable[Delete[tuple]] | Delete[tuple]], None],
+        set_store_htlc_events: Callable[[bool], None],
     ) -> None:
 
         self._get_config = get_config
         self._db_to_csv = db_to_csv
         self._db_delete_data = db_delete_data
+        self._set_store_htlc_events = set_store_htlc_events
+
+        if (config := self._get_config()) is not None:
+            self._set_store_htlc_events(config.store_htlc_events)
 
     def run(self, request: RunnerRequest) -> RunnerResult:
         """
@@ -178,6 +201,13 @@ class TrackerService:
             queries.append(delete_failed_htlcs(deletion_cutoff))
 
             self._db_delete_data(queries)
+
+        self._set_store_htlc_events(config.store_htlc_events)
+        if config.delete_htlc_events:
+            deletion_cutoff = request.timestamp
+            deletion_cutoff += timedelta(hours=-config.delete_htlc_events_hours)
+
+            self._db_delete_data(delete_htlc_events(deletion_cutoff))
 
         logger.info("Finished run...")
 

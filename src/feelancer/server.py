@@ -56,14 +56,10 @@ class Lnd:
         pub_key = self.lnclient.pubkey_local
         self.ln_store = LightningStore(db, pub_key)
         self.tracker_store = TrackerStore(db, self.ln_store.ln_node_id)
-        self.payment_tracker: Tracker = LNDPaymentTracker(
-            self.lnclient, self.tracker_store
-        )
-        self.invoice_tracker: Tracker = LNDInvoiceTracker(
-            self.lnclient, self.tracker_store
-        )
-        self.htlc_tracker: Tracker = LNDHtlcTracker(self.lnclient, self.tracker_store)
-        self.fwd_tracker: Tracker = LNDFwdTracker(
+        self.payment_tracker = LNDPaymentTracker(self.lnclient, self.tracker_store)
+        self.invoice_tracker = LNDInvoiceTracker(self.lnclient, self.tracker_store)
+        self.htlc_tracker = LNDHtlcTracker(self.lnclient, self.tracker_store)
+        self.fwd_tracker = LNDFwdTracker(
             self.lnclient, self.tracker_store, self.htlc_tracker.pop_settled_forwards
         )
 
@@ -265,6 +261,7 @@ class MainServer(BaseServer):
             self._get_config_reader("tracker", TrackerConfig),
             self.cfg.db.sel_all_to_csv,
             self.cfg.db.del_core,
+            lnd.htlc_tracker.set_store_htlc_events,
         )
 
         self.runner.register_task(tracker.run)
