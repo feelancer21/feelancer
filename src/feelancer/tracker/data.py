@@ -315,6 +315,15 @@ def delete_htlc_events(deletion_cutoff: datetime) -> Delete[tuple[HtlcEvent]]:
     return delete(HtlcEvent).where(HtlcEvent.timestamp < deletion_cutoff)
 
 
+def delete_orphaned_operations() -> Delete[tuple[Operation]]:
+    """
+    Returns a query to delete all orphaned operations that are not linked to
+    any operation transactions.
+    """
+
+    return delete(Operation).where(~Operation.operation_transactions.any())
+
+
 class TrackerStore:
 
     def __init__(self, db: FeelancerDB, ln_node_id: int) -> None:

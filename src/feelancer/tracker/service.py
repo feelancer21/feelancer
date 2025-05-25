@@ -10,6 +10,7 @@ from .data import (
     delete_failed_htlcs,
     delete_failed_transactions,
     delete_htlc_events,
+    delete_orphaned_operations,
     query_average_node_speed,
     query_liquidity_locked_per_htlc,
     query_slow_nodes,
@@ -199,6 +200,7 @@ class TrackerService:
             # First we delete the failed transactions, then the failed htlcs.
             queries.append(delete_failed_transactions(deletion_cutoff))
             queries.append(delete_failed_htlcs(deletion_cutoff))
+            queries.append(delete_orphaned_operations())
 
             self._db_delete_data(queries)
 
