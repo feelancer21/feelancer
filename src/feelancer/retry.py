@@ -50,12 +50,12 @@ def new_retry_handler(
                     raise e
 
                 except exceptions_retry as e:
-                    logger.warning(f"An error occurred: {e}; {retries_left=}")
                     if (
                         min_tolerence_time is not None
                         and datetime.now(pytz.utc) > min_tolerence_time
                     ):
                         retries_left = max_retries
+                    logger.warning(f"An error occurred: {e}; {retries_left=}")
 
                     if retries_left == 0:
                         raise e
