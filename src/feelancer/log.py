@@ -16,12 +16,6 @@ TRACE_LEVEL = 5
 logging.addLevelName(TRACE_LEVEL, "TRACE")
 
 
-def trace(self: logging.Logger, message, *args, **kwargs):
-
-    if self.isEnabledFor(TRACE_LEVEL):
-        self._log(TRACE_LEVEL, message, args, **kwargs)
-
-
 class MyLogger(logging.Logger):
     def __init__(self, name: str) -> None:
         super().__init__(name)
@@ -29,6 +23,14 @@ class MyLogger(logging.Logger):
     def trace(self, msg, *args, **kwargs):
         if self.isEnabledFor(TRACE_LEVEL):
             self._log(TRACE_LEVEL, msg, args, **kwargs)
+
+    def trace_lazy(self, msg_call: Callable[[], str], *args, **kwargs):
+        """
+        Log a message lazily, only evaluating the message when the trace log level
+        is enabled.
+        """
+        if self.isEnabledFor(TRACE_LEVEL):
+            self._log(TRACE_LEVEL, msg_call(), args, **kwargs)
 
 
 logging.setLoggerClass(MyLogger)

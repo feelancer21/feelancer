@@ -414,8 +414,8 @@ class LNDHtlcTracker(LndBaseTracker):
         index = _incoming_htlc_index(htlc)
         self._not_final_by_in[index].append(htlc)
 
-        self._logger.trace(
-            f"Added non final event: {index=}; event={MessageToDict(htlc)}; "
+        self._logger.trace_lazy(
+            lambda: f"Added non final event: {index=}; event={MessageToDict(htlc)}; "
             f"{len(self._not_final_by_in)=}; "
         )
 
