@@ -11,6 +11,7 @@ from typing import Generic, Protocol, TypeVar
 import grpc
 from google.protobuf.json_format import MessageToDict
 from google.protobuf.message import Message
+from google.protobuf.json_format import MessageToDict
 
 from feelancer.base import BaseServer, run_with_timeout
 from feelancer.event import stop_event
