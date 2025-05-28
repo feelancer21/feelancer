@@ -4,7 +4,6 @@ from datetime import datetime
 from feelancer.grpc.client import StreamConverter
 from feelancer.lightning.lnd import LNDClient
 from feelancer.lnd.grpc_generated import lightning_pb2 as ln
-from feelancer.retry import new_retry_handler
 from feelancer.tracker.data import TrackerStore, new_operation_from_htlcs
 from feelancer.tracker.models import (
     Forward,
@@ -25,22 +24,8 @@ from .base import LndBaseTracker
 RECON_TIME_INTERVAL = 30 * 24 * 3600  # 30 days in seconds
 PAGINATOR_BLOCKING_INTERVAL = 21  # 21 seconds
 
-EXCEPTIONS_RETRY = (Exception,)
-EXCEPTIONS_RAISE = ()
-MAX_RETRIES = 3
-DELAY = 3
-MIN_TOLERANCE_DELTA = None
 
 type LndForwardReconSource = StreamConverter[Operation, ln.ForwardingEvent]
-
-
-htlc_event_retry_handler = new_retry_handler(
-    exceptions_retry=EXCEPTIONS_RETRY,
-    exceptions_raise=EXCEPTIONS_RAISE,
-    max_retries=MAX_RETRIES,
-    delay=DELAY,
-    min_tolerance_delta=MIN_TOLERANCE_DELTA,
-)
 
 
 class LNDFwdTracker(LndBaseTracker):
