@@ -29,15 +29,21 @@ STREAM_LOGGER_INTERVAL = 100
 
 
 class LndBaseTracker(Generic[T, U, V], ABC):
-    def __init__(self, lnd: LNDClient, store: TrackerStore):
+    def __init__(
+        self,
+        lnd: LNDClient,
+        store: TrackerStore,
+        name: str,
+        logger_interval: int = STREAM_LOGGER_INTERVAL,
+    ) -> None:
 
         self._lnd = lnd.lnd
         self._pub_key = lnd.pubkey_local
         self._store = store
-        self._items_name = self._get_items_name()
+        self._items_name = name
         self._logger = getLogger(self.__module__)
         self._stream_logger = stream_logger(
-            interval=STREAM_LOGGER_INTERVAL,
+            interval=logger_interval,
             items_name=self._items_name,
             logger=self._logger,
         )
@@ -47,12 +53,6 @@ class LndBaseTracker(Generic[T, U, V], ABC):
     def _delete_orphaned_data(self) -> None:
         """
         Deletes orphaned data from the database.
-        """
-
-    @abstractmethod
-    def _get_items_name(self) -> str:
-        """
-        The name of the items that are being tracked. Used for logging.
         """
 
     @abstractmethod
