@@ -53,7 +53,7 @@ class LNDHtlcTracker(LndBaseTracker):
     def __init__(
         self, lnd: LNDClient, store: TrackerStore, store_htlc_events: bool = False
     ) -> None:
-        super().__init__(lnd, store)
+        super().__init__(lnd, store, "htlc events")
 
         self._store_htlc_events = store_htlc_events
 
@@ -80,9 +80,6 @@ class LNDHtlcTracker(LndBaseTracker):
 
     def _delete_orphaned_data(self) -> None:
         return None
-
-    def _get_items_name(self) -> str:
-        return "htlc events"
 
     def _pre_sync_source(self) -> None:
         return None

@@ -29,7 +29,7 @@ type LndInvoiceReconSource = StreamConverter[Operation, ln.Invoice]
 
 class LNDInvoiceTracker(LndBaseTracker):
     def __init__(self, lnd: LNDClient, store: TrackerStore):
-        super().__init__(lnd, store)
+        super().__init__(lnd, store, "invoices")
 
         # add_index for start of the next recon. This is set during a recon
         # and is the add_index of the first unsettled invoice. If all
@@ -38,9 +38,6 @@ class LNDInvoiceTracker(LndBaseTracker):
 
     def _delete_orphaned_data(self) -> None:
         return None
-
-    def _get_items_name(self) -> str:
-        return "invoices"
 
     def _pre_sync_source(self) -> LndInvoiceReconSource:
 

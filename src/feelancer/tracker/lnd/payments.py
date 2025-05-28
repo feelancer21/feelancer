@@ -36,7 +36,7 @@ type LndPaymentReconSource = StreamConverter[Operation, ln.Payment]
 
 class LNDPaymentTracker(LndBaseTracker):
     def __init__(self, lnd: LNDClient, store: TrackerStore):
-        super().__init__(lnd, store)
+        super().__init__(lnd, store, "payments")
 
         # payment index for start of the next recon. This is set during a recon
         # and is the  payment_index of the first unsettled payment. If all
@@ -45,9 +45,6 @@ class LNDPaymentTracker(LndBaseTracker):
 
     def _delete_orphaned_data(self) -> None:
         self._store.delete_orphaned_payments()
-
-    def _get_items_name(self) -> str:
-        return "payments"
 
     def _pre_sync_source(self) -> LndPaymentReconSource:
 

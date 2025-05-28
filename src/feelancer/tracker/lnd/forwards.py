@@ -52,15 +52,12 @@ class LNDFwdTracker(LndBaseTracker):
             [str, str, int, int], tuple[HtlcForward, HtlcForward]
         ],
     ):
-        super().__init__(lnd, store)
+        super().__init__(lnd, store, "forwards")
         self._fwds_from_event_stream = fwds_from_event_stream
         self._fwd_index = 0
 
     def _delete_orphaned_data(self) -> None:
         return None
-
-    def _get_items_name(self) -> str:
-        return "forwards"
 
     def _pre_sync_source(self) -> LndForwardReconSource:
         index_offset = self._get_fwd_index()
