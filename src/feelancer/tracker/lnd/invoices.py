@@ -98,7 +98,7 @@ class LNDInvoiceTracker(LndBaseTracker):
         return StreamConverter(paginator, process_invoice)
 
     def _get_new_stream(self) -> Callable[[], Generator[Operation]]:
-        dispatcher = self._lnd.subscribe_invoices_dispatcher
+        dispatcher = self._lnd.invoices_dispatcher
         return self._get_new_stream_from_dispatcher(dispatcher)
 
     def _process_invoice(

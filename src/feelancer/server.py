@@ -26,10 +26,15 @@ from .reconnect.reconnector import LNDReconnector
 from .reconnect.service import ReconnectConfig, ReconnectService
 from .tasks.runner import TaskRunner
 from .tracker.data import TrackerStore
+from .tracker.lnd.channelbackups import LNDChannelBackupTracker
+from .tracker.lnd.channelevents import LNDChannelEventTracker
 from .tracker.lnd.forwards import LNDFwdTracker
+from .tracker.lnd.graph import LNDChannelGraphTracker
 from .tracker.lnd.htlcsevents import LNDHtlcTracker
 from .tracker.lnd.invoices import LNDInvoiceTracker
 from .tracker.lnd.payments import LNDPaymentTracker
+from .tracker.lnd.peerevents import LNDPeerEventTracker
+from .tracker.lnd.transactions import LNDTransactionTracker
 from .tracker.service import TrackerConfig, TrackerService
 from .utils import read_config_file
 
@@ -56,12 +61,20 @@ class Lnd:
         pub_key = self.lnclient.pubkey_local
         self.ln_store = LightningStore(db, pub_key)
         self.tracker_store = TrackerStore(db, self.ln_store.ln_node_id)
-        self.payment_tracker = LNDPaymentTracker(self.lnclient, self.tracker_store)
-        self.invoice_tracker = LNDInvoiceTracker(self.lnclient, self.tracker_store)
-        self.htlc_tracker = LNDHtlcTracker(self.lnclient, self.tracker_store)
+
+        tracker_args = (self.lnclient, self.tracker_store)
+
+        self.payment_tracker = LNDPaymentTracker(*tracker_args)
+        self.invoice_tracker = LNDInvoiceTracker(*tracker_args)
+        self.htlc_tracker = LNDHtlcTracker(*tracker_args)
         self.fwd_tracker = LNDFwdTracker(
-            self.lnclient, self.tracker_store, self.htlc_tracker.pop_settled_forwards
+            *tracker_args, self.htlc_tracker.pop_settled_forwards
         )
+        self.channel_graph_tracker = LNDChannelGraphTracker(*tracker_args)
+        self.channel_event_tracker = LNDChannelEventTracker(*tracker_args)
+        self.channel_backup_tracker = LNDChannelBackupTracker(*tracker_args)
+        self.peer_event_tracker = LNDPeerEventTracker(*tracker_args)
+        self.transaction_tracker = LNDTransactionTracker(*tracker_args)
 
 
 @dataclass
@@ -239,8 +252,13 @@ class MainServer(BaseServer):
         """
 
         self._register_sub_server(lnd.lndgrpc.track_payments_dispatcher)
-        self._register_sub_server(lnd.lndgrpc.subscribe_invoices_dispatcher)
-        self._register_sub_server(lnd.lndgrpc.subscribe_htlc_events_dispatcher)
+        self._register_sub_server(lnd.lndgrpc.invoices_dispatcher)
+        self._register_sub_server(lnd.lndgrpc.htlc_events_dispatcher)
+        self._register_sub_server(lnd.lndgrpc.graph_topology_dispatcher)
+        self._register_sub_server(lnd.lndgrpc.channel_event_dispatcher)
+        self._register_sub_server(lnd.lndgrpc.channel_backup_dispatcher)
+        self._register_sub_server(lnd.lndgrpc.peer_event_dispatcher)
+        self._register_sub_server(lnd.lndgrpc.transaction_dispatcher)
 
         # pid service is responsible for updating the fees with the pid model.
         pid_store = PidStore(self.cfg.db, lnd.lnclient.pubkey_local)
@@ -270,6 +288,11 @@ class MainServer(BaseServer):
         self._register_tracker(lnd.invoice_tracker)
         self._register_tracker(lnd.fwd_tracker)
         self._register_tracker(lnd.htlc_tracker)
+        self._register_tracker(lnd.channel_graph_tracker)
+        self._register_tracker(lnd.channel_event_tracker)
+        self._register_tracker(lnd.channel_backup_tracker)
+        self._register_tracker(lnd.peer_event_tracker)
+        self._register_tracker(lnd.transaction_tracker)
 
     def _register_tracker(self, tracker: Tracker) -> None:
         self._register_sync_starter(tracker.pre_sync_start)
