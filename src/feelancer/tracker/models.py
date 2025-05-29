@@ -849,3 +849,39 @@ class Forward(Transaction):
     __mapper_args__ = {
         "polymorphic_identity": TransactionType.LN_FORWARD,
     }
+
+
+class UntransformedStreamType(PyEnum):
+    UNKNOWN = 0
+    CHANNEL_BACKUP = 1
+    CHANNEL_EVENT = 2
+    GRAPH_TOPOLOGY = 3
+    PEER_EVENT = 4
+    STATE = 5
+    TRANSACTION = 6
+
+
+class UntransformedData(Base):
+    __tablename__ = "ln_untransformed_data"
+
+    id: Mapped[int] = mapped_column(autoincrement=True, primary_key=True)
+
+    ln_node_id: Mapped[int] = mapped_column(
+        ForeignKey("ln_node.id", ondelete="CASCADE"), nullable=False
+    )
+
+    # the local lightning node
+    ln_node: Mapped[DBLnNode] = relationship(DBLnNode)
+
+    # The type of the untransformed stream
+    stream_type: Mapped[UntransformedStreamType] = mapped_column(
+        Enum(UntransformedStreamType), nullable=False, index=True
+    )
+
+    # The data of the untransformed stream as JSONB
+    data: Mapped[dict] = mapped_column(JSONB, nullable=False)
+
+    # The timestamp when the stream was created
+    capture_time: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )

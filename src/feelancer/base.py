@@ -1,5 +1,6 @@
 import os
 import signal
+import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Protocol, TypeVar
@@ -20,6 +21,37 @@ class Server(Protocol):
     def stop(self) -> None: ...
 
 
+def run_with_timeout(
+    func: Callable[[], T], timeout: int, on_timeout: Callable[[], None]
+) -> T:
+    """
+    'func' is called and returned, if it does not finish within 'timeout' seconds,
+    'on_timeout' is called additionally.
+    """
+    # We wrap 'func' and set an finished event to signal when the function
+    # has completed.
+    finished = threading.Event()
+
+    def wrapped_func() -> T:
+        try:
+            return func()
+        finally:
+            finished.set()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        future_wrapped = executor.submit(wrapped_func)
+
+        # The next future finishes ether when the wrapped function
+        # has completed or when the timeout is reached.
+        future_wait = executor.submit(lambda: finished.wait(timeout + 21))
+        try:
+            future_wait.result(timeout=timeout)
+        except TimeoutError:
+            on_timeout()
+        finally:
+            return future_wrapped.result()
+
+
 def _run_concurrent(
     tasks: list[Callable[[], None]], err_signal: signal.Signals | None
 ) -> None:
@@ -28,8 +60,11 @@ def _run_concurrent(
     we send a signal to the signal handler to stop the MainServer.
     """
 
-    with ThreadPoolExecutor() as executor:
-        futures = {executor.submit(t): t for t in tasks}
+    if len(tasks) == 0:
+        return
+
+    with ThreadPoolExecutor(max_workers=len(tasks)) as executor:
+        futures = [executor.submit(t) for t in tasks]
 
         for future in as_completed(futures):
             try:

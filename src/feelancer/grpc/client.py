@@ -12,7 +12,7 @@ import grpc
 from google.protobuf.json_format import MessageToDict
 from google.protobuf.message import Message
 
-from feelancer.base import BaseServer
+from feelancer.base import BaseServer, run_with_timeout
 from feelancer.event import stop_event
 from feelancer.log import getLogger
 from feelancer.retry import default_retry_handler, new_retry_handler
@@ -391,7 +391,7 @@ class StreamDispatcher(Generic[T], BaseServer):
             # The stream initializer allows creating rpc streams in the same
             # grpc channel. We have to init it outside _channel_retry_handler.
             stream_initializer = self._new_stream_initializer()
-            self._logger.debug("Stream Initializer set...")
+            self._logger.debug("Stream initializer set...")
 
             self._start_stream(stream_initializer)
 
@@ -410,7 +410,8 @@ class StreamDispatcher(Generic[T], BaseServer):
     @_channel_retry_handler
     def _start_stream(self, stream_initializer: grpc.UnaryStreamMultiCallable) -> None:
 
-        # Creating a new stream in the grpc channel, decorates with an error handler
+        # Creating a new stream in the grpc channel. Storing the raw stream,
+        # enables us to cancel it later.
         self._stream = stream_initializer(self._request)
 
         # Decorating the stream with an error handler.
@@ -421,13 +422,19 @@ class StreamDispatcher(Generic[T], BaseServer):
             # Fetching the first message from the stream. In case of an error
             # we will not set the _is_receiving flag. This can be the case
             # when the server is still unavailable.
-            m = next(handled_stream)
+            # If there is no message until the timeout, we will start the reconciliation.
+            m = run_with_timeout(
+                func=lambda: next(handled_stream),  # 1st message from the stream
+                timeout=SLEEP_RECON,
+                on_timeout=lambda: self._is_receiving.set(),
+            )
+
             self._logger.trace_lazy(lambda: f"Received 1st message: {MessageToDict(m)}")
             self._put_to_queues(m)
 
             self._is_receiving.set()
 
-            # Receiving the grpc messages
+            # Receiving all grpc messages.
             for m in handled_stream:
                 self._logger.trace_lazy(
                     lambda: f"Received next message: {MessageToDict(m)}"

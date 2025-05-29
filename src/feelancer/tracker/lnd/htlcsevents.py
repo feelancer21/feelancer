@@ -97,7 +97,7 @@ class LNDHtlcTracker(LndBaseTracker):
         return None
 
     def _get_new_stream(self) -> Callable[[], Generator[HtlcEvent]]:
-        dispatcher = self._lnd.subscribe_htlc_events_dispatcher
+        dispatcher = self._lnd.htlc_events_dispatcher
         return self._get_new_stream_from_dispatcher(dispatcher)
 
     def _process_htlc_event(
