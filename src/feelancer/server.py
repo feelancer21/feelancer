@@ -76,6 +76,16 @@ class Lnd:
         self.peer_event_tracker = LNDPeerEventTracker(*tracker_args)
         self.transaction_tracker = LNDTransactionTracker(*tracker_args)
 
+    def store_untransformed_events(self, store: bool) -> None:
+        """
+        Helper function to trigger all trackers to store untransformed events.
+        """
+        self.channel_graph_tracker.store_events = store
+        self.channel_event_tracker.store_events = store
+        self.channel_backup_tracker.store_events = store
+        self.peer_event_tracker.store_events = store
+        self.transaction_tracker.store_events = store
+
 
 @dataclass
 class MainConfig:
@@ -280,6 +290,7 @@ class MainServer(BaseServer):
             self.cfg.db.sel_all_to_csv,
             self.cfg.db.del_core,
             lnd.htlc_tracker.set_store_htlc_events,
+            lnd.store_untransformed_events,
         )
 
         self.runner.register_task(tracker.run)

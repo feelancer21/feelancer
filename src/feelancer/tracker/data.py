@@ -29,6 +29,8 @@ from .models import (
     Transaction,
     TransactionResolveInfo,
     TransactionResolveType,
+    UntransformedData,
+    UntransformedStreamType,
 )
 
 CACHE_SIZE_PAYMENT_REQUEST_ID = 1000
@@ -313,6 +315,27 @@ def delete_htlc_events(deletion_cutoff: datetime) -> Delete[tuple[HtlcEvent]]:
     """
 
     return delete(HtlcEvent).where(HtlcEvent.timestamp < deletion_cutoff)
+
+
+def delete_untransformed_data(
+    deletion_cutoff: datetime,
+) -> Delete[tuple[UntransformedData]]:
+    """
+    Returns a query to delete untransformed data that are older than the
+    given time. Time is exclusive. This includes graph topology, peer events,
+    and channel events. Other untransformed data are not deleted, because they
+    are not consuming much space and maybe useful later.
+    """
+    return delete(UntransformedData).where(
+        UntransformedData.capture_time < deletion_cutoff,
+        UntransformedData.stream_type.in_(
+            [
+                UntransformedStreamType.GRAPH_TOPOLOGY,
+                UntransformedStreamType.PEER_EVENT,
+                UntransformedStreamType.CHANNEL_EVENT,
+            ]
+        ),
+    )
 
 
 def delete_orphaned_operations() -> Delete[tuple[Operation]]:

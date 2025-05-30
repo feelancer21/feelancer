@@ -13,8 +13,10 @@ from .base import LndBaseTracker
 
 
 class LNDChannelGraphTracker(LndBaseTracker):
-    def __init__(self, lnd: LNDClient, store: TrackerStore):
+    def __init__(self, lnd: LNDClient, store: TrackerStore, store_events: bool = False):
         super().__init__(lnd, store, "graph topology updates")
+
+        self.store_events = store_events
 
     def _delete_orphaned_data(self) -> None:
         return None
@@ -38,6 +40,9 @@ class LNDChannelGraphTracker(LndBaseTracker):
     def _process_graph_topo_update(
         self, event: ln.GraphTopologyUpdate, recon_running: bool
     ) -> Generator[UntransformedData]:
+
+        if not self.store_events:
+            return
 
         yield UntransformedData(
             ln_node_id=self._store.ln_node_id,

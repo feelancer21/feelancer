@@ -13,8 +13,10 @@ from .base import LndBaseTracker
 
 
 class LNDPeerEventTracker(LndBaseTracker):
-    def __init__(self, lnd: LNDClient, store: TrackerStore):
+    def __init__(self, lnd: LNDClient, store: TrackerStore, store_events: bool = False):
         super().__init__(lnd, store, "peer events", 1)
+
+        self.store_events = store_events
 
     def _delete_orphaned_data(self) -> None:
         return None
@@ -38,6 +40,9 @@ class LNDPeerEventTracker(LndBaseTracker):
     def _process_peer_event(
         self, event: ln.PeerEvent, recon_running: bool
     ) -> Generator[UntransformedData]:
+
+        if not self.store_events:
+            return
 
         yield UntransformedData(
             ln_node_id=self._store.ln_node_id,

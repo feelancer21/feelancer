@@ -192,3 +192,18 @@ htlc_liquidity_locked_csv_file = "~/.feelancer/htlc_liquidity_locked.csv"
 delete_failed = true
 # Number of hours to keep failed payments and htlc attempts
 delete_failed_hours = 168
+
+# Indicates whether htlc events are stored in the ln_htlc_event table of the
+# database and if they are deleted after a certain time.
+store_htlc_events = true
+delete_htlc_events = true
+delete_htlc_events_hours = 168
+
+# Indicates whether untransformed events are stored in the ln_untransformed_data
+# table of the database and if they are deleted after a certain time.
+# This includes SubscribeChannelEvents, SubscribeChannelGraph, SubscribeChannelBackups
+# SubscribePeerEvents and SubscribeTransactions.
+# Note: Transactions and Backups are not deleted.
+store_untransformed_events = true
+delete_untransformed_events = true
+delete_untransformed_events_hours = 168
