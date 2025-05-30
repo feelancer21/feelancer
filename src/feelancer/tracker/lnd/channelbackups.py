@@ -13,8 +13,10 @@ from .base import LndBaseTracker
 
 
 class LNDChannelBackupTracker(LndBaseTracker):
-    def __init__(self, lnd: LNDClient, store: TrackerStore):
+    def __init__(self, lnd: LNDClient, store: TrackerStore, store_events: bool = False):
         super().__init__(lnd, store, "channel backups", 1)
+
+        self.store_events = store_events
 
     def _delete_orphaned_data(self) -> None:
         return None
@@ -38,6 +40,9 @@ class LNDChannelBackupTracker(LndBaseTracker):
     def _process_channel_backup(
         self, event: ln.ChanBackupSnapshot, recon_running: bool
     ) -> Generator[UntransformedData]:
+
+        if not self.store_events:
+            return
 
         data = MessageToDict(event)
         self._logger.debug(f"Processing channel backups: {data=}")

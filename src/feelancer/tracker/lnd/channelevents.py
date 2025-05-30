@@ -13,8 +13,10 @@ from .base import LndBaseTracker
 
 
 class LNDChannelEventTracker(LndBaseTracker):
-    def __init__(self, lnd: LNDClient, store: TrackerStore):
+    def __init__(self, lnd: LNDClient, store: TrackerStore, store_events: bool = False):
         super().__init__(lnd, store, "channel events", 1)
+
+        self.store_events = store_events
 
     def _delete_orphaned_data(self) -> None:
         return None
@@ -38,6 +40,9 @@ class LNDChannelEventTracker(LndBaseTracker):
     def _process_channel_event(
         self, event: ln.ChannelEventUpdate, recon_running: bool
     ) -> Generator[UntransformedData]:
+
+        if not self.store_events:
+            return
 
         data = MessageToDict(event)
         self._logger.debug(f"Processing channel event: {data=}")

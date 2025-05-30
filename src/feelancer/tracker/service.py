@@ -11,6 +11,7 @@ from .data import (
     delete_failed_transactions,
     delete_htlc_events,
     delete_orphaned_operations,
+    delete_untransformed_data,
     query_average_node_speed,
     query_liquidity_locked_per_htlc,
     query_slow_nodes,
@@ -36,6 +37,10 @@ DEFAULT_DELETE_FAILED_HOURS = 168
 DEFAULT_STORE_HTLC_EVENTS = False
 DEFAULT_DELETE_HTLC_EVENTS = False
 DEFAULT_DELETE_HTLC_EVENTS_HOURS = 168
+
+DEFAULT_STORE_UNTRANSFORMED_EVENTS = False
+DEFAULT_DELETE_UNTRANSFORMED_EVENTS = False
+DEFAULT_DELETE_UNTRANSFORMED_EVENTS_HOURS = 168
 
 logger = getLogger(__name__)
 
@@ -124,6 +129,23 @@ class TrackerConfig:
                 )
             )
 
+            self.store_untransformed_events = bool(
+                config_dict.get(
+                    "store_untransformed_events", DEFAULT_STORE_UNTRANSFORMED_EVENTS
+                )
+            )
+            self.delete_untransformed_events = bool(
+                config_dict.get(
+                    "delete_untransformed_events", DEFAULT_DELETE_UNTRANSFORMED_EVENTS
+                )
+            )
+            self.delete_untransformed_events_hours = int(
+                config_dict.get(
+                    "delete_untransformed_events_hours",
+                    DEFAULT_DELETE_UNTRANSFORMED_EVENTS_HOURS,
+                )
+            )
+
         except Exception as e:
             raise ValueError(f"Invalid config: {e}")
 
@@ -139,15 +161,18 @@ class TrackerService:
         db_to_csv: Callable[[Select[tuple], str, list[str] | None], None],
         db_delete_data: Callable[[Iterable[Delete[tuple]] | Delete[tuple]], None],
         set_store_htlc_events: Callable[[bool], None],
+        set_store_untransformed_events: Callable[[bool], None],
     ) -> None:
 
         self._get_config = get_config
         self._db_to_csv = db_to_csv
         self._db_delete_data = db_delete_data
         self._set_store_htlc_events = set_store_htlc_events
+        self._set_store_untransformed_events = set_store_untransformed_events
 
         if (config := self._get_config()) is not None:
             self._set_store_htlc_events(config.store_htlc_events)
+            self._set_store_untransformed_events(config.store_untransformed_events)
 
     def run(self, request: RunnerRequest) -> RunnerResult:
         """
@@ -210,6 +235,15 @@ class TrackerService:
             deletion_cutoff += timedelta(hours=-config.delete_htlc_events_hours)
 
             self._db_delete_data(delete_htlc_events(deletion_cutoff))
+
+        self._set_store_untransformed_events(config.store_untransformed_events)
+        if config.delete_untransformed_events:
+            deletion_cutoff = request.timestamp
+            deletion_cutoff += timedelta(
+                hours=-config.delete_untransformed_events_hours
+            )
+
+            self._db_delete_data(delete_untransformed_data(deletion_cutoff))
 
         logger.info("Finished run...")
 
