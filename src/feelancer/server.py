@@ -286,12 +286,24 @@ class MainServer(BaseServer):
         )
         self.runner.register_task(reconnect.run)
 
+        # Helper function to trigger all trackers to store untransformed events.
+        def store_untransformed_events(store: bool) -> None:
+            lnd.channel_graph_tracker.store_events = store
+            lnd.channel_event_tracker.store_events = store
+            lnd.channel_backup_tracker.store_events = store
+            lnd.peer_event_tracker.store_events = store
+            lnd.transaction_tracker.store_events = store
+
         tracker = TrackerService(
             self._get_config_reader("tracker", TrackerConfig),
             self.cfg.db.sel_all_to_csv,
             self.cfg.db.del_core,
             lnd.htlc_tracker.set_store_htlc_events,
+<<<<<<< HEAD
             lnd.store_untransformed_events,
+=======
+            store_untransformed_events,
+>>>>>>> d8ef525 (tracker: Add config options for storing and deleting untransformed data)
         )
 
         self.runner.register_task(tracker.run)
