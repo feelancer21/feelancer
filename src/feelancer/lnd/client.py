@@ -391,100 +391,76 @@ class LndGrpc(SecureGrpcClient):
         self, no_inflight_updates: bool = False
     ) -> LndPaymentDispatcher:
 
-        req = rt.TrackPaymentsRequest()
-        req.no_inflight_updates = no_inflight_updates
+        def new_stream(channel: grpc.Channel) -> Generator[ln.Payment]:
+            req = rt.TrackPaymentsRequest()
+            req.no_inflight_updates = no_inflight_updates
+            handler = lnd_resp_handler.new_handle_rpc_stream("TrackPayments")
+            return handler(rtrpc.RouterStub(channel).TrackPayments(req))
 
-        rpc_handler = lnd_resp_handler.new_handle_rpc_stream("TrackPayments")
-
-        return LndPaymentDispatcher(
-            new_stream_initializer=lambda: self._router_stub.TrackPayments,
-            request=req,
-            handle_rpc_stream=rpc_handler,
-        )
+        return LndPaymentDispatcher(lambda: self._channel, new_stream)
 
     def _new_invoice_dispatcher(self) -> LndInvoiceDispatcher:
 
-        req = ln.InvoiceSubscription()
+        def new_stream(channel: grpc.Channel) -> Generator[ln.Invoice]:
+            req = ln.InvoiceSubscription()
+            handler = lnd_resp_handler.new_handle_rpc_stream("SubscribeInvoices")
+            return handler(lnrpc.LightningStub(channel).SubscribeInvoices(req))
 
-        rpc_handler = lnd_resp_handler.new_handle_rpc_stream("SubscribeInvoices")
-
-        return LndInvoiceDispatcher(
-            new_stream_initializer=lambda: self._ln_stub.SubscribeInvoices,
-            request=req,
-            handle_rpc_stream=rpc_handler,
-        )
+        return LndInvoiceDispatcher(lambda: self._channel, new_stream)
 
     def _new_htlc_event_dispatcher(self) -> LndHtlcEventDispatcher:
 
-        req = rt.SubscribeHtlcEventsRequest()
+        def new_stream(channel: grpc.Channel) -> Generator[rt.HtlcEvent]:
+            req = rt.SubscribeHtlcEventsRequest()
+            handler = lnd_resp_handler.new_handle_rpc_stream("SubscribeHtlcEvents")
+            return handler(rtrpc.RouterStub(channel).SubscribeHtlcEvents(req))
 
-        rpc_handler = lnd_resp_handler.new_handle_rpc_stream("SubscribeHtlcEvents")
-
-        return LndHtlcEventDispatcher(
-            new_stream_initializer=lambda: self._router_stub.SubscribeHtlcEvents,
-            request=req,
-            handle_rpc_stream=rpc_handler,
-        )
+        return LndHtlcEventDispatcher(lambda: self._channel, new_stream)
 
     def _new_graph_topology_dispatcher(self) -> LndGraphTopologyDispatcher:
 
-        req = ln.GraphTopologySubscription()
+        def new_stream(channel: grpc.Channel) -> Generator[ln.GraphTopologyUpdate]:
+            req = ln.GraphTopologySubscription()
+            handler = lnd_resp_handler.new_handle_rpc_stream("SubscribeChannelGraph")
+            return handler(lnrpc.LightningStub(channel).SubscribeChannelGraph(req))
 
-        rpc_handler = lnd_resp_handler.new_handle_rpc_stream("SubscribeChannelGraph")
-
-        return LndGraphTopologyDispatcher(
-            new_stream_initializer=lambda: self._ln_stub.SubscribeChannelGraph,
-            request=req,
-            handle_rpc_stream=rpc_handler,
-        )
+        return LndGraphTopologyDispatcher(lambda: self._channel, new_stream)
 
     def _new_channel_event_dispatcher(self) -> LndChannelEventDispatcher:
 
-        req = ln.ChannelEventSubscription()
+        def new_stream(channel: grpc.Channel) -> Generator[ln.ChannelEventUpdate]:
+            req = ln.ChannelEventSubscription()
+            handler = lnd_resp_handler.new_handle_rpc_stream("SubscribeChannelEvents")
+            return handler(lnrpc.LightningStub(channel).SubscribeChannelEvents(req))
 
-        rpc_handler = lnd_resp_handler.new_handle_rpc_stream("SubscribeChannelEvents")
-
-        return LndChannelEventDispatcher(
-            new_stream_initializer=lambda: self._ln_stub.SubscribeChannelEvents,
-            request=req,
-            handle_rpc_stream=rpc_handler,
-        )
+        return LndChannelEventDispatcher(lambda: self._channel, new_stream)
 
     def _new_channel_backup_dispatcher(self) -> LndChannelBackupDispatcher:
 
-        req = ln.ChannelBackupSubscription()
+        def new_stream(channel: grpc.Channel) -> Generator[ln.ChanBackupSnapshot]:
+            req = ln.ChannelBackupSubscription()
+            handler = lnd_resp_handler.new_handle_rpc_stream("SubscribeChannelBackups")
+            return handler(lnrpc.LightningStub(channel).SubscribeChannelBackups(req))
 
-        rpc_handler = lnd_resp_handler.new_handle_rpc_stream("SubscribeChannelBackups")
-
-        return LndChannelBackupDispatcher(
-            new_stream_initializer=lambda: self._ln_stub.SubscribeChannelBackups,
-            request=req,
-            handle_rpc_stream=rpc_handler,
-        )
+        return LndChannelBackupDispatcher(lambda: self._channel, new_stream)
 
     def _new_peer_event_dispatcher(self) -> LndPeerEventDispatcher:
 
-        req = ln.PeerEventSubscription()
+        def new_stream(channel: grpc.Channel) -> Generator[ln.PeerEvent]:
+            req = ln.PeerEventSubscription()
+            handler = lnd_resp_handler.new_handle_rpc_stream("SubscribePeerEvents")
+            return handler(lnrpc.LightningStub(channel).SubscribePeerEvents(req))
 
-        rpc_handler = lnd_resp_handler.new_handle_rpc_stream("SubscribePeerEvents")
-
-        return LndPeerEventDispatcher(
-            new_stream_initializer=lambda: self._ln_stub.SubscribePeerEvents,
-            request=req,
-            handle_rpc_stream=rpc_handler,
-        )
+        return LndPeerEventDispatcher(lambda: self._channel, new_stream)
 
     def _new_transaction_dispatcher(self) -> LndTransactionDispatcher:
 
-        req = ln.GetTransactionsRequest()
+        def new_stream(channel: grpc.Channel) -> Generator[ln.Transaction]:
+            req = ln.GetTransactionsRequest()
+            handler = lnd_resp_handler.new_handle_rpc_stream("SubscribeTransactions")
+            return handler(lnrpc.LightningStub(channel).SubscribeTransactions(req))
 
-        rpc_handler = lnd_resp_handler.new_handle_rpc_stream("SubscribeTransactions")
-
-        return LndTransactionDispatcher(
-            new_stream_initializer=lambda: self._ln_stub.SubscribeTransactions,
-            request=req,
-            handle_rpc_stream=rpc_handler,
-        )
+        return LndTransactionDispatcher(lambda: self._channel, new_stream)
 
 
 def update_failure_name(num) -> str:
