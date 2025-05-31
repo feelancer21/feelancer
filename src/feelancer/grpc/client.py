@@ -134,8 +134,7 @@ class RpcResponseHandler:
 
         # Can occur during rpc streams, when the user cancels the stream.
         if code == grpc.StatusCode.CANCELLED:
-            if details == "Locally cancelled by application!":
-                raise LocallyCancelled(details)
+            raise LocallyCancelled(details)
 
         if code == grpc.StatusCode.DEADLINE_EXCEEDED:
             raise DeadlineExceeded(details)
@@ -253,9 +252,8 @@ class StreamDispatcher(Generic[T], BaseServer):
 
     def __init__(
         self,
-        new_stream_initializer: Callable[[], grpc.UnaryStreamMultiCallable],
-        request: Message,
-        handle_rpc_stream: Callable[[Iterable[T]], Generator[T]],
+        new_grpc_channel: Callable[[], grpc.Channel],
+        new_stream: Callable[[grpc.Channel], Generator[T]],
         **kwargs,
     ) -> None:
 
@@ -264,12 +262,15 @@ class StreamDispatcher(Generic[T], BaseServer):
         # Want to have the class name in the logger name
         self._logger = getLogger(self.__module__ + "." + self.__class__.__name__)
 
-        self._new_stream_initializer = new_stream_initializer
-        self._request: Message = request
+        self._new_grpc_channel = new_grpc_channel
+        self._new_stream = new_stream
 
         self._message_queues: list[queue.Queue[T | Exception]] = []
-        self._stream: Iterable[T] | None = None
-        self._handle_rpc_stream = handle_rpc_stream
+        self._channel: grpc.Channel | None = None
+
+        # Lock for creating and closing the grpc channel, because multiple threads
+        # are involved.
+        self._channel_lock = threading.Lock()
 
         # Indicates whether there is a subscriber for the messages.
         self._is_subscribed: threading.Event = threading.Event()
@@ -371,6 +372,8 @@ class StreamDispatcher(Generic[T], BaseServer):
                     self._logger.info("Reconciliation finished")
                     in_recon = False
 
+                self._logger.trace_lazy(lambda: f"Queue size: {q.qsize()}")
+
     @default_retry_handler
     def _start(self) -> None:
         """
@@ -386,16 +389,21 @@ class StreamDispatcher(Generic[T], BaseServer):
         if stop_event.is_set():
             return None
 
-        # We have a subscriber. We can start the stream
+        # We have a subscriber. We are creating a new grpc channel for the stream.
+        with self._channel_lock:
+            self._channel = self._new_grpc_channel()
+
+        # Registering a callback for the channel connectivity changes.
+        def on_channel_connectivity(c: grpc.ChannelConnectivity) -> None:
+            self._logger.debug(f"ChannelConnectivity set to {c.value}.")
+
+        self._channel.subscribe(on_channel_connectivity)
+
+        self._logger.debug("New grpc channel initialized...")
+
         try:
-            # The stream initializer allows creating rpc streams in the same
-            # grpc channel. We have to init it outside _channel_retry_handler.
-            stream_initializer = self._new_stream_initializer()
-            self._logger.debug("Stream initializer set...")
+            self._start_stream(self._channel)
 
-            self._start_stream(stream_initializer)
-
-        # Unexpected errors are raised
         except Exception as e:
 
             if isinstance(e, LocallyCancelled):
@@ -406,16 +414,15 @@ class StreamDispatcher(Generic[T], BaseServer):
                 return None
 
             raise e
+        finally:
+            with self._channel_lock:
+                self._channel = None
 
     @_channel_retry_handler
-    def _start_stream(self, stream_initializer: grpc.UnaryStreamMultiCallable) -> None:
+    def _start_stream(self, channel: grpc.Channel) -> None:
 
-        # Creating a new stream in the grpc channel. Storing the raw stream,
-        # enables us to cancel it later.
-        self._stream = stream_initializer(self._request)
-
-        # Decorating the stream with an error handler.
-        handled_stream = self._handle_rpc_stream(self._stream)  # type: ignore
+        # Creating a new stream decorated with an error handler.
+        handled_stream = self._new_stream(channel)
 
         self._logger.debug("Starting stream...")
         try:
@@ -458,14 +465,14 @@ class StreamDispatcher(Generic[T], BaseServer):
             raise e
 
         finally:
-            self._stream = None
             self._is_receiving.clear()
 
     def _stop(self) -> None:
         """Stops receiving of the messages from the upstream."""
 
-        if self._stream is not None:
-            self._stream.cancel()  # type: ignore
+        with self._channel_lock:
+            if self._channel is not None:
+                self._channel.close()
 
     def _put_to_queues(self, data: T | Exception) -> None:
         """Puts a message to each queue."""
