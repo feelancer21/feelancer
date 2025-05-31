@@ -128,11 +128,15 @@ class LNDClient:
                 return None
 
             except lnd.PeerAlreadyConnected as e:
+                # Not trying other addresses if the peer is already connected.
                 logger.debug(f"Received from lnd: {e}")
                 return None
 
-            except (lnd.DialProxFailed, lnd.EOF, DeadlineExceeded) as e:
-                logger.warning(f"Received from lnd: {e}")
+            except (lnd.UnknownRpcError, DeadlineExceeded) as e:
+                logger.warning(
+                    f"Cannot connect to {pub_key=}@{host=}; received from lnd: {e}; "
+                    f"trying next host if available."
+                )
 
     def disconnect_peer(self, pub_key: str) -> None:
 
@@ -141,7 +145,7 @@ class LNDClient:
         try:
             self.lnd.disconnect_peer(pub_key)
             logger.info(f"Disonnected from {pub_key=}")
-        except (lnd.PeerNotConnected, DeadlineExceeded) as e:
+        except (lnd.UnknownRpcError, DeadlineExceeded) as e:
             logger.debug(f"Received from lnd: {e}")
 
     def get_channel_policies(

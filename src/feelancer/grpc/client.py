@@ -38,9 +38,11 @@ class DeadlineExceeded(Exception): ...
 
 
 class RpcResponseHandler:
-    def __init__(self, eval_status: Callable[[grpc.StatusCode, str], None]):
+    def __init__(self, eval_error: Callable[[grpc.RpcError, str | None], None]):
 
-        self._eval_status = eval_status
+        # eval_error is a client specific function which evaluates a RpcError. It
+        # takes the RpcError and an optional function name as arguments.
+        self._eval_error = eval_error
         self._logger = logging.getLogger(self.__module__)
 
     def decorator_rpc_unary(self, fnc):
@@ -53,7 +55,9 @@ class RpcResponseHandler:
             try:
                 return fnc(*args, **kwargs)
             except grpc.RpcError as e:
-                self.rpc_error_handler(e, self._msg_body(fnc, *args, **kwargs))
+                self.rpc_error_handler(
+                    e, self._msg_body(fnc, *args, **kwargs), fnc.__name__
+                )
             except Exception as e:
                 self.exception_handler(e, self._msg_body(fnc, *args, **kwargs))
 
@@ -61,7 +65,8 @@ class RpcResponseHandler:
 
     def decorator_rpc_stream(self, fnc):
         """
-        Decorator for handling errors for a stream rpc.
+        Decorator for handling errors for a stream rpc. It handles the raised
+        errors when subscribing to the stream.
         """
 
         @wraps(fnc)
@@ -70,7 +75,9 @@ class RpcResponseHandler:
                 stream = fnc(*args, **kwargs)
                 yield from stream
             except grpc.RpcError as e:
-                self.rpc_error_handler(e, self._msg_body(fnc, *args, **kwargs))
+                self.rpc_error_handler(
+                    e, self._msg_body(fnc, *args, **kwargs), fnc.__name__
+                )
             except Exception as e:
                 self.exception_handler(e, self._msg_body(fnc, *args, **kwargs))
 
@@ -86,7 +93,7 @@ class RpcResponseHandler:
             try:
                 yield from stream
             except grpc.RpcError as e:
-                self.rpc_error_handler(e, msg)
+                self.rpc_error_handler(e, msg, name)
             except Exception as e:
                 self.exception_handler(e, msg)
 
@@ -104,17 +111,20 @@ class RpcResponseHandler:
         """
         Default error handling for exceptions which are not RPC related.
         """
+        self._logger.error(msg_body)
         raise e
 
-    def rpc_error_handler(self, e: grpc.RpcError, msg_body: str) -> None:
+    def rpc_error_handler(
+        self, e: grpc.RpcError, msg_body: str, func_name: str | None
+    ) -> None:
+
+        # Eval the error to raise a specific exception.
+        self._eval_error(e, func_name)
+
         code: grpc.StatusCode = e.code()  # type: ignore
         details: str = e.details()  # type: ignore
 
         msg = f"{msg_body}; RpcError code: {code}; details: {details}"
-        if self._eval_status is not None:
-
-            # Evaluating the status code and details
-            self._eval_status(code, details)
 
         # Can occur during rpc streams, when the user cancels the stream.
         if code == grpc.StatusCode.CANCELLED:
