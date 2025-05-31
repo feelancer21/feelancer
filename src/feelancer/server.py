@@ -156,7 +156,7 @@ class SignalHandler:
         self._alarm_handler = alarm_handler
 
         self._lock = threading.Lock()
-        self._sig_received = False
+        self._sig_received = threading.Event()
 
         # If one signal is received, self._receive_signal is called
         signal.signal(signal.SIGTERM, self._receive_sig)
@@ -167,10 +167,11 @@ class SignalHandler:
     def _receive_sig(self, signum, frame) -> None:
         """Action if SIGTERM or SIGINT is received."""
 
+        # Prevents double execution of the signal handler.
         with self._lock:
-            if self._sig_received:
+            if self._sig_received.is_set():
                 return
-            self._sig_received = True
+            self._sig_received.set()
 
         logger.debug(f"Received {signal.Signals(signum).name}")
 
@@ -341,5 +342,5 @@ class MainServer(BaseServer):
         Kills the server.
         """
 
-        self._logger.info("{Killing...\n")
+        self._logger.error("Cannot shutdown server gracefully; killing app...\n")
         os._exit(1)

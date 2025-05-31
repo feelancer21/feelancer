@@ -132,7 +132,7 @@ class BaseServer:
         """
 
         # Preventing start if stop occurred before start. It's more a workaround
-        # and safe in all cases.
+        # and not safe in all cases.
         if stop_event.is_set():
             return
 
