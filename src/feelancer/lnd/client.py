@@ -22,52 +22,46 @@ PAGINATOR_MAX_FORWARDING_EVENTS = 10000
 PAGINATOR_MAX_PAYMENTS = 10000
 
 
-class EdgeNotFound(Exception): ...
+class EdgeNotFound(grpc.RpcError): ...
 
 
-class PeerNotConnected(Exception): ...
+class PeerAlreadyConnected(grpc.RpcError): ...
 
 
-class PeerAlreadyConnected(Exception): ...
+class UnknownRpcError(grpc.RpcError):
+    def __init__(self, e: grpc.RpcError):
+        super().__init__(str(e))
+        self.details = lambda: e.details()  # type: ignore
+        self.code = lambda: e.code()  # type: ignore
+        self.debug_error_string = lambda: e.debug_error_string()  # type: ignore
 
 
-class DialProxFailed(Exception): ...
-
-
-class EOF(Exception): ...
-
-
-def _eval_lnd_rpc_status(code: grpc.StatusCode, details: str) -> None:
+def _eval_lnd_rpc_error(rpc_error: grpc.RpcError, func_name: str | None) -> None:
     """
-    Callable which evaluates lnd specific grpc error based on StatusCode and
-    details. If a criteria is matched, a specific exception is raised or True
-    is returned. If no criteria is matched False is returned.
+    Evaluates the given RpcError and raises a specific exception if applicable.
     """
+
+    code: grpc.StatusCode = rpc_error.code()  # type: ignore
 
     if code == grpc.StatusCode.UNKNOWN:
+        details: str = rpc_error.details()  # type: ignore
+
         if details == "edge not found":
             raise EdgeNotFound(details)
-
-        if details == "EOF":
-            raise EOF(details)
-
-        if re.match(r"unable to disconnect peer: peer (.*) is not connected", details):
-            raise PeerNotConnected(details)
 
         if re.match(r"already connected to peer: (.*)", details):
             raise PeerAlreadyConnected(details)
 
-        if re.match(
-            r"dial proxy failed(.*)",
-            details,
-        ):
-            raise DialProxFailed(details)
+        # For some functions we raise an UnknownRpcError
+        funcs_raise_unkwown = ["connect_peer", "disconnect_peer"]
+        if func_name is not None and func_name in funcs_raise_unkwown:
+            raise UnknownRpcError(rpc_error)
 
 
 class LndResponseHandler(RpcResponseHandler): ...
 
 
-lnd_resp_handler = LndResponseHandler(_eval_lnd_rpc_status)
+lnd_resp_handler = LndResponseHandler(_eval_lnd_rpc_error)
 lnd_handle_rpc_unary = lnd_resp_handler.decorator_rpc_unary
 lnd_handle_rpc_stream = lnd_resp_handler.decorator_rpc_stream
 
