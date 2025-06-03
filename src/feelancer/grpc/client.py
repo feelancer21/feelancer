@@ -489,8 +489,8 @@ class Paginator(Generic[W]):
         self, max_events: int | None, blocking_sec: int | None, offset: int, **kwargs
     ) -> Generator[W]:
         """
-        If blocking_sec is set, the paginator will not stop after the receiving
-        the last events. It will wait for seconds and afterwards calling the
+        If blocking_sec is set, the paginator will not stop after receiving
+        the last events. It will wait some for seconds and afterwards calling the
         producer again.
         If max_events is not None, it will stop after max_events events.
         """
@@ -501,7 +501,7 @@ class Paginator(Generic[W]):
         next_max = self._max_responses
         next_offset = offset
 
-        while True:
+        while not stop_event.is_set():
 
             if events_open is not None and events_open < self._max_responses:
                 next_max = events_open
@@ -523,13 +523,10 @@ class Paginator(Generic[W]):
                     # We will break even in a blocking case
                     break
 
-            # Next call would not return any more events
+            # An immediate next call would probably not return any new data, so we
+            # break if blocking_sec is None., or we wait some seconds until the
+            # next call.
             if len(data) < self._max_responses:
                 if blocking_sec is None:
                     break
-
-            if blocking_sec is not None:
                 stop_event.wait(blocking_sec)
-
-            if stop_event.is_set():
-                break
