@@ -233,7 +233,7 @@ class ReconSource(Generic[V], Protocol):
 class StreamDispatcher(Generic[T], BaseServer):
     """
     Receives grpc messages of Type T from an stream and handles the errors.
-    The message are distributors to all subscribers of the dispatchers.
+    The messages are distributed to all subscribers of the dispatchers.
     """
 
     def __init__(
@@ -381,7 +381,7 @@ class StreamDispatcher(Generic[T], BaseServer):
 
         # Registering a callback for the channel connectivity changes.
         def on_channel_connectivity(c: grpc.ChannelConnectivity) -> None:
-            self._logger.debug(f"ChannelConnectivity set to {c.value}.")
+            self._logger.debug(f"Channel connectivity is {c.value}.")
 
         self._channel.subscribe(on_channel_connectivity)
 
@@ -390,16 +390,6 @@ class StreamDispatcher(Generic[T], BaseServer):
         try:
             self._start_stream(self._channel)
 
-        except Exception as e:
-
-            if isinstance(e, LocallyCancelled):
-                # User ended the stream.
-                self._logger.debug(f"Stream cancelled: {e}")
-
-                # We end the method gracefully.
-                return None
-
-            raise e
         finally:
             with self._channel_lock:
                 self._channel = None
@@ -447,6 +437,12 @@ class StreamDispatcher(Generic[T], BaseServer):
             if self._is_receiving.is_set():
                 # Signaling the end of the queue to the consumers.
                 self._put_to_queues(e)
+
+            # If the stream was cancelled by the user, we end the method without
+            # raising an exception.
+            if isinstance(e, LocallyCancelled):
+                self._logger.debug(f"Stream cancelled: {e}")
+                return None
 
             raise e
 
