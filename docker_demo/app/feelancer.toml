@@ -4,6 +4,16 @@ cert_filepath = "/root/.lnd/tls.cert"
 macaroon_filepath = "/root/.lnd/data/chain/bitcoin/testnet/readonly.macaroon"
 ip_address = "192.168.2.21:10009"
 
+# The maximum number of payments to be returned during payment pre sync
+paginator_max_payments = 10000 # default
+
+# grpc options
+grpc_max_message_length = 209_715_200         # 200 MB
+grpc_max_receive_message_length = 209_715_200 # 200 MB
+grpc_max_connection_idle_ms = 30_000
+grpc_keepalive_time_ms = 30_000
+grpc_keepalive_timeout_ms = 20_000
+
 
 [sqlalchemy.url]
 # Sqlalchemy configuration for your database.

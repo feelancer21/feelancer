@@ -84,13 +84,18 @@ class LndGrpc(SecureGrpcClient, BaseServer):
         self,
         ip_address: str,
         credentials: grpc.ChannelCredentials,
+        paginator_max_forwarding_events: int = PAGINATOR_MAX_FORWARDING_EVENTS,
+        paginator_max_payments: int = PAGINATOR_MAX_PAYMENTS,
         **kwargs,
     ) -> None:
-        SecureGrpcClient.__init__(self, ip_address, credentials)
+        SecureGrpcClient.__init__(self, ip_address, credentials, **kwargs)
 
         # Responsible for dispatching realtime streams form the grpc server
         # to internal services.
-        BaseServer.__init__(self, **kwargs)
+        BaseServer.__init__(self)
+
+        self._pagintor_max_forwarding_events = paginator_max_forwarding_events
+        self._pagintor_max_payments = paginator_max_payments
 
         self.track_payments_dispatcher = self._new_payments_dispatcher()
 
@@ -287,7 +292,7 @@ class LndGrpc(SecureGrpcClient, BaseServer):
         paginator = Paginator[ln.ForwardingEvent](
             producer=self._ln_stub.ForwardingHistory,
             request=ln.ForwardingHistoryRequest,
-            max_responses=PAGINATOR_MAX_FORWARDING_EVENTS,
+            max_responses=self._pagintor_max_forwarding_events,
             read_response=_read,
             set_request=_set,
         )
@@ -314,7 +319,7 @@ class LndGrpc(SecureGrpcClient, BaseServer):
         paginator = Paginator[ln.Payment](
             producer=self._ln_stub.ListPayments,
             request=ln.ListPaymentsRequest,
-            max_responses=PAGINATOR_MAX_PAYMENTS,
+            max_responses=self._pagintor_max_payments,
             read_response=_read,
             set_request=_set,
         )
