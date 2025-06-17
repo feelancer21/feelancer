@@ -209,10 +209,6 @@ class MainServer(BaseServer):
         # Setting up the signal handler for SIGTERM and SIGINT.
         SignalHandler(self.stop, self.kill, self.cfg.timeout)
 
-        # Adding callables for starting and stopping internal services of the
-        # lnclient, e.g. dispatcher of streams.
-        self._register_sub_server(cfg.lnclient)
-
         # We init a task runner which controls the scheduler for the job
         # execution.
         runner = TaskRunner(
@@ -239,6 +235,10 @@ class MainServer(BaseServer):
         paytrack_conf = self.get_paytrack_config()
         paytrack_service: PaytrackService | None = None
         if paytrack_conf is not None:
+            # Adding callables for starting and stopping internal services of the
+            # lnclient, e.g. dispatcher of streams.
+            self._register_sub_server(cfg.lnclient)
+
             paytrack_service = PaytrackService(
                 payment_tracker=self.cfg.payment_tracker,
                 get_paytrack_config=self.get_paytrack_config,
