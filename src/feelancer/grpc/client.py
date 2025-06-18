@@ -145,7 +145,7 @@ class MacaroonMetadataPlugin(grpc.AuthMetadataPlugin):
     def __init__(self, macaroon):
         self.macaroon = macaroon
 
-    def __call__(self, context, callback):
+    def __call__(self, context, callback: Callable):
         callback([("macaroon", self.macaroon)], None)
 
 
