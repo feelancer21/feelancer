@@ -15,7 +15,7 @@ from google.protobuf.message import Message
 from feelancer.base import BaseServer
 from feelancer.retry import create_retry_handler, default_retry_handler
 
-DEFAULT_MESSAGE_SIZE_MB = 50 * 1024 * 1024
+DEFAULT_MESSAGE_SIZE_MB = 200 * 1024 * 1024
 DEFAULT_MAX_CONNECTION_IDLE_MS = 30000
 DEFAULT_KEEPALIVE_TIME_MS = 30000
 DEFAULT_KEEPALIVE_TIMEOUT_MS = 20000
@@ -145,25 +145,39 @@ class MacaroonMetadataPlugin(grpc.AuthMetadataPlugin):
     def __init__(self, macaroon):
         self.macaroon = macaroon
 
-    def __call__(self, context, callback):
+    def __call__(self, context, callback: Callable):
         callback([("macaroon", self.macaroon)], None)
 
 
 class SecureGrpcClient:
-    def __init__(self, ip_address: str, credentials: grpc.ChannelCredentials):
+    def __init__(
+        self,
+        ip_address: str,
+        credentials: grpc.ChannelCredentials,
+        grpc_max_message_length: int = DEFAULT_MESSAGE_SIZE_MB,
+        grpc_max_receive_message_length: int = DEFAULT_MESSAGE_SIZE_MB,
+        grpc_max_connection_idle_ms: int = DEFAULT_MAX_CONNECTION_IDLE_MS,
+        grpc_keepalive_time_ms: int = DEFAULT_KEEPALIVE_TIME_MS,
+        grpc_keepalive_timeout_ms: int = DEFAULT_KEEPALIVE_TIMEOUT_MS,
+        **kwargs,
+    ):
         self.channel_options = [
-            ("grpc.max_message_length", DEFAULT_MESSAGE_SIZE_MB),
-            ("grpc.max_receive_message_length", DEFAULT_MESSAGE_SIZE_MB),
-            ("grpc.max_connection_idle_ms", DEFAULT_MAX_CONNECTION_IDLE_MS),
-            ("grpc.keepalive_time_ms", DEFAULT_KEEPALIVE_TIME_MS),
-            ("grpc.keepalive_timeout_ms", DEFAULT_KEEPALIVE_TIMEOUT_MS),
+            ("grpc.max_message_length", grpc_max_message_length),
+            ("grpc.max_receive_message_length", grpc_max_receive_message_length),
+            ("grpc.max_connection_idle_ms", grpc_max_connection_idle_ms),
+            ("grpc.keepalive_time_ms", grpc_keepalive_time_ms),
+            ("grpc.keepalive_timeout_ms", grpc_keepalive_timeout_ms),
         ]
         self.ip_address = ip_address
         self._credentials = credentials
 
     @classmethod
     def from_file(
-        cls, ip_address: str, cert_filepath: str, macaroon_filepath: str | None
+        cls,
+        ip_address: str,
+        cert_filepath: str,
+        macaroon_filepath: str | None,
+        **kwargs,
     ):
         tls_certificate = open(cert_filepath, "rb").read()
         ssl_credentials = grpc.ssl_channel_credentials(tls_certificate)
@@ -180,7 +194,7 @@ class SecureGrpcClient:
         combined_credentials = grpc.composite_channel_credentials(
             ssl_credentials, auth_credentials
         )
-        return cls(ip_address, combined_credentials)
+        return cls(ip_address, combined_credentials, **kwargs)
 
     @property
     def _channel(self):
