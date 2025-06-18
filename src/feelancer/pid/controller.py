@@ -443,6 +443,11 @@ class PidController:
                 # we use this params at starting point for the control variable.
                 timestamp, params = self.pid_store.ewma_params_last_by_peer(pub_key)
 
+                logger.debug(
+                    f"No existing spread controller for {pub_key=}; {timestamp=}; "
+                    f"{params=}; {spread_new=}"
+                )
+
                 # Fallback to current config if there is no historic controller.
                 if not params:
                     if spread_new is None:
@@ -455,7 +460,16 @@ class PidController:
                 # Fallback to current config if the historic controller is too old.
                 if timestamp:
                     delta_hours = (timestamp_start - timestamp).total_seconds() / 3600
+                    logger.debug(
+                        f"Delta hours for {pub_key=}: {delta_hours:.2f}; "
+                        f"{config.max_age_spread_hours=}"
+                    )
                     if delta_hours > config.max_age_spread_hours:
+                        if spread_new is None:
+                            # Can also happen if channel was a longer time on the
+                            # exclude list. channel_collection.ref_fee_rate_changed
+                            # was False in this case.
+                            recalibrate_spread()
                         params = peer_config.ewma_controller
                     else:
                         # if we use the historic controller, we do not want a
