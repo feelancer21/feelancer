@@ -345,6 +345,14 @@ class PidConfig:
         else:
             raise TypeError("'db_only' is not a bool")
 
+        self.no_db_only_pubkeys: list[str] = []
+        if no_db_only_pubkeys := conf_copy.get("no_db_only_pubkeys"):
+            if not isinstance(no_db_only_pubkeys, list):
+                raise TypeError("'no_db_only_pubkeys' is not a list")
+
+            for pubkey in no_db_only_pubkeys:
+                self.no_db_only_pubkeys.append(str(pubkey))
+
         if isinstance(set_inbound := conf_copy.get("set_inbound"), bool):
             self.set_inbound = set_inbound
         elif set_inbound is None:

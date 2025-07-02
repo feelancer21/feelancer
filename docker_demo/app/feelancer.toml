@@ -74,22 +74,31 @@ min_seconds = 1
 
 
 ## Model specific configuration
-# At the moment only the pid-model is applied. Pid models the fee_rate only with
-# a PID-Controller
-
-
+# At the moment only the pid-model is applied. Pid models a peer dependent spread
+# rate only wit a PID-Controller. Moreover a rudimentary margin controller
+# is implemented.
 [pid]
-# List of peers and/or chan_ids to be excluded from the model
+
+# List of peers and/or chan_ids to be excluded from the pid model, i.e. such peers
+# are not used for the calculation of the default target and no results are stored
+# in the database and are sent to lnd.
 exclude_pubkeys = []
 exclude_chanids = []
+
+# If true then the policy updates are not sent to the lnd backend. This flag is
+# only useful for testing purposes, e.g. on mainnet. Then the user can analyze
+# the potential behavior of the feelancer with logs and db entries.
+db_only = true
+
+# 'no_db_only_pubkeys' is a list of pubkeys for which the db_only==True is ignored.
+# It can be used as whitelist during a bootstrapping of the tool.
+no_db_only_pubkeys = []
+
 
 # If true then also inbound discounts and fees are derived. The setting of positive
 # inbound fees can be prevented with inbound_fee_rate_max = 0 in the feelancer
 # section.
 set_inbound = true
-
-# If true then the updates are not sent to lnd backend.
-db_only = true
 
 # Typically, either ‘fee_rate_new_local’ or ‘fee_rate_new_remote’ is used on
 # channels with new peers. However, we want to prevent existing fees from being

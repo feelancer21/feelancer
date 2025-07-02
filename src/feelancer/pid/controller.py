@@ -723,12 +723,13 @@ class PidController:
         """
 
         res = []
-        if self.config.db_only:
-            return res
-
         set_inbound = self.config.set_inbound
 
         for pub_key, spread_controller in self.spread_controller_map.items():
+            # Skipping the peer when no policy updates are required.
+            if self.config.db_only and pub_key not in self.config.no_db_only_pubkeys:
+                continue
+
             peer_config = self.config.peer_config(pub_key)
             margin_idio = peer_config.margin_idiosyncratic
             for r in yield_pid_results(
