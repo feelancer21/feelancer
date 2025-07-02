@@ -91,17 +91,18 @@ set_inbound = true
 # If true then the updates are not sent to lnd backend.
 db_only = true
 
-# A channel is new if it wasn't included in the last run and if it has a max
-# age of this number of blocks.
-# If a channel is new and if there is no other public channel. The fee_rate_new_local
-# or fee_rate_new_remote is applied
+# Typically, either ‘fee_rate_new_local’ or ‘fee_rate_new_remote’ is used on
+# channels with new peers. However, we want to prevent existing fees from being
+# overwritten, especially during the first run of the feelancer. Therefore, the
+# aforementioned fee rates are only used if a channel does not exceed the age
+# ‘max_age_new_channels’ in blocks.
 max_age_new_channels = 144
 
-# The model includes a fee level specific component and a peer specific component.
-# The fee level component compares the capacity weighted average fee_rate of all
-# included peers with the local balance weighted average fee_rate. 
-# If the former is higher, it indicates the node is more depleted, and we increase
-# all fee_rates slightly. Otherwise, we decrease all fee_rates slightly.
+# If a peer was not included in the last run, it may make sense to use the last
+# available spread, e.g. if a channel was recently closed. However, we must
+# ensure that we do not pull values from the database that are too old.
+# 'max_age_spread_hours' specifies how old a spread may be in hours.
+max_age_spread_hours = 72
 
 
 [pid.pin]
