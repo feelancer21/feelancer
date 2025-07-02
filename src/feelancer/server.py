@@ -244,6 +244,7 @@ class MainServer(BaseServer):
                 get_paytrack_config=self.get_paytrack_config,
                 to_csv=self.cfg.db.query_all_to_csv,
                 delete_data=self.cfg.db.core_delete,
+                get_last_run=lambda: pid.pid_store.pid_run_last()[1],
             )
             self._register_sub_server(paytrack_service)
 
