@@ -288,6 +288,10 @@ class PidSpreadControllerConfig(GenericConf):
     fee_rate_new_local: int = 21000
     fee_rate_new_remote: int = 0
     margin_idiosyncratic: float = 0
+    error_max: float = 0.5
+    error_min: float = -0.5
+    ratio_error_max: int = 1_000_000
+    ratio_error_min: int = 0
 
 
 @dataclass

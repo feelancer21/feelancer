@@ -144,17 +144,40 @@ mr_controller = { k_m = 50, alpha = 0.1 }
 
 
 [pid.peers.default]
+# These are the default parameters for each peer using the pid model.
+# The values can overwritten for specific groups of peers, e.g. [feelancer.peers.boltz]
+fee_rate_new_local = 1500 # default: 21000
+fee_rate_new_remote = 250 # default: 0
 
-fee_rate_new_local = 1500
-fee_rate_new_remote = 250
+# Error calculation parameters for PID controller
+# These parameters define the error function used in the spread controller
+# The error is calculated based on the liquidity ratio compared to the target
+# Between ratio_error_min and ratio_error_max the error is linearly interpolated.
+
+# Maximum positive error value when liquidity_in ratio is at or above ratio_error_max
+error_max = 1.0 # default: 0.5
+
+# Minimum negative error value when liquidity_in ratio is at or below ratio_error_min
+error_min = -0.1 # default: -0.5
+
+# Upper bound for liquidity ratio (in millionths) where error reaches error_max
+# If liquidity_in/(liquidity_in+liquidity_out) >= ratio_error_max/1_000_000, error = error_max
+ratio_error_max = 800_000 # default: 1_000_000
+
+# Lower bound for liquidity ratio (in millionths) where error reaches error_min
+# If liquidity_in/(liquidity_in+liquidity_out) <= ratio_error_min/1_000_000, error = error_min
+ratio_error_min = 200_000 # default: 0
 
 # Relevant for recalculating the ewma if a parameter changes. Not implemented yet
 lambda_epsilon = 1e-4
 
-ewma_controller = { k_t = 0.1, k_p = 1, alpha_i = 0.04, k_i = 4.8, alpha_d = 1, k_d = 2.4 }
+ewma_controller = { k_t = 0.1, k_p = 1, alpha_i = 0.04, k_i = 4.8, alpha_d = 1, k_d = 2.4 } # default: params are 0
 
 
 [pid.peers.boltz]
+# This is an example of a group of peers with specific parameters. The name of
+# the group is arbitrary, but has to be unique. All groups has to be distinct,
+# i.e. no two groups can have the same pubkey.
 pubkeys = [
     "026165850492521f4ac8abd9bd8088123446d126f648ca35e60f88177dc149ceb2",
     "02d96eadea3d780104449aca5c93461ce67c1564e2e1d73225fa67dd3b997a6018",

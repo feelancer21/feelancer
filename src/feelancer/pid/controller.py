@@ -43,37 +43,67 @@ logger = logging.getLogger(__name__)
 
 
 def _calc_error(
-    liquidity_in: float, liquidity_out: float, target: float, name: str = ""
+    liquidity_in: float,
+    liquidity_out: float,
+    target: float,
+    error_max: float,
+    error_min: float,
+    ratio_error_max: int,
+    ratio_error_min: int,
+    name: str = "",
 ) -> float:
     """
     Calculates the error for EwmaController.
 
     The error is 0 if liquidity_in (normalized in millionths) is at the
     target. If liquidity_in is higher than the target the error is in the
-    range ]0; 0.5]. And if liquidity_in is lower than the target the error
-    is in the range [-0.5; 0[.
+    range ]0; error_max]. And if liquidity_in is lower than the target the error
+    is in the range [error_min; 0[.
     """
+
+    if ratio_error_max < ratio_error_min:
+        raise ValueError(f"{ratio_error_max=} must be greater than {ratio_error_min=}.")
+
+    if error_max < 0:
+        raise ValueError(f"{error_max=} must be greater equal than 0.")
+
+    if error_min > 0:
+        raise ValueError(f"{error_min=} must be less equal than 0.")
+
+    set_point_max = ratio_error_max / PEER_TARGET_UNIT
+    set_point_min = ratio_error_min / PEER_TARGET_UNIT
+    set_point = target / PEER_TARGET_UNIT
+
+    def calculate_error(ratio: float) -> float:
+        # Interpolate with piecewise linear functions between [error_min; error_max ]
+        if ratio >= set_point_max:
+            return error_max
+
+        if ratio <= set_point_min:
+            return error_min
+
+        if ratio_in >= set_point:
+            return error_max / (set_point_max - set_point) * (ratio - set_point)
+
+        else:
+            return -error_min / (set_point - set_point_min) * (ratio - set_point)
 
     liquidity_total = liquidity_in + liquidity_out
     try:
         ratio_in = liquidity_in / liquidity_total
-        set_point = target / PEER_TARGET_UNIT
-        logger.debug(
-            f"Set point calculated for {name}; {ratio_in:=.6f}; {set_point=:.6f}"
-        )
 
-        # Interpolate with piecewise linear functions between [-0.5; 0.5]
-        if ratio_in >= set_point:
-            error = 0.5 / (1 - set_point) * (ratio_in - set_point)
-        else:
-            error = 0.5 / set_point * (ratio_in - set_point)
-
-        logger.debug(f"Error calculated for {name}; {error=:.6f}")
     except ZeroDivisionError:
         error = 0
         logger.debug(f"Error calculated for {name}; {error=:.6f}")
 
-    return error
+        return error
+
+    else:
+        logger.debug(f"Ratio calculated for {name}; {ratio_in:=.6f}; {set_point=:.6f}")
+        error = calculate_error(ratio_in)
+        logger.debug(f"Error calculated for {name}; {error=:.6f}")
+
+        return error
 
 
 class ReinitRequired(Exception):
@@ -156,6 +186,10 @@ class SpreadController:
         channel_collection: ChannelCollection,
         ewma_params: EwmaControllerParams,
         target: float,
+        error_max: float,
+        error_min: float,
+        ratio_error_max: int,
+        ratio_error_min: int,
         spread_recalibrated: float | None = None,
     ) -> None:
         """Updates the parameters and calls the EwmaController"""
@@ -182,11 +216,15 @@ class SpreadController:
             self.ewma_controller.set_k_t(ewma_params.k_t)
 
         # Calculation of the error for EwmaController, it maps our inbound liquidity
-        # to a value in the range [-0.5; 0.5]
+        # to a value in the range [-error_min; error_max].
         error = _calc_error(
             liquidity_in=channel_collection.liquidity_in,
             liquidity_out=channel_collection.liquidity_out,
             target=target,
+            error_max=error_max,
+            error_min=error_min,
+            ratio_error_max=ratio_error_max,
+            ratio_error_min=ratio_error_min,
             name=self._name,
         )
 
@@ -486,16 +524,28 @@ class PidController:
             # ReinitRequired error. In this case we initialize a new controller
             # from the start with its whole history,
             target = peer_config.target or target_default
-            call_args = (
-                timestamp_start,
-                channel_collection,
-                peer_config.ewma_controller,
-                target,
-                spread_recalibrated,
-            )
+
+            def call_spread_controller(controller: SpreadController):
+                controller(
+                    timestamp_start,
+                    channel_collection,
+                    peer_config.ewma_controller,
+                    target,
+                    peer_config.error_max,
+                    peer_config.error_min,
+                    peer_config.ratio_error_max,
+                    peer_config.ratio_error_min,
+                    spread_recalibrated,
+                )
+                logger.debug(
+                    f"Called spread controller for {pub_key} with args: "
+                    f"{timestamp_start=}; {peer_config=}; "
+                    f"{target=:,.2f}; {margin_peer=:,.2f}; "
+                    f"{controller.spread=:,.2f}"
+                )
 
             try:
-                spread_controller(*call_args)
+                call_spread_controller(spread_controller)
             except ReinitRequired:
                 logger.info(f"Reinit required for {pub_key}")
                 history = self.pid_store.ewma_params_by_pub_key(pub_key)
@@ -504,14 +554,7 @@ class PidController:
                         peer_config.ewma_controller, history, pub_key
                     )
                 )
-                spread_controller(*call_args)
-
-            logger.debug(
-                f"Called spread controller for {pub_key} with args: "
-                f"{timestamp_start=}; params {peer_config.ewma_controller}; "
-                f"{target=:,.2f}; {margin_peer=:,.2f}; "
-                f"{spread_controller.spread=:,.2f}"
-            )
+                call_spread_controller(spread_controller)
 
             # Force update to make sure that the new fee rate is broadcasted or
             # to align the fee rates of new channels with the existing ones.
