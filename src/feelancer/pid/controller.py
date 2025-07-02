@@ -156,7 +156,7 @@ class SpreadController:
         channel_collection: ChannelCollection,
         ewma_params: EwmaControllerParams,
         target: float,
-        spread_new: float | None = None,
+        spread_recalibrated: float | None = None,
     ) -> None:
         """Updates the parameters and calls the EwmaController"""
 
@@ -191,9 +191,9 @@ class SpreadController:
         )
 
         # Set a new spread if recalibration was needed.
-        if spread_new is not None:
-            logger.debug(f"Set {spread_new=:,.2f}")
-            self.ewma_controller.control_variable = spread_new
+        if spread_recalibrated is not None:
+            logger.debug(f"Set {spread_recalibrated=:,.2f}")
+            self.ewma_controller.control_variable = spread_recalibrated
 
         # Now we are able to call the actual ewma controller
         self.ewma_controller(error, timestamp)
@@ -411,16 +411,16 @@ class PidController:
             # idiosyncratic margin.
             margin_peer = margin_last + peer_config.margin_idiosyncratic
 
-            # spread_new is set, if a recalibration of the spread was needed.
-            spread_new: float | None = None
+            # spread_recalibrated is set, if a recalibration of the spread was needed.
+            spread_recalibrated: float | None = None
 
             def recalibrate_spread() -> None:
                 # Recalculates the spread with the current reference fee rate
-                nonlocal spread_new
-                spread_new = channel_collection.ref_fee_rate - margin_peer
+                nonlocal spread_recalibrated
+                spread_recalibrated = channel_collection.ref_fee_rate - margin_peer
                 logger.debug(
                     f"Spread for {pub_key=} calibrated; "
-                    f"calculated {spread_new=:,.2f}; "
+                    f"calculated {spread_recalibrated=:,.2f}; "
                     f"{channel_collection.ref_fee_rate_last=}; "
                     f"{channel_collection.ref_fee_rate=}; {margin_peer=:,.2f}"
                 )
@@ -443,9 +443,14 @@ class PidController:
                 # we use this params at starting point for the control variable.
                 timestamp, params = self.pid_store.ewma_params_last_by_peer(pub_key)
 
+                logger.debug(
+                    f"No existing spread controller for {pub_key=}; {timestamp=}; "
+                    f"{params=}; {spread_recalibrated=}"
+                )
+
                 # Fallback to current config if there is no historic controller.
                 if not params:
-                    if spread_new is None:
+                    if spread_recalibrated is None:
                         # Can happen if the pub_key was on an exclude list when
                         # it was first seen. channel_collection.ref_fee_rate_changed
                         # was False in this case.
@@ -455,12 +460,21 @@ class PidController:
                 # Fallback to current config if the historic controller is too old.
                 if timestamp:
                     delta_hours = (timestamp_start - timestamp).total_seconds() / 3600
+                    logger.debug(
+                        f"Delta hours for {pub_key=}: {delta_hours:.2f}; "
+                        f"{config.max_age_spread_hours=}"
+                    )
                     if delta_hours > config.max_age_spread_hours:
+                        if spread_recalibrated is None:
+                            # Can also happen if channel was a longer time on the
+                            # exclude list. channel_collection.ref_fee_rate_changed
+                            # was False in this case.
+                            recalibrate_spread()
                         params = peer_config.ewma_controller
                     else:
                         # if we use the historic controller, we do not want a
                         # recalibrated spread.
-                        spread_new = None
+                        spread_recalibrated = None
 
                 spread_controller = self.spread_controller_map[pub_key] = (
                     SpreadController(params, self.last_timestamp, pub_key)
@@ -477,7 +491,7 @@ class PidController:
                 channel_collection,
                 peer_config.ewma_controller,
                 target,
-                spread_new,
+                spread_recalibrated,
             )
 
             try:
