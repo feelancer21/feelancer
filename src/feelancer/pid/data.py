@@ -37,7 +37,7 @@ if TYPE_CHECKING:
     from feelancer.data.db import FeelancerDB
 
     from .analytics import EwmaController, MrController
-    from .controller import MarginController, PidResult, SpreadController
+    from .controller import MarginController, PidChannelResult, SpreadController
 
 T = TypeVar("T")
 
@@ -118,7 +118,7 @@ def new_pid_run(run: DBRun, ln_node: DBLnNode) -> DBPidRun:
 
 
 def new_pid_result(
-    pid_result: PidResult,
+    pid_result: PidChannelResult,
     channel_static: DBLnChannelStatic,
     pid_run: DBPidRun,
 ) -> DBPidResult:
@@ -167,6 +167,7 @@ def _new_mr_controller(mr_controller: MrController) -> DBPidMrController:
 
 def new_spread_controller(
     spread_controller: SpreadController,
+    target: float,
     channel_peer: DBLnChannelPeer,
     pid_run: DBPidRun,
 ) -> DBPidSpreadController:
@@ -174,7 +175,7 @@ def new_spread_controller(
         pid_run=pid_run,
         peer=channel_peer,
         ewma_controller=_new_ewma_controller(spread_controller.ewma_controller),
-        target=spread_controller.target,
+        target=target,
     )
 
 

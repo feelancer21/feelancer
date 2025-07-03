@@ -14,7 +14,12 @@ from feelancer.lightning.client import Channel, ChannelPolicy, LightningClient
 from feelancer.lightning.data import LightningCache
 from feelancer.pid.aggregator import ChannelAggregator, ChannelCollection
 from feelancer.pid.analytics import EwmaControllerParams, MrControllerParams
-from feelancer.pid.controller import PidController, SpreadController, _calc_error
+from feelancer.pid.controller import (
+    PidController,
+    PidPeerResult,
+    PidResult,
+    _calc_error,
+)
 from feelancer.pid.data import (
     PidConfig,
     PidMarginControllerConfig,
@@ -2347,16 +2352,16 @@ class TestPid(unittest.TestCase):
                 controller.pid_store.ewma_params_last_by_peer = params_last
 
                 # Now all is mocked and we can call the controller.
-                controller(c.config, lncache, c.timestamp)
+                res = controller(c.config, lncache, c.timestamp)
 
                 # We can proceed with the next call if there is no expected result.
                 if isinstance(c.expected_result, NoExpectedResult):
                     continue
 
-                self._assert_pid_controller_call(controller, c.expected_result, msgcall)
+                self._assert_pid_controller_call(res, c.expected_result, msgcall)
 
     def _assert_pid_controller_call(
-        self, c: PidController, e: ERPidControllerCall, msg: str
+        self, c: PidResult, e: ERPidControllerCall, msg: str
     ):
         """
         Validation of a pid controller after a call using the expected results.
@@ -2366,19 +2371,19 @@ class TestPid(unittest.TestCase):
 
         # Assert the spread rate controller. First we determine the union set
         # of pub_keys
-        pub_keys = c.spread_controller_map.keys() | e.spread_controller_results.keys()
+        pub_keys = c.peer_result_map.keys() | e.spread_controller_results.keys()
         for pub_key in pub_keys:
             msgpub = f"{pub_key=}; " + msg
 
-            s = c.spread_controller_map.get(pub_key)
+            s = c.peer_result_map.get(pub_key)
             # Ensures also that it is not None.
-            self.assertIsInstance(s, SpreadController, msgpub)
+            self.assertIsInstance(s, PidPeerResult, msgpub)
 
             r = e.spread_controller_results.get(pub_key)
             # Ensures also that it is not None.
             self.assertIsInstance(r, ERSpreadRateController, msgpub)
 
-            self._assert_spread_controller(s, r, msgpub)  # type: ignore
+            self._assert_peer_result(s, r, msgpub)  # type: ignore
 
         # Create a dict of the generated PolicyProposal. And afterward a set
         # of all chan_points.
@@ -2402,11 +2407,11 @@ class TestPid(unittest.TestCase):
             # We assert the whole PolicyProposal objects here.
             self.assertEqual(p, r, msgchan)
 
-    def _assert_spread_controller(
-        self, con: SpreadController, e_con: ERSpreadRateController, msg: str
+    def _assert_peer_result(
+        self, res: PidPeerResult, e_con: ERSpreadRateController, msg: str
     ) -> None:
-        self.assertEqual(con.spread, e_con.spread, msg)
-        self.assertEqual(con.target, e_con.target, msg)
+        self.assertEqual(res.spread_controller.spread, e_con.spread, msg)
+        self.assertEqual(res.target, e_con.target, msg)
 
     def test_calc_error(self):
         testcases: list[TCasePidError] = []

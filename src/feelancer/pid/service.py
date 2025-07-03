@@ -48,11 +48,9 @@ class PidService:
                 self.pid_store, self.ln_store, pid_config
             )
 
-        self.pid_controller(pid_config, request.ln, request.timestamp)
+        pid_result = self.pid_controller(pid_config, request.ln, request.timestamp)
 
-        res = RunnerResult(
-            self.pid_controller.store_data, self.pid_controller.policy_proposals()
-        )
+        res = RunnerResult(pid_result.store_data, pid_result.policy_proposals())
 
         logger.info("Finished pid controller")
         return res
