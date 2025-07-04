@@ -1,3 +1,4 @@
+
 [lnd]
 cert_filepath = "/root/.lnd/tls.cert"
 # for policy updates you have to change it, e.g. to admin.macaroon
@@ -5,14 +6,14 @@ macaroon_filepath = "/root/.lnd/data/chain/bitcoin/testnet/readonly.macaroon"
 ip_address = "192.168.2.21:10009"
 
 # The maximum number of payments to be returned during payment pre sync
-paginator_max_payments = 10000 # default
+paginator_max_payments = 10000 # default: 10000 messages
 
 # grpc options
-grpc_max_message_length = 209_715_200         # 200 MB
-grpc_max_receive_message_length = 209_715_200 # 200 MB
-grpc_max_connection_idle_ms = 30_000
-grpc_keepalive_time_ms = 30_000
-grpc_keepalive_timeout_ms = 20_000
+grpc_max_message_length = 209_715_200         # default: 200 MB
+grpc_max_receive_message_length = 209_715_200 # default: 200 MB
+grpc_max_connection_idle_ms = 30_000          # default: 30 seconds
+grpc_keepalive_time_ms = 30_000               # default: 30 seconds
+grpc_keepalive_timeout_ms = 20_000            # default: 20 seconds
 
 
 [sqlalchemy.url]
@@ -34,7 +35,7 @@ logfile = "/app/feelancer.log"
 # General parameters independent from specific models and specific peers.
 
 # Execution interval of the jobs
-seconds = 900
+seconds = 900 # mandatory
 
 
 [feelancer.peers.default]
@@ -42,23 +43,26 @@ seconds = 900
 # One can configure defaults for all peers here
 
 # Minimum time interval in seconds between two policy broadcasts to the network.
-min_seconds = 3600
+# Not recommend to set this at high value when you run other scripts performing
+# policy updates.
+min_seconds = 3600 # Default: 86400s (24 hours)
+
 # Minimum ppm change up / down, which has to be applied when broadcasting fee_rate to
 # the network.
-fee_rate_ppm_min_up = 5
-fee_rate_ppm_min_down = 1
+fee_rate_ppm_min_up = 5   # Default: 10ppm
+fee_rate_ppm_min_down = 1 # Default: 10ppm
 
 # Minimum and maximum fee_rate in ppm can be configured. 
-fee_rate_min = 1
-fee_rate_max = 2121
+fee_rate_min = 1    # Default: 0
+fee_rate_max = 2121 # Default: 2500
 
 # Minimum ppm change up / down, which has to be applied when broadcasting fee_rate to# Minimum time interval in seconds between two policy broadcasts to the network.
 # the network.
-inbound_fee_rate_ppm_min_up = 2
-inbound_fee_rate_ppm_min_down = 5
+inbound_fee_rate_ppm_min_up = 2   # Default: 10ppm
+inbound_fee_rate_ppm_min_down = 5 # Default: 10ppm
 # Minimum and maximum fee_rate in ppm can be configured. 
-inbound_fee_rate_min = -99999
-inbound_fee_rate_max = 0
+inbound_fee_rate_min = -99999 # Default: -2500
+inbound_fee_rate_max = 0      # Default: 0
 
 
 # You can also overwrite the default values for specific peers.
@@ -88,30 +92,30 @@ exclude_chanids = []
 # If true then the policy updates are not sent to the lnd backend. This flag is
 # only useful for testing purposes, e.g. on mainnet. Then the user can analyze
 # the potential behavior of the feelancer with logs and db entries.
-db_only = true
+db_only = true # default: True
 
 # 'no_db_only_pubkeys' is a list of pubkeys for which the db_only==True is ignored.
 # It can be used as whitelist during a bootstrapping of the tool.
-no_db_only_pubkeys = []
+no_db_only_pubkeys = [] # default: []
 
 
 # If true then also inbound discounts and fees are derived. The setting of positive
 # inbound fees can be prevented with inbound_fee_rate_max = 0 in the feelancer
 # section.
-set_inbound = true
+set_inbound = true # default: False
 
 # Typically, either ‘fee_rate_new_local’ or ‘fee_rate_new_remote’ is used on
 # channels with new peers. However, we want to prevent existing fees from being
 # overwritten, especially during the first run of the feelancer. Therefore, the
 # aforementioned fee rates are only used if a channel does not exceed the age
 # ‘max_age_new_channels’ in blocks.
-max_age_new_channels = 144
+max_age_new_channels = 144 # default: 144blocks 
 
 # If a peer was not included in the last run, it may make sense to use the last
 # available spread, e.g. if a channel was recently closed. However, we must
 # ensure that we do not pull values from the database that are too old.
 # 'max_age_spread_hours' specifies how old a spread may be in hours.
-max_age_spread_hours = 72
+max_age_spread_hours = 72 # default: 0 hours
 
 
 [pid.pin]
@@ -192,10 +196,10 @@ margin_idiosyncratic = -10
 # It reconnects channels with stuck htlcs and maybe inactive channels.
 
 # inactive channels are only included if set to true.
-include_inactive = false
+include_inactive = false # Default: false
 
 # An htlc is defined as stuck if the expiry is less blocks away than this value
-max_blocks_to_expiry = 13
+max_blocks_to_expiry = 13 # Default: 13
 
 [paytrack]
 # If the 'paytrack' section is included in config file a paytrack service will be started.
@@ -204,6 +208,7 @@ max_blocks_to_expiry = 13
 # The following params control the creation of csv files using the stored data.
 # The files are created every feelancer.seconds.
 
+# All mentioned values in ths section are its default values.
 # Create the a list with pub_key, average node speed and count of payments
 node_speed_write_csv = false
 # time window of the historical data
