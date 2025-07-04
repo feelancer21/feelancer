@@ -1,3 +1,8 @@
+# DISCLAIMER
+# All values beginning with the feelancer section and its defaults are for illustrative
+# purposes only. The author does not wish to make any recommendations at this
+# point of the project. Every user should find out for themselves how the
+# algorithm works and find their own values.
 
 [lnd]
 cert_filepath = "/root/.lnd/tls.cert"
