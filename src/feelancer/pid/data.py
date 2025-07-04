@@ -37,7 +37,7 @@ if TYPE_CHECKING:
     from feelancer.data.db import FeelancerDB
 
     from .analytics import EwmaController, MrController
-    from .controller import MarginController, PidResult, SpreadController
+    from .controller import MarginController, PidChannelResult, SpreadController
 
 T = TypeVar("T")
 
@@ -118,7 +118,7 @@ def new_pid_run(run: DBRun, ln_node: DBLnNode) -> DBPidRun:
 
 
 def new_pid_result(
-    pid_result: PidResult,
+    pid_result: PidChannelResult,
     channel_static: DBLnChannelStatic,
     pid_run: DBPidRun,
 ) -> DBPidResult:
@@ -167,6 +167,7 @@ def _new_mr_controller(mr_controller: MrController) -> DBPidMrController:
 
 def new_spread_controller(
     spread_controller: SpreadController,
+    target: float,
     channel_peer: DBLnChannelPeer,
     pid_run: DBPidRun,
 ) -> DBPidSpreadController:
@@ -174,7 +175,7 @@ def new_spread_controller(
         pid_run=pid_run,
         peer=channel_peer,
         ewma_controller=_new_ewma_controller(spread_controller.ewma_controller),
-        target=spread_controller.target,
+        target=target,
     )
 
 
@@ -287,7 +288,19 @@ class PidSpreadControllerConfig(GenericConf):
     target: int | None = None
     fee_rate_new_local: int = 21000
     fee_rate_new_remote: int = 0
+
+    # idiosyncratic margin add-on in ppm
     margin_idiosyncratic: float = 0
+
+    # idiosyncratic margin add-on in percent of the spread
+    margin_idiosyncratic_pct: float = 0
+
+    margin_idiosyncratic_min: float = 0
+    margin_idiosyncratic_max: float = 2**31
+    error_max: float = 0.5
+    error_min: float = -0.5
+    ratio_error_max: int = 1_000_000
+    ratio_error_min: int = 0
 
 
 @dataclass
@@ -344,6 +357,14 @@ class PidConfig:
             self.db_only = DEFAULT_DB_ONLY
         else:
             raise TypeError("'db_only' is not a bool")
+
+        self.no_db_only_pubkeys: list[str] = []
+        if no_db_only_pubkeys := conf_copy.get("no_db_only_pubkeys"):
+            if not isinstance(no_db_only_pubkeys, list):
+                raise TypeError("'no_db_only_pubkeys' is not a list")
+
+            for pubkey in no_db_only_pubkeys:
+                self.no_db_only_pubkeys.append(str(pubkey))
 
         if isinstance(set_inbound := conf_copy.get("set_inbound"), bool):
             self.set_inbound = set_inbound

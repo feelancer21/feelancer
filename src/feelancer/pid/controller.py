@@ -32,7 +32,13 @@ if TYPE_CHECKING:
     )
 
     from .aggregator import ChannelCollection
-    from .data import EwmaControllerParams, MrControllerParams, PidConfig, PidStore
+    from .data import (
+        EwmaControllerParams,
+        MrControllerParams,
+        PidConfig,
+        PidSpreadControllerConfig,
+        PidStore,
+    )
     from .models import DBPidMarginController, DBPidResult, DBPidSpreadController
 
 
@@ -43,37 +49,67 @@ logger = logging.getLogger(__name__)
 
 
 def _calc_error(
-    liquidity_in: float, liquidity_out: float, target: float, name: str = ""
+    liquidity_in: float,
+    liquidity_out: float,
+    target: float,
+    error_max: float,
+    error_min: float,
+    ratio_error_max: int,
+    ratio_error_min: int,
+    name: str = "",
 ) -> float:
     """
     Calculates the error for EwmaController.
 
     The error is 0 if liquidity_in (normalized in millionths) is at the
     target. If liquidity_in is higher than the target the error is in the
-    range ]0; 0.5]. And if liquidity_in is lower than the target the error
-    is in the range [-0.5; 0[.
+    range ]0; error_max]. And if liquidity_in is lower than the target the error
+    is in the range [error_min; 0[.
     """
+
+    if ratio_error_max < ratio_error_min:
+        raise ValueError(f"{ratio_error_max=} must be greater than {ratio_error_min=}.")
+
+    if error_max < 0:
+        raise ValueError(f"{error_max=} must be greater equal than 0.")
+
+    if error_min > 0:
+        raise ValueError(f"{error_min=} must be less equal than 0.")
+
+    set_point_max = ratio_error_max / PEER_TARGET_UNIT
+    set_point_min = ratio_error_min / PEER_TARGET_UNIT
+    set_point = target / PEER_TARGET_UNIT
+
+    def calculate_error(ratio: float) -> float:
+        # Interpolate with piecewise linear functions between [error_min; error_max ]
+        if ratio >= set_point_max:
+            return error_max
+
+        if ratio <= set_point_min:
+            return error_min
+
+        if ratio_in >= set_point:
+            return error_max / (set_point_max - set_point) * (ratio - set_point)
+
+        else:
+            return -error_min / (set_point - set_point_min) * (ratio - set_point)
 
     liquidity_total = liquidity_in + liquidity_out
     try:
         ratio_in = liquidity_in / liquidity_total
-        set_point = target / PEER_TARGET_UNIT
-        logger.debug(
-            f"Set point calculated for {name}; {ratio_in:=.6f}; {set_point=:.6f}"
-        )
 
-        # Interpolate with piecewise linear functions between [-0.5; 0.5]
-        if ratio_in >= set_point:
-            error = 0.5 / (1 - set_point) * (ratio_in - set_point)
-        else:
-            error = 0.5 / set_point * (ratio_in - set_point)
-
-        logger.debug(f"Error calculated for {name}; {error=:.6f}")
     except ZeroDivisionError:
         error = 0
         logger.debug(f"Error calculated for {name}; {error=:.6f}")
 
-    return error
+        return error
+
+    else:
+        logger.debug(f"Ratio calculated for {name}; {ratio_in:=.6f}; {set_point=:.6f}")
+        error = calculate_error(ratio_in)
+        logger.debug(f"Error calculated for {name}; {error=:.6f}")
+
+        return error
 
 
 class ReinitRequired(Exception):
@@ -139,13 +175,7 @@ class SpreadController:
         timestamp_last: datetime | None,
         name: str,
     ):
-        self.target = 0
-        self._channel_collection: ChannelCollection | None = None
-
-        self.ewma_controller = EwmaController.from_params(
-            ewma_params,
-            timestamp_last,
-        )
+        self.ewma_controller = EwmaController.from_params(ewma_params, timestamp_last)
 
         # name is used for logging
         self._name = name
@@ -153,9 +183,14 @@ class SpreadController:
     def __call__(
         self,
         timestamp: datetime,
-        channel_collection: ChannelCollection,
+        liquidity_in: float,
+        liquidity_out: float,
         ewma_params: EwmaControllerParams,
         target: float,
+        error_max: float,
+        error_min: float,
+        ratio_error_max: int,
+        ratio_error_min: int,
         spread_recalibrated: float | None = None,
     ) -> None:
         """Updates the parameters and calls the EwmaController"""
@@ -182,11 +217,15 @@ class SpreadController:
             self.ewma_controller.set_k_t(ewma_params.k_t)
 
         # Calculation of the error for EwmaController, it maps our inbound liquidity
-        # to a value in the range [-0.5; 0.5]
+        # to a value in the range [-error_min; error_max].
         error = _calc_error(
-            liquidity_in=channel_collection.liquidity_in,
-            liquidity_out=channel_collection.liquidity_out,
+            liquidity_in=liquidity_in,
+            liquidity_out=liquidity_out,
             target=target,
+            error_max=error_max,
+            error_min=error_min,
+            ratio_error_max=ratio_error_max,
+            ratio_error_min=ratio_error_min,
             name=self._name,
         )
 
@@ -197,18 +236,6 @@ class SpreadController:
 
         # Now we are able to call the actual ewma controller
         self.ewma_controller(error, timestamp)
-
-        self.target = target
-        self._channel_collection = channel_collection
-
-    def channels(self) -> Generator[Channel]:
-        """
-        Yields all channels associated with this controller.
-        """
-        if not self._channel_collection:
-            return None
-
-        yield from self._channel_collection.pid_channels()
 
     @property
     def spread(self) -> float:
@@ -245,57 +272,190 @@ class SpreadController:
 
 
 @dataclass
-class PidResult:
+class PidChannelResult:
     channel: Channel
     margin_base: float
     margin_idiosyncratic: float
     spread: float
 
+    def _margin_total(self) -> float:
+        """
+        Returns the total margin for this channel.
+        It is the sum of the base margin and the idiosyncratic margin.
+        """
+        return self.margin_base + self.margin_idiosyncratic
 
-def yield_pid_results(
-    margin_controller: MarginController,
-    spread_controller: SpreadController,
-    margin_idiosyncratic: float,
-) -> Generator[PidResult]:
-    """
-    Yields the pid results per channel for a pair of margin controller and
-    spread controller.
-    """
+    def get_policy_proposal(
+        self, set_inbound: bool, force_update: bool
+    ) -> PolicyProposal:
+        """
+        Converts the PidChannelResult to a PolicyProposal
 
-    for channel in spread_controller.channels():
-        yield PidResult(
-            channel=channel,
-            margin_base=margin_controller.margin,
-            spread=spread_controller.spread,
-            margin_idiosyncratic=margin_idiosyncratic,
+        The outbound fee rate is set to the sum of spread and margin.
+        """
+
+        fee_rate_ppm = self._margin_total() + self.spread
+
+        inbound_fee_rate_ppm = int(-self.spread) if set_inbound else None
+
+        return PolicyProposal(
+            channel=self.channel,
+            fee_rate_ppm=int(max(fee_rate_ppm, 0)),
+            inbound_fee_rate_ppm=inbound_fee_rate_ppm,
+            force_update=force_update,
         )
 
-    pass
 
-
-def new_policy_proposal(
-    pid_result: PidResult, set_inbound: bool, force_update: bool
-) -> PolicyProposal:
+@dataclass
+class PidPeerResult:
     """
-    Converts the PidResult to a PolicyProposal
-
-    The outbound fee rate is set to the sum of spread and margins. The margin
-    consists of two parts: A specific addon (margin_idiosyncratic) for this peer
-    and a base line which is determined by the margin controller.
+    Result class of the PidController for one peer.
     """
 
-    fee_rate_ppm = (
-        pid_result.margin_base + pid_result.margin_idiosyncratic + pid_result.spread
-    )
+    spread_controller: SpreadController
+    target: float
+    channel_collection: ChannelCollection
+    config: PidSpreadControllerConfig
 
-    inbound_fee_rate_ppm = int(-pid_result.spread) if set_inbound else None
+    def _channels(self) -> Generator[Channel]:
+        """
+        Yields all channels associated with this peer result.
+        """
 
-    return PolicyProposal(
-        channel=pid_result.channel,
-        fee_rate_ppm=int(max(fee_rate_ppm, 0)),
-        inbound_fee_rate_ppm=inbound_fee_rate_ppm,
-        force_update=force_update,
-    )
+        yield from self.channel_collection.pid_channels()
+
+    @property
+    def margin_idiosyncratic(self) -> float:
+        """
+        Returns the idiosyncratic margin for this peer.
+        """
+
+        res = (
+            self.config.margin_idiosyncratic
+            + (self.config.margin_idiosyncratic_pct * self.spread_controller.spread)
+            / 100
+        )
+
+        if res < self.config.margin_idiosyncratic_min:
+            return self.config.margin_idiosyncratic_min
+
+        if res > self.config.margin_idiosyncratic_max:
+            return self.config.margin_idiosyncratic_max
+
+        return res
+
+    def yield_pid_channel_results(
+        self,
+        margin_base: float,
+    ) -> Generator[PidChannelResult]:
+        """
+        Yields the pid results per channel for a pair of margin controller and
+        spread controller.
+        """
+
+        for channel in self._channels():
+            yield PidChannelResult(
+                channel=channel,
+                margin_base=margin_base,
+                spread=self.spread_controller.spread,
+                margin_idiosyncratic=self.margin_idiosyncratic,
+            )
+
+
+@dataclass
+class PidResult:
+    """
+    Result class of the PidController.
+    """
+
+    config: PidConfig
+    peer_result_map: dict[str, PidPeerResult]
+    margin_controller: MarginController
+    # Peers which require a force with the next policy update. Can be peers
+    # with new channels or peers with a change of the reference fee rate.
+    peers_update_force: set[str]
+
+    def store_data(self, ln_session: LightningSessionCache) -> None:
+        """
+        Adds all relevant date of the PidController and a LightningCache
+        to a db session.
+        """
+
+        ln_session.channel_policies(0, True)
+        ln_session.channel_policies(0, False)
+        ln_session.channel_policies(1, True)
+
+        # We'd like log bigger changes of the fee rates to find them faster.
+        # Therefore we are looping of the intersection of both chan_ids and
+        # determine the differences on channel level.
+        # TODO: This can be removed in a later stage of the project.
+        channels_0 = ln_session.ln.channels_by_sequence(0)
+        channels_1 = ln_session.ln.channels_by_sequence(1)
+
+        for chan_id in channels_0.keys() & channels_1.keys():
+            p_0 = channels_0[chan_id].policy_local
+            p_1 = channels_1[chan_id].policy_local
+            if not p_0 or not p_1:
+                continue
+
+            if abs(p_1.fee_rate_ppm - p_0.fee_rate_ppm) >= LOG_THRESHOLD:
+                logger.warning(
+                    f"fee rate on channel {chan_id} changed from "
+                    f"{p_0.fee_rate_ppm} to {p_1.fee_rate_ppm}"
+                )
+            if (
+                abs(p_1.inbound_fee_rate_ppm - p_0.inbound_fee_rate_ppm)
+                >= LOG_THRESHOLD
+            ):
+                logger.warning(
+                    f"inbound fee rate on channel {chan_id} changed from "
+                    f"{p_0.inbound_fee_rate_ppm} to {p_1.inbound_fee_rate_ppm}"
+                )
+
+        ln_session.channel_liquidity
+
+        ln_session.db_session.add(ln_session.ln_run)
+        ln_session.db_session.add_all(self._yield_results(ln_session))
+
+    def _yield_results(
+        self, ln_session: LightningSessionCache
+    ) -> Generator[DBPidMarginController | DBPidSpreadController | DBPidResult]:
+        """
+        Generates all sqlalchemy objects with the results of the last call of
+        the PidController.
+        """
+
+        pid_run = new_pid_run(ln_session.db_run, ln_session.ln_node)
+        yield new_margin_controller(pid_run, self.margin_controller)
+
+        for pub_key, r in self.peer_result_map.items():
+            peer = ln_session.channel_peer_by(pub_key=pub_key)
+
+            yield new_spread_controller(r.spread_controller, r.target, peer, pid_run)
+
+            for c in r.yield_pid_channel_results(self.margin_controller.margin):
+                channel = ln_session.channel_static_by(channel=c.channel)
+                yield new_pid_result(c, channel, pid_run)
+
+    def policy_proposals(self) -> list[PolicyProposal]:
+        """
+        Creates a list of all PolicyProposals with the results of the last call of
+        the PidController.
+        """
+
+        res = []
+        set_inbound = self.config.set_inbound
+
+        for pub_key, r in self.peer_result_map.items():
+            # Skipping the peer when no policy updates are required.
+            if self.config.db_only and pub_key not in self.config.no_db_only_pubkeys:
+                continue
+
+            for c in r.yield_pid_channel_results(self.margin_controller.margin):
+                force_update = pub_key in self.peers_update_force
+                res.append(c.get_policy_proposal(set_inbound, force_update))
+
+        return res
 
 
 class PidController:
@@ -306,7 +466,7 @@ class PidController:
     def __init__(
         self, pid_store: PidStore, ln_store: LightningStore, config: PidConfig
     ) -> None:
-        self.config = config
+
         self.pid_store = pid_store
         self.ln_store = ln_store
 
@@ -324,7 +484,7 @@ class PidController:
             mr_params = self.pid_store.mr_params_by_run(last_run_id)
 
         if not mr_params:
-            mr_params = self.config.margin.mr_controller
+            mr_params = config.margin.mr_controller
 
         self.margin_controller = MarginController(mr_params, self.last_timestamp)
 
@@ -342,33 +502,31 @@ class PidController:
 
         self.spread_level_controller: EwmaController | None = None
 
-        # Peers which require a force with the next policy update. Can be peers
-        # with new channels or peers with a change of the reference fee rate.
-        self.peers_update_force: set[str] = set()
-
     def __call__(
         self, config: PidConfig, ln: LightningCache, timestamp_start: datetime
-    ) -> None:
+    ) -> PidResult:
         """
         Updates the MarginController and all SpreadControllers with new data
         fetched from the LN Node.
         """
 
         last_run_id, _ = self.pid_store.pid_run_last()
-        self.config = config
 
-        # reset the set
-        self.peers_update_force = set()
+        peer_results: dict[str, PidPeerResult] = {}
+
+        # Peers which require a force with the next policy update. Can be peers
+        # with new channels or peers with a change of the reference fee rate.
+        peers_update_force = set()
 
         # We need the last margin later we have to recalculate the spread for
         # one peer
         margin_last = self.margin_controller.margin
 
         # Calling the margin controller
-        self.margin_controller(timestamp_start, self.config.margin.mr_controller)
+        self.margin_controller(timestamp_start, config.margin.mr_controller)
         logger.debug(
             f"Called margin controller with args: timestamp {timestamp_start}; "
-            f"params {self.config.margin.mr_controller}; result margin: "
+            f"params {config.margin.mr_controller}; result margin: "
             f"{self.margin_controller.margin:,.2f}"
         )
 
@@ -384,7 +542,7 @@ class PidController:
             # last_policies = self.pid_store.last_policies_end(last_ln_run)
 
         aggregator = ChannelAggregator.from_channels(
-            config=self.config,
+            config=config,
             policies_last=last_policies,
             block_height=block_height,
             channels=ln.channels.values(),
@@ -401,28 +559,30 @@ class PidController:
             pub_keys_current.append(pub_key)
 
             spread_controller = self.spread_controller_map.get(pub_key)
-            peer_config = self.config.peer_config(pub_key)
-
-            # The margin for the case we have to recalibrate the spread because
-            # the external fee rate had changed. This margin has to be consistent
-            # with the last call of the controller.
-            # TODO: At the moment it is a proxy, because it is the sum of the last
-            # state of the margin controller (what is right) and the current
-            # idiosyncratic margin.
-            margin_peer = margin_last + peer_config.margin_idiosyncratic
+            peer_config = config.peer_config(pub_key)
 
             # spread_recalibrated is set, if a recalibration of the spread was needed.
             spread_recalibrated: float | None = None
 
             def recalibrate_spread() -> None:
-                # Recalculates the spread with the current reference fee rate
+                # Recalculates the spread with the current reference fee rate.
                 nonlocal spread_recalibrated
-                spread_recalibrated = channel_collection.ref_fee_rate - margin_peer
+
+                # The spread s calibrated such that r_o = m_c + s * ( 1+ p/100 ),
+                # with r_o is the ref_fee_rate, m_c the constant margin and p the
+                # idiosyncratic margin in percent. Hence s = (r_o - m_c) / (1 + p/100).
+                margin_const = margin_last + peer_config.margin_idiosyncratic
+
+                spread_recalibrated = (
+                    channel_collection.ref_fee_rate - margin_const
+                ) / (1 + peer_config.margin_idiosyncratic_pct / 100)
                 logger.debug(
                     f"Spread for {pub_key=} calibrated; "
                     f"calculated {spread_recalibrated=:,.2f}; "
                     f"{channel_collection.ref_fee_rate_last=}; "
-                    f"{channel_collection.ref_fee_rate=}; {margin_peer=:,.2f}"
+                    f"{channel_collection.ref_fee_rate=}; {margin_last=:,.2f}; "
+                    f"{peer_config.margin_idiosyncratic=:,.2f}; "
+                    f"{peer_config.margin_idiosyncratic_pct=:,.2f}"
                 )
 
             # If the reference fee rate of the channels has changed due to manual
@@ -435,7 +595,7 @@ class PidController:
 
                 # Make sure that the other channels have the same fee rate after
                 # the run. If it not intended the user has to exclude these channels.
-                self.peers_update_force.add(pub_key)
+                peers_update_force.add(pub_key)
 
             # If there is no existing controller we have to create one
             if not spread_controller:
@@ -486,16 +646,28 @@ class PidController:
             # ReinitRequired error. In this case we initialize a new controller
             # from the start with its whole history,
             target = peer_config.target or target_default
-            call_args = (
-                timestamp_start,
-                channel_collection,
-                peer_config.ewma_controller,
-                target,
-                spread_recalibrated,
-            )
+
+            def call_spread_controller(controller: SpreadController):
+                controller(
+                    timestamp_start,
+                    channel_collection.liquidity_in,
+                    channel_collection.liquidity_out,
+                    peer_config.ewma_controller,
+                    target,
+                    peer_config.error_max,
+                    peer_config.error_min,
+                    peer_config.ratio_error_max,
+                    peer_config.ratio_error_min,
+                    spread_recalibrated,
+                )
+                logger.debug(
+                    f"Called spread controller for {pub_key} with args: "
+                    f"{timestamp_start=}; {peer_config=}; {target=:,.2f}; "
+                    f"{controller.spread=:,.2f}"
+                )
 
             try:
-                spread_controller(*call_args)
+                call_spread_controller(spread_controller)
             except ReinitRequired:
                 logger.info(f"Reinit required for {pub_key}")
                 history = self.pid_store.ewma_params_by_pub_key(pub_key)
@@ -504,19 +676,24 @@ class PidController:
                         peer_config.ewma_controller, history, pub_key
                     )
                 )
-                spread_controller(*call_args)
-
-            logger.debug(
-                f"Called spread controller for {pub_key} with args: "
-                f"{timestamp_start=}; params {peer_config.ewma_controller}; "
-                f"{target=:,.2f}; {margin_peer=:,.2f}; "
-                f"{spread_controller.spread=:,.2f}"
-            )
+                call_spread_controller(spread_controller)
 
             # Force update to make sure that the new fee rate is broadcasted or
             # to align the fee rates of new channels with the existing ones.
             if channel_collection.has_new_channels:
-                self.peers_update_force.add(pub_key)
+                peers_update_force.add(pub_key)
+
+            peer_results[pub_key] = peer_result = PidPeerResult(
+                spread_controller=spread_controller,
+                target=target,
+                channel_collection=channel_collection,
+                config=peer_config,
+            )
+
+            logger.debug(
+                f"Created peer result for {pub_key=}: "
+                f"{peer_result.margin_idiosyncratic=:,.2f}"
+            )
 
         # If the channels with a peer has been closed, we can remove the controller
         # from the map. Therefore wie create a new map with the current pub keys.
@@ -532,19 +709,17 @@ class PidController:
         # the spreads of all controllers about the value.
         shift = 0
         if (pin_peer := config.pin_peer) is not None:
-            pin_controller = self.spread_controller_map.get(pin_peer)
+            peer_result = peer_results.get(pin_peer)
 
-            if pin_controller is not None:
-                peer_config = config.peer_config(pin_peer)
-
+            if peer_result is not None:
                 if config.pin_method == "fee_rate":
                     shift = config.pin_value - (
                         self.margin_controller.margin
-                        + peer_config.margin_idiosyncratic
-                        + pin_controller.spread
+                        + peer_result.margin_idiosyncratic
+                        + peer_result.spread_controller.spread
                     )
                 elif config.pin_method == "spread":
-                    shift = config.pin_value - pin_controller.spread
+                    shift = config.pin_value - peer_result.spread_controller.spread
 
         # Experimental feature of a spread level controller. It is a simple ewma
         # controller set up with k_p only.
@@ -568,18 +743,18 @@ class PidController:
 
             margin = self.margin_controller.margin
 
-            for c in self.spread_controller_map.values():
-                if (col := c._channel_collection) is None:
+            for p in peer_results.values():
+                if (col := p.channel_collection) is None:
                     continue
 
                 # We floor the spread by the negative margin, to avoid the usage
                 # of high negative spreads.
-                spread = max(c.spread, -margin)
+                spread = max(p.spread_controller.spread, -margin)
 
                 liq_remote = col.liquidity_in
                 liq_local = col.liquidity_out
 
-                target_value = (liq_local + liq_remote) * c.target / PEER_TARGET_UNIT
+                target_value = (liq_local + liq_remote) * p.target / PEER_TARGET_UNIT
 
                 sum_target_weighted += spread * target_value
                 sum_target += target_value
@@ -650,91 +825,9 @@ class PidController:
 
         self.last_timestamp = timestamp_start
 
-    def store_data(self, ln_session: LightningSessionCache) -> None:
-        """
-        Adds all relevant date of the PidController and a LightningCache
-        to a db session.
-        """
-
-        ln_session.channel_policies(0, True)
-        ln_session.channel_policies(0, False)
-        ln_session.channel_policies(1, True)
-
-        # We'd like log bigger changes of the fee rates to find them faster.
-        # Therefore we are looping of the intersection of both chan_ids and
-        # determine the differences on channel level.
-        # TODO: This can be removed in a later stage of the project.
-        channels_0 = ln_session.ln.channels_by_sequence(0)
-        channels_1 = ln_session.ln.channels_by_sequence(1)
-
-        for chan_id in channels_0.keys() & channels_1.keys():
-            p_0 = channels_0[chan_id].policy_local
-            p_1 = channels_1[chan_id].policy_local
-            if not p_0 or not p_1:
-                continue
-
-            if abs(p_1.fee_rate_ppm - p_0.fee_rate_ppm) >= LOG_THRESHOLD:
-                logger.warning(
-                    f"fee rate on channel {chan_id} changed from "
-                    f"{p_0.fee_rate_ppm} to {p_1.fee_rate_ppm}"
-                )
-            if (
-                abs(p_1.inbound_fee_rate_ppm - p_0.inbound_fee_rate_ppm)
-                >= LOG_THRESHOLD
-            ):
-                logger.warning(
-                    f"inbound fee rate on channel {chan_id} changed from "
-                    f"{p_0.inbound_fee_rate_ppm} to {p_1.inbound_fee_rate_ppm}"
-                )
-
-        ln_session.channel_liquidity
-
-        ln_session.db_session.add(ln_session.ln_run)
-        ln_session.db_session.add_all(self._yield_results(ln_session))
-
-    def _yield_results(
-        self, ln_session: LightningSessionCache
-    ) -> Generator[DBPidMarginController | DBPidSpreadController | DBPidResult]:
-        """
-        Generates all sqlalchemy objects with the results of the last call of
-        the PidController.
-        """
-
-        pid_run = new_pid_run(ln_session.db_run, ln_session.ln_node)
-        yield new_margin_controller(pid_run, self.margin_controller)
-
-        for pub_key, spread_controller in self.spread_controller_map.items():
-            peer = ln_session.channel_peer_by(pub_key=pub_key)
-
-            yield new_spread_controller(spread_controller, peer, pid_run)
-
-            peer_config = self.config.peer_config(pub_key)
-            margin_idio = peer_config.margin_idiosyncratic
-            for res in yield_pid_results(
-                self.margin_controller, spread_controller, margin_idio
-            ):
-                channel = ln_session.channel_static_by(channel=res.channel)
-                yield new_pid_result(res, channel, pid_run)
-
-    def policy_proposals(self) -> list[PolicyProposal]:
-        """
-        Creates a list of all PolicyProposals with the results of the last call of
-        the PidController.
-        """
-
-        res = []
-        if self.config.db_only:
-            return res
-
-        set_inbound = self.config.set_inbound
-
-        for pub_key, spread_controller in self.spread_controller_map.items():
-            peer_config = self.config.peer_config(pub_key)
-            margin_idio = peer_config.margin_idiosyncratic
-            for r in yield_pid_results(
-                self.margin_controller, spread_controller, margin_idio
-            ):
-                force_update = pub_key in self.peers_update_force
-                res.append(new_policy_proposal(r, set_inbound, force_update))
-
-        return res
+        return PidResult(
+            config=config,
+            peer_result_map=peer_results,
+            margin_controller=self.margin_controller,
+            peers_update_force=peers_update_force,
+        )

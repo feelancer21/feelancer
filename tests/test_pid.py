@@ -14,12 +14,24 @@ from feelancer.lightning.client import Channel, ChannelPolicy, LightningClient
 from feelancer.lightning.data import LightningCache
 from feelancer.pid.aggregator import ChannelAggregator, ChannelCollection
 from feelancer.pid.analytics import EwmaControllerParams, MrControllerParams
-from feelancer.pid.controller import PidController, SpreadController, _calc_error
+from feelancer.pid.controller import (
+    PidController,
+    PidPeerResult,
+    PidResult,
+    _calc_error,
+)
 from feelancer.pid.data import (
     PidConfig,
     PidMarginControllerConfig,
     PidSpreadControllerConfig,
 )
+
+
+def _err_with_defaults(
+    liquidity_in: float, liquidity_out: float, target: float
+) -> float:
+
+    return _calc_error(liquidity_in, liquidity_out, target, 0.5, -0.5, 1_000_000, 0)
 
 
 def _new_mock_channel_policy(fee_rate_ppm: int) -> ChannelPolicy:
@@ -230,7 +242,10 @@ class TCasePidError:
     liquidity_in: float
     liquidity_out: float
     target: float
-
+    error_max: float
+    error_min: float
+    ratio_error_max: int
+    ratio_error_min: int
     expected_error: float
 
 
@@ -1374,7 +1389,9 @@ class TestPid(unittest.TestCase):
         # liquidity_out = 0.75M + 0.25M + 2M = 3M
 
         # first call for bob's channel
-        call_1 = EwmaCall(3600, _calc_error(3_000_000, 3_000_000, 400_000), bob_ewma_2)
+        call_1 = EwmaCall(
+            3600, _err_with_defaults(3_000_000, 3_000_000, 400_000), bob_ewma_2
+        )
         spread_call_1 = call_ewma(60.0, [call_1]).control_variable
 
         # creating a copy for the second call. 0.5M more local liquidity and 0.5M
@@ -1384,7 +1401,9 @@ class TestPid(unittest.TestCase):
         bob_chan_1_2.liquidity_in_settled_sat = 1_000_000
 
         # second call for bob's channel
-        call_2 = EwmaCall(2100, _calc_error(2_500_000, 3_500_000, 400_000), bob_ewma_2)
+        call_2 = EwmaCall(
+            2100, _err_with_defaults(2_500_000, 3_500_000, 400_000), bob_ewma_2
+        )
         spread_call_2 = call_ewma(60.0, [call_1, call_2]).control_variable
 
         # Chanel party 2: carol
@@ -1397,7 +1416,7 @@ class TestPid(unittest.TestCase):
         # 6M * 0.4 + 8.5M * X = 8M => X = (8M - 2.4M) / 8.5M
         target_3 = (8_000_000 - 2_400_000) / 8.5
         call_3 = EwmaCall(
-            3600, _calc_error(5_000_000, 3_500_000, target_3), default_ewma
+            3600, _err_with_defaults(5_000_000, 3_500_000, target_3), default_ewma
         )
         spread_call_3 = call_ewma(360.0, [call_3]).control_variable
 
@@ -1406,7 +1425,7 @@ class TestPid(unittest.TestCase):
         # 6M * 0.4 + 8.5M * X = 7.5M => X = (8M - 2.4M) / 8.5M
         target_4 = (7_500_000 - 2_400_000) / 8.5
         call_4 = EwmaCall(
-            2100, _calc_error(5_000_000, 3_500_000, target_4), default_ewma
+            2100, _err_with_defaults(5_000_000, 3_500_000, target_4), default_ewma
         )
         spread_call_4 = call_ewma(360.0, [call_3, call_4]).control_variable
 
@@ -1528,7 +1547,7 @@ class TestPid(unittest.TestCase):
         # Default target for carol both channels in the first call
         target_5 = 5_000_000 / 8.5
         call_5 = EwmaCall(
-            3600, _calc_error(5_000_000, 3_500_000, target_5), default_ewma
+            3600, _err_with_defaults(5_000_000, 3_500_000, target_5), default_ewma
         )
         spread_call_5 = call_ewma(360.0, [call_5]).control_variable
 
@@ -1542,7 +1561,9 @@ class TestPid(unittest.TestCase):
 
         # We also have to recalculate the expected result for bob in the second
         # call. Target is the same as in testcase 1.
-        call_7 = EwmaCall(2100, _calc_error(2_500_000, 3_500_000, 400_000), bob_ewma_2)
+        call_7 = EwmaCall(
+            2100, _err_with_defaults(2_500_000, 3_500_000, 400_000), bob_ewma_2
+        )
 
         # The liquidity is more local, i.e. we start with 2000ppm local and a
         # spread of 2000ppm - 40ppm (margin) = 1960
@@ -1648,7 +1669,9 @@ class TestPid(unittest.TestCase):
         # leads to a usage of the spread, i.e. the control_variable of 210 set
         # in bob_ewma_2
         pid_config_2.max_age_spread_hours = 2
-        call_8 = EwmaCall(2100, _calc_error(2_500_000, 3_500_000, 400_000), bob_ewma_2)
+        call_8 = EwmaCall(
+            2100, _err_with_defaults(2_500_000, 3_500_000, 400_000), bob_ewma_2
+        )
         spread_call_8 = call_ewma(210.0, [call_8]).control_variable
 
         self.testcases_controller.append(
@@ -1854,7 +1877,7 @@ class TestPid(unittest.TestCase):
         # For carol we can use target_5, because balance is unchanged.
 
         call_8 = EwmaCall(
-            2100, _calc_error(5_000_000, 3_500_000, target_5), default_ewma
+            2100, _err_with_defaults(5_000_000, 3_500_000, target_5), default_ewma
         )
 
         spread_call_8 = call_ewma(360.0, [call_3, call_8]).control_variable
@@ -1960,7 +1983,9 @@ class TestPid(unittest.TestCase):
         # We change the EwmaControllerParams between the calls for bob now.
         # Starting with call_1 again.
         # call_9 is like call_2 but with bob_ewma_2 instead of bob_ewma_3
-        call_9 = EwmaCall(2100, _calc_error(2_500_000, 3_500_000, 400_000), bob_ewma_3)
+        call_9 = EwmaCall(
+            2100, _err_with_defaults(2_500_000, 3_500_000, 400_000), bob_ewma_3
+        )
 
         # the expected result for bob after the second call.
         spread_call_9 = call_ewma(60, [call_1, call_9]).control_variable
@@ -2090,7 +2115,7 @@ class TestPid(unittest.TestCase):
         # for second call
         call_10 = EwmaCall(
             2100,
-            _calc_error(2_500_000, 3_500_000, 400_000),
+            _err_with_defaults(2_500_000, 3_500_000, 400_000),
             bob_ewma_2,
             control_variable=10,
         )
@@ -2327,16 +2352,16 @@ class TestPid(unittest.TestCase):
                 controller.pid_store.ewma_params_last_by_peer = params_last
 
                 # Now all is mocked and we can call the controller.
-                controller(c.config, lncache, c.timestamp)
+                res = controller(c.config, lncache, c.timestamp)
 
                 # We can proceed with the next call if there is no expected result.
                 if isinstance(c.expected_result, NoExpectedResult):
                     continue
 
-                self._assert_pid_controller_call(controller, c.expected_result, msgcall)
+                self._assert_pid_controller_call(res, c.expected_result, msgcall)
 
     def _assert_pid_controller_call(
-        self, c: PidController, e: ERPidControllerCall, msg: str
+        self, c: PidResult, e: ERPidControllerCall, msg: str
     ):
         """
         Validation of a pid controller after a call using the expected results.
@@ -2346,19 +2371,19 @@ class TestPid(unittest.TestCase):
 
         # Assert the spread rate controller. First we determine the union set
         # of pub_keys
-        pub_keys = c.spread_controller_map.keys() | e.spread_controller_results.keys()
+        pub_keys = c.peer_result_map.keys() | e.spread_controller_results.keys()
         for pub_key in pub_keys:
             msgpub = f"{pub_key=}; " + msg
 
-            s = c.spread_controller_map.get(pub_key)
+            s = c.peer_result_map.get(pub_key)
             # Ensures also that it is not None.
-            self.assertIsInstance(s, SpreadController, msgpub)
+            self.assertIsInstance(s, PidPeerResult, msgpub)
 
             r = e.spread_controller_results.get(pub_key)
             # Ensures also that it is not None.
             self.assertIsInstance(r, ERSpreadRateController, msgpub)
 
-            self._assert_spread_controller(s, r, msgpub)  # type: ignore
+            self._assert_peer_result(s, r, msgpub)  # type: ignore
 
         # Create a dict of the generated PolicyProposal. And afterward a set
         # of all chan_points.
@@ -2382,14 +2407,21 @@ class TestPid(unittest.TestCase):
             # We assert the whole PolicyProposal objects here.
             self.assertEqual(p, r, msgchan)
 
-    def _assert_spread_controller(
-        self, con: SpreadController, e_con: ERSpreadRateController, msg: str
+    def _assert_peer_result(
+        self, res: PidPeerResult, e_con: ERSpreadRateController, msg: str
     ) -> None:
-        self.assertEqual(con.spread, e_con.spread, msg)
-        self.assertEqual(con.target, e_con.target, msg)
+        self.assertEqual(res.spread_controller.spread, e_con.spread, msg)
+        self.assertEqual(res.target, e_con.target, msg)
 
     def test_calc_error(self):
         testcases: list[TCasePidError] = []
+
+        default_args = {
+            "error_max": 0.5,
+            "error_min": -0.5,
+            "ratio_error_max": 1_000_000,
+            "ratio_error_min": 0,
+        }
 
         testcases.append(
             TCasePidError(
@@ -2399,6 +2431,7 @@ class TestPid(unittest.TestCase):
                 liquidity_out=0,
                 target=100_000,
                 expected_error=0,
+                **default_args,
             )
         )
 
@@ -2413,6 +2446,7 @@ class TestPid(unittest.TestCase):
                 # error = 1/2 / (1 - 4/10) * (4/6 - 4/10) + 0
                 #       = 1/2 * 5/3 * 16/60 = 80/360 = 2/9
                 expected_error=2 / 9,
+                **default_args,
             )
         )
 
@@ -2427,6 +2461,7 @@ class TestPid(unittest.TestCase):
                 # error = 1/2 / (4/10 - 0) * (1/12 - 4/10) + 0
                 #       = 1/2 * 5/2 * (-38)/120 = -190/480 = -19/48
                 expected_error=-19 / 48,
+                **default_args,
             )
         )
 
@@ -2438,6 +2473,7 @@ class TestPid(unittest.TestCase):
                 liquidity_out=11_000_000,
                 target=400_000,
                 expected_error=-1 / 2,
+                **default_args,
             )
         )
 
@@ -2449,12 +2485,124 @@ class TestPid(unittest.TestCase):
                 liquidity_out=0,
                 target=400_000,
                 expected_error=1 / 2,
+                **default_args,
+            )
+        )
+
+        no_default_args = {
+            "error_max": 1.0,
+            "error_min": -0.1,
+            "ratio_error_max": 600_000,
+            "ratio_error_min": 100_000,
+        }
+
+        testcases.append(
+            TCasePidError(
+                name="6",
+                description="zero liquidity",
+                liquidity_in=0,
+                liquidity_out=0,
+                target=100_000,
+                expected_error=0,
+                **no_default_args,
+            )
+        )
+
+        testcases.append(
+            TCasePidError(
+                name="7",
+                description="liquidity_in over ratio_error_max",
+                liquidity_in=7_000_000,
+                liquidity_out=3_000_000,
+                target=400_000,
+                expected_error=1,
+                **no_default_args,
+            )
+        )
+
+        testcases.append(
+            TCasePidError(
+                name="8",
+                description="liquidity_in at ratio_error_max",
+                liquidity_in=6_000_000,
+                liquidity_out=4_000_000,
+                target=400_000,
+                expected_error=1,
+                **no_default_args,
+            )
+        )
+
+        testcases.append(
+            TCasePidError(
+                name="9",
+                description="liquidity_in over target",
+                liquidity_in=5_500_000,
+                liquidity_out=4_500_000,
+                target=400_000,
+                expected_error=3 / 4,
+                **no_default_args,
+            )
+        )
+
+        testcases.append(
+            TCasePidError(
+                name="10",
+                description="liquidity_in at target",
+                liquidity_in=4_000_000,
+                liquidity_out=6_000_000,
+                target=400_000,
+                expected_error=0,
+                **no_default_args,
+            )
+        )
+
+        testcases.append(
+            TCasePidError(
+                name="11",
+                description="liquidity_in below target",
+                liquidity_in=3_000_000,
+                liquidity_out=7_000_000,
+                target=400_000,
+                expected_error=-1 / 30,
+                **no_default_args,
+            )
+        )
+
+        testcases.append(
+            TCasePidError(
+                name="12",
+                description="liquidity_in at ratio_error_min",
+                liquidity_in=1_000_000,
+                liquidity_out=9_000_000,
+                target=400_000,
+                expected_error=-1 / 10,
+                **no_default_args,
+            )
+        )
+
+        testcases.append(
+            TCasePidError(
+                name="13",
+                description="liquidity_in below ratio_error_min",
+                liquidity_in=100_000,
+                liquidity_out=9_900_000,
+                target=400_000,
+                expected_error=-1 / 10,
+                **no_default_args,
             )
         )
 
         for t in testcases:
             msg = f"{t.name=}; {t.description=}"
-            err = _calc_error(t.liquidity_in, t.liquidity_out, t.target)
+            err = _calc_error(
+                t.liquidity_in,
+                t.liquidity_out,
+                t.target,
+                t.error_max,
+                t.error_min,
+                t.ratio_error_max,
+                t.ratio_error_min,
+            )
 
             # Compare on 7 decimal places
             self.assertAlmostEqual(err, t.expected_error, None, msg)

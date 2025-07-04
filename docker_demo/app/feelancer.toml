@@ -1,3 +1,4 @@
+
 [lnd]
 cert_filepath = "/root/.lnd/tls.cert"
 # for policy updates you have to change it, e.g. to admin.macaroon
@@ -5,14 +6,14 @@ macaroon_filepath = "/root/.lnd/data/chain/bitcoin/testnet/readonly.macaroon"
 ip_address = "192.168.2.21:10009"
 
 # The maximum number of payments to be returned during payment pre sync
-paginator_max_payments = 10000 # default
+paginator_max_payments = 10000 # default: 10000 messages
 
 # grpc options
-grpc_max_message_length = 209_715_200         # 200 MB
-grpc_max_receive_message_length = 209_715_200 # 200 MB
-grpc_max_connection_idle_ms = 30_000
-grpc_keepalive_time_ms = 30_000
-grpc_keepalive_timeout_ms = 20_000
+grpc_max_message_length = 209_715_200         # default: 200 MB
+grpc_max_receive_message_length = 209_715_200 # default: 200 MB
+grpc_max_connection_idle_ms = 30_000          # default: 30 seconds
+grpc_keepalive_time_ms = 30_000               # default: 30 seconds
+grpc_keepalive_timeout_ms = 20_000            # default: 20 seconds
 
 
 [sqlalchemy.url]
@@ -34,7 +35,7 @@ logfile = "/app/feelancer.log"
 # General parameters independent from specific models and specific peers.
 
 # Execution interval of the jobs
-seconds = 900
+seconds = 900 # mandatory
 
 
 [feelancer.peers.default]
@@ -42,23 +43,26 @@ seconds = 900
 # One can configure defaults for all peers here
 
 # Minimum time interval in seconds between two policy broadcasts to the network.
-min_seconds = 3600
+# Not recommend to set this at high value when you run other scripts performing
+# policy updates.
+min_seconds = 3600 # Default: 86400s (24 hours)
+
 # Minimum ppm change up / down, which has to be applied when broadcasting fee_rate to
 # the network.
-fee_rate_ppm_min_up = 5
-fee_rate_ppm_min_down = 1
+fee_rate_ppm_min_up = 5   # Default: 10ppm
+fee_rate_ppm_min_down = 1 # Default: 10ppm
 
 # Minimum and maximum fee_rate in ppm can be configured. 
-fee_rate_min = 1
-fee_rate_max = 2121
+fee_rate_min = 1    # Default: 0
+fee_rate_max = 2121 # Default: 2500
 
 # Minimum ppm change up / down, which has to be applied when broadcasting fee_rate to# Minimum time interval in seconds between two policy broadcasts to the network.
 # the network.
-inbound_fee_rate_ppm_min_up = 2
-inbound_fee_rate_ppm_min_down = 5
+inbound_fee_rate_ppm_min_up = 2   # Default: 10ppm
+inbound_fee_rate_ppm_min_down = 5 # Default: 10ppm
 # Minimum and maximum fee_rate in ppm can be configured. 
-inbound_fee_rate_min = -99999
-inbound_fee_rate_max = 0
+inbound_fee_rate_min = -99999 # Default: -2500
+inbound_fee_rate_max = 0      # Default: 0
 
 
 # You can also overwrite the default values for specific peers.
@@ -74,34 +78,44 @@ min_seconds = 1
 
 
 ## Model specific configuration
-# At the moment only the pid-model is applied. Pid models the fee_rate only with
-# a PID-Controller
-
-
+# At the moment only the pid-model is applied. Pid models a peer dependent spread
+# rate only wit a PID-Controller. Moreover a rudimentary margin controller
+# is implemented.
 [pid]
-# List of peers and/or chan_ids to be excluded from the model
+
+# List of peers and/or chan_ids to be excluded from the pid model, i.e. such peers
+# are not used for the calculation of the default target and no results are stored
+# in the database and are sent to lnd.
 exclude_pubkeys = []
 exclude_chanids = []
+
+# If true then the policy updates are not sent to the lnd backend. This flag is
+# only useful for testing purposes, e.g. on mainnet. Then the user can analyze
+# the potential behavior of the feelancer with logs and db entries.
+db_only = true # default: True
+
+# 'no_db_only_pubkeys' is a list of pubkeys for which the db_only==True is ignored.
+# It can be used as whitelist during a bootstrapping of the tool.
+no_db_only_pubkeys = [] # default: []
+
 
 # If true then also inbound discounts and fees are derived. The setting of positive
 # inbound fees can be prevented with inbound_fee_rate_max = 0 in the feelancer
 # section.
-set_inbound = true
+set_inbound = true # default: False
 
-# If true then the updates are not sent to lnd backend.
-db_only = true
+# Typically, either ‘fee_rate_new_local’ or ‘fee_rate_new_remote’ is used on
+# channels with new peers. However, we want to prevent existing fees from being
+# overwritten, especially during the first run of the feelancer. Therefore, the
+# aforementioned fee rates are only used if a channel does not exceed the age
+# ‘max_age_new_channels’ in blocks.
+max_age_new_channels = 144 # default: 144blocks 
 
-# A channel is new if it wasn't included in the last run and if it has a max
-# age of this number of blocks.
-# If a channel is new and if there is no other public channel. The fee_rate_new_local
-# or fee_rate_new_remote is applied
-max_age_new_channels = 144
-
-# The model includes a fee level specific component and a peer specific component.
-# The fee level component compares the capacity weighted average fee_rate of all
-# included peers with the local balance weighted average fee_rate. 
-# If the former is higher, it indicates the node is more depleted, and we increase
-# all fee_rates slightly. Otherwise, we decrease all fee_rates slightly.
+# If a peer was not included in the last run, it may make sense to use the last
+# available spread, e.g. if a channel was recently closed. However, we must
+# ensure that we do not pull values from the database that are too old.
+# 'max_age_spread_hours' specifies how old a spread may be in hours.
+max_age_spread_hours = 72 # default: 0 hours
 
 
 [pid.pin]
@@ -134,24 +148,59 @@ mr_controller = { k_m = 50, alpha = 0.1 }
 
 
 [pid.peers.default]
+# These are the default parameters for each peer using the pid model.
+# The values can overwritten for specific groups of peers, e.g. [feelancer.peers.boltz]
+fee_rate_new_local = 1500 # default: 21000
+fee_rate_new_remote = 250 # default: 0
 
-fee_rate_new_local = 1500
-fee_rate_new_remote = 250
+# Error calculation parameters for PID controller
+# These parameters define the error function used in the spread controller
+# The error is calculated based on the liquidity ratio compared to the target
+# Between ratio_error_min and ratio_error_max the error is linearly interpolated.
+
+# Maximum positive error value when liquidity_in ratio is at or above ratio_error_max
+error_max = 1.0 # default: 0.5
+
+# Minimum negative error value when liquidity_in ratio is at or below ratio_error_min
+error_min = -0.1 # default: -0.5
+
+# Upper bound for liquidity ratio (in millionths) where error reaches error_max
+# If liquidity_in/(liquidity_in+liquidity_out) >= ratio_error_max/1_000_000, error = error_max
+ratio_error_max = 800_000 # default: 1_000_000
+
+# Lower bound for liquidity ratio (in millionths) where error reaches error_min
+# If liquidity_in/(liquidity_in+liquidity_out) <= ratio_error_min/1_000_000, error = error_min
+ratio_error_min = 200_000 # default: 0
 
 # Relevant for recalculating the ewma if a parameter changes. Not implemented yet
 lambda_epsilon = 1e-4
 
-ewma_controller = { k_t = 0.1, k_p = 1, alpha_i = 0.04, k_i = 4.8, alpha_d = 1, k_d = 2.4 }
+ewma_controller = { k_t = 0.1, k_p = 1, alpha_i = 0.04, k_i = 4.8, alpha_d = 1, k_d = 2.4 } # default: params are 0
 
+# A margin add-on in ppm on top of the margin controller, which can be defined
+# idiosyncratically for each peer.
+margin_idiosyncratic = -10
+
+# A second margin add-on in percent of the spread, which can also be defined
+# idiosyncratically for each peer.
+margin_idiosyncratic_pct = 5.0
+
+# Minimum value of the idiosyncratic margin in ppm.
+margin_idiosyncratic_min = -100
+
+# Maximum value of the idiosyncratic margin in ppm.
+margin_idiosyncratic_max = 100
 
 [pid.peers.boltz]
+# This is an example of a group of peers with specific parameters. The name of
+# the group is arbitrary, but has to be unique. All groups has to be distinct,
+# i.e. no two groups can have the same pubkey.
 pubkeys = [
     "026165850492521f4ac8abd9bd8088123446d126f648ca35e60f88177dc149ceb2",
     "02d96eadea3d780104449aca5c93461ce67c1564e2e1d73225fa67dd3b997a6018",
 ]
 target = 900_000
 ewma_controller = { k_p = 1 }
-margin_idiosyncratic = -10
 
 
 [reconnect]
@@ -159,10 +208,10 @@ margin_idiosyncratic = -10
 # It reconnects channels with stuck htlcs and maybe inactive channels.
 
 # inactive channels are only included if set to true.
-include_inactive = false
+include_inactive = false # Default: false
 
 # An htlc is defined as stuck if the expiry is less blocks away than this value
-max_blocks_to_expiry = 13
+max_blocks_to_expiry = 13 # Default: 13
 
 [paytrack]
 # If the 'paytrack' section is included in config file a paytrack service will be started.
@@ -171,6 +220,7 @@ max_blocks_to_expiry = 13
 # The following params control the creation of csv files using the stored data.
 # The files are created every feelancer.seconds.
 
+# All mentioned values in ths section are its default values.
 # Create the a list with pub_key, average node speed and count of payments
 node_speed_write_csv = false
 # time window of the historical data

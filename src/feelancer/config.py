@@ -11,7 +11,7 @@ class FeelancerPeersConfig(GenericConf):
     fee_rate_min: int = 0
     fee_rate_max: int = 2500
     inbound_fee_rate_min: int = -2500
-    inbound_fee_rate_max: int = 2500
+    inbound_fee_rate_max: int = 0
     fee_rate_ppm_min_up: int = 10
     fee_rate_ppm_min_down: int = 10
     inbound_fee_rate_ppm_min_up: int = 10

@@ -21,6 +21,8 @@ PEER_TARGET_UNIT = 1_000_000
 # The default value for the default target, which is only used if an error
 # occurred.
 TARGET_DEFAULT = 500_000
+DEFAULT_TARGET_MAX = 1_000_000
+DEFAULT_TARGET_MIN = 0
 
 
 class ChannelCollection:
@@ -328,9 +330,17 @@ class ChannelAggregator:
                 sum_liquidity_target += (local + remote) * peer_config.target
 
         if sum_liquidity != sum_liquidity_known_target:
-            self._target_default = (
+            target = (
                 PEER_TARGET_UNIT * (sum_liquidity - sum_local) - sum_liquidity_target
             ) / (sum_liquidity - sum_liquidity_known_target)
+
+            if target < DEFAULT_TARGET_MIN:
+                target = DEFAULT_TARGET_MIN
+
+            if target > DEFAULT_TARGET_MAX:
+                target = DEFAULT_TARGET_MAX
+
+            self._target_default = target
 
         else:
             # This case should only happen when sum_liquidity is equal to

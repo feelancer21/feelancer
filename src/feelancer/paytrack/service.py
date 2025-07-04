@@ -1,6 +1,6 @@
 import logging
 from collections.abc import Callable, Iterable
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from sqlalchemy import Delete, Select
 
@@ -123,6 +123,7 @@ class PaytrackService(BaseServer):
         get_paytrack_config: Callable[..., PaytrackConfig | None],
         to_csv: Callable[[Select[tuple], str, list[str] | None], None],
         delete_data: Callable[[Iterable[Delete[tuple]]], None],
+        get_last_run: Callable[[], datetime | None],
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -130,6 +131,7 @@ class PaytrackService(BaseServer):
         self._get_paytrack_config = get_paytrack_config
         self._to_csv = to_csv
         self._delete_data = delete_data
+        self._get_last_run = get_last_run
 
         self._register_starter(self._start_server)
         self._register_stopper(self._stop_server)
@@ -145,6 +147,12 @@ class PaytrackService(BaseServer):
 
         logger.info("Start run...")
         logger.debug(f"Config used for run {config.__dict__=}")
+
+        last_run = self._get_last_run()
+        if last_run is not None:
+            if last_run.date() == request.timestamp.date():
+                logger.debug("Skipping paytrack exports. ")
+                return RunnerResult()
 
         if config.node_speed_write_csv:
             qry, header = query_average_node_speed(
