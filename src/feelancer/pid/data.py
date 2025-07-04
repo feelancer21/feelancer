@@ -288,7 +288,15 @@ class PidSpreadControllerConfig(GenericConf):
     target: int | None = None
     fee_rate_new_local: int = 21000
     fee_rate_new_remote: int = 0
+
+    # idiosyncratic margin add-on in ppm
     margin_idiosyncratic: float = 0
+
+    # idiosyncratic margin add-on in percent of the spread
+    margin_idiosyncratic_pct: float = 0
+
+    margin_idiosyncratic_min: float = 0
+    margin_idiosyncratic_max: float = 2**31
     error_max: float = 0.5
     error_min: float = -0.5
     ratio_error_max: int = 1_000_000

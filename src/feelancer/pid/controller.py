@@ -329,7 +329,20 @@ class PidPeerResult:
         """
         Returns the idiosyncratic margin for this peer.
         """
-        return self.config.margin_idiosyncratic
+
+        res = (
+            self.config.margin_idiosyncratic
+            + (self.config.margin_idiosyncratic_pct * self.spread_controller.spread)
+            / 100
+        )
+
+        if res < self.config.margin_idiosyncratic_min:
+            return self.config.margin_idiosyncratic_min
+
+        if res > self.config.margin_idiosyncratic_max:
+            return self.config.margin_idiosyncratic_max
+
+        return res
 
     def yield_pid_channel_results(
         self,
@@ -548,26 +561,28 @@ class PidController:
             spread_controller = self.spread_controller_map.get(pub_key)
             peer_config = config.peer_config(pub_key)
 
-            # The margin for the case we have to recalibrate the spread because
-            # the external fee rate had changed. This margin has to be consistent
-            # with the last call of the controller.
-            # TODO: At the moment it is a proxy, because it is the sum of the last
-            # state of the margin controller (what is right) and the current
-            # idiosyncratic margin.
-            margin_peer = margin_last + peer_config.margin_idiosyncratic
-
             # spread_recalibrated is set, if a recalibration of the spread was needed.
             spread_recalibrated: float | None = None
 
             def recalibrate_spread() -> None:
-                # Recalculates the spread with the current reference fee rate
+                # Recalculates the spread with the current reference fee rate.
                 nonlocal spread_recalibrated
-                spread_recalibrated = channel_collection.ref_fee_rate - margin_peer
+
+                # The spread s calibrated such that r_o = m_c + s * ( 1+ p/100 ),
+                # with r_o is the ref_fee_rate, m_c the constant margin and p the
+                # idiosyncratic margin in percent. Hence s = (r_o - m_c) / (1 + p/100).
+                margin_const = margin_last + peer_config.margin_idiosyncratic
+
+                spread_recalibrated = (
+                    channel_collection.ref_fee_rate - margin_const
+                ) / (1 + peer_config.margin_idiosyncratic_pct / 100)
                 logger.debug(
                     f"Spread for {pub_key=} calibrated; "
                     f"calculated {spread_recalibrated=:,.2f}; "
                     f"{channel_collection.ref_fee_rate_last=}; "
-                    f"{channel_collection.ref_fee_rate=}; {margin_peer=:,.2f}"
+                    f"{channel_collection.ref_fee_rate=}; {margin_last=:,.2f}; "
+                    f"{peer_config.margin_idiosyncratic=:,.2f}; "
+                    f"{peer_config.margin_idiosyncratic_pct=:,.2f}"
                 )
 
             # If the reference fee rate of the channels has changed due to manual
@@ -647,8 +662,7 @@ class PidController:
                 )
                 logger.debug(
                     f"Called spread controller for {pub_key} with args: "
-                    f"{timestamp_start=}; {peer_config=}; "
-                    f"{target=:,.2f}; {margin_peer=:,.2f}; "
+                    f"{timestamp_start=}; {peer_config=}; {target=:,.2f}; "
                     f"{controller.spread=:,.2f}"
                 )
 
@@ -669,11 +683,16 @@ class PidController:
             if channel_collection.has_new_channels:
                 peers_update_force.add(pub_key)
 
-            peer_results[pub_key] = PidPeerResult(
+            peer_results[pub_key] = peer_result = PidPeerResult(
                 spread_controller=spread_controller,
                 target=target,
                 channel_collection=channel_collection,
                 config=peer_config,
+            )
+
+            logger.debug(
+                f"Created peer result for {pub_key=}: "
+                f"{peer_result.margin_idiosyncratic=:,.2f}"
             )
 
         # If the channels with a peer has been closed, we can remove the controller

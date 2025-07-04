@@ -177,6 +177,19 @@ lambda_epsilon = 1e-4
 
 ewma_controller = { k_t = 0.1, k_p = 1, alpha_i = 0.04, k_i = 4.8, alpha_d = 1, k_d = 2.4 } # default: params are 0
 
+# A margin add-on in ppm on top of the margin controller, which can be defined
+# idiosyncratically for each peer.
+margin_idiosyncratic = -10
+
+# A second margin add-on in percent of the spread, which can also be defined
+# idiosyncratically for each peer.
+margin_idiosyncratic_pct = 5.0
+
+# Minimum value of the idiosyncratic margin in ppm.
+margin_idiosyncratic_min = -100
+
+# Maximum value of the idiosyncratic margin in ppm.
+margin_idiosyncratic_max = 100
 
 [pid.peers.boltz]
 # This is an example of a group of peers with specific parameters. The name of
@@ -188,7 +201,6 @@ pubkeys = [
 ]
 target = 900_000
 ewma_controller = { k_p = 1 }
-margin_idiosyncratic = -10
 
 
 [reconnect]
