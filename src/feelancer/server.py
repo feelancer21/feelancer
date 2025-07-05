@@ -300,6 +300,7 @@ class MainServer(BaseServer):
             self.cfg.db.del_core,
             lnd.htlc_tracker.set_store_htlc_events,
             lnd.store_untransformed_events,
+            lambda: pid_store.pid_run_last()[1],
         )
 
         self.runner.register_task(tracker.run)
