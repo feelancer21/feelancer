@@ -1,5 +1,5 @@
 from collections.abc import Callable, Iterable
-from datetime import timedelta
+from datetime import timedelta, datetime
 
 from sqlalchemy import Delete, Select
 
@@ -162,6 +162,7 @@ class TrackerService:
         db_delete_data: Callable[[Iterable[Delete[tuple]] | Delete[tuple]], None],
         set_store_htlc_events: Callable[[bool], None],
         set_store_untransformed_events: Callable[[bool], None],
+        get_last_run: Callable[[], datetime | None],
     ) -> None:
 
         self._get_config = get_config
@@ -169,6 +170,7 @@ class TrackerService:
         self._db_delete_data = db_delete_data
         self._set_store_htlc_events = set_store_htlc_events
         self._set_store_untransformed_events = set_store_untransformed_events
+        self._get_last_run = get_last_run
 
         if (config := self._get_config()) is not None:
             self._set_store_htlc_events(config.store_htlc_events)
@@ -185,6 +187,12 @@ class TrackerService:
 
         logger.info("Start run...")
         logger.debug(f"Config used for run {config.__dict__=}")
+
+        last_run = self._get_last_run()
+        if last_run is not None:
+            if last_run.date() == request.timestamp.date():
+                logger.debug("Skipping paytrack exports. ")
+                return RunnerResult()
 
         if config.node_speed_write_csv:
             qry, header = query_average_node_speed(
