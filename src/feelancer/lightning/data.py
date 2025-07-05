@@ -5,9 +5,10 @@ from typing import TYPE_CHECKING
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
-from feelancer.data.db import SessionExecutor
+from feelancer.data.db import GetIdException, SessionExecutor
 from feelancer.lightning.client import ChannelPolicy, LightningClient
 from feelancer.lightning.models import (
+    Base,
     DBLnChannelLiquidity,
     DBLnChannelPeer,
     DBLnChannelPolicy,
@@ -150,7 +151,12 @@ class LightningStore:
 
     def __init__(self, db: FeelancerDB, pubkey_local: str) -> None:
         self.db = db
+        self.db.new_base(Base)
         self.pubkey_local = pubkey_local
+
+        self._get_node_id_or_add = self.db.new_get_id_or_add(
+            get_qry=query_node, read_id=lambda n: n.id
+        )
 
     @property
     def ln_node_id(self) -> int:
@@ -158,20 +164,13 @@ class LightningStore:
         Returns the id of the lightning node.
         """
 
-        def get_local_node() -> DBLnNode | None:
-            return self.db.query_first(query_node(self.pubkey_local), lambda c: c)
-
-        ln_node: DBLnNode | None = get_local_node()
-        if ln_node is None:
-            ln_node = self.db.execute_post(
-                lambda s: s.add(_new_ln_node(self.pubkey_local)), lambda c: c
+        try:
+            # We try to get the node id from the database.
+            return self._get_node_id_or_add(
+                self.pubkey_local, lambda: _new_ln_node(self.pubkey_local)
             )
-            ln_node: DBLnNode | None = get_local_node()
-
-        if ln_node is None:
+        except GetIdException:
             raise Exception(f"Cannot get node.id for {self.pubkey_local=}")
-
-        return ln_node.id
 
     def local_policies(self, run_id: int, sequence_id: int) -> dict[int, ChannelPolicy]:
 
@@ -180,7 +179,7 @@ class LightningStore:
         def key(p: DBLnChannelPolicy) -> int:
             return p.static.chan_id
 
-        return self.db.query_all_to_dict(qry, key, _convert_channel_policy)
+        return self.db.sel_all_to_dict(qry, key, _convert_channel_policy)
 
 
 class LightningSessionCache:
@@ -214,7 +213,7 @@ class LightningSessionCache:
         if self._channel_peer:
             return self._channel_peer
 
-        self._channel_peer = self.exec.query_all_to_dict(
+        self._channel_peer = self.exec.sel_all_to_dict(
             query_channel_peers(), lambda c: c.pub_key, lambda c: c
         )
 
@@ -243,13 +242,13 @@ class LightningSessionCache:
             qry = query_channel_static(self.ln_node.id)
 
             # We transform the result to a dict with (node_id, chan_id) as key.
-            self._channel_static = self.exec.query_all_to_dict(
+            self._channel_static = self.exec.sel_all_to_dict(
                 qry, lambda c: (c.ln_node_id, c.chan_id), lambda c: c
             )
 
         # Creating DBLnChannelStatic for new channels
         for channel in self.ln.channels.values():
-            idx = self._create_chan_idx(channel)
+            idx = self._new_chan_idx(channel)
 
             if not (self._channel_static.get(idx)):
                 self._channel_static[idx] = _new_channel_static(
@@ -270,7 +269,7 @@ class LightningSessionCache:
 
         self._channel_liquidity = {}
         for channel in self.ln.channels.values():
-            idx = self._create_chan_idx(channel)
+            idx = self._new_chan_idx(channel)
 
             self._channel_liquidity[idx] = _new_channel_liquidity(
                 channel, self.channel_static_by(channel), self.ln_run
@@ -293,7 +292,7 @@ class LightningSessionCache:
 
         policies = self._channel_policies[pol_idx] = {}
         for channel in self.ln.channels_by_sequence(sequence_id).values():
-            idx = self._create_chan_idx(channel)
+            idx = self._new_chan_idx(channel)
             static = self.channel_static_by(channel)
             if local:
                 policy = channel.policy_local
@@ -316,16 +315,16 @@ class LightningSessionCache:
     def channel_static_by(self, channel: Channel) -> DBLnChannelStatic:
         """Returns DBLnChannelStatic for a given channel"""
 
-        return self.channel_static[self._create_chan_idx(channel)]
+        return self.channel_static[self._new_chan_idx(channel)]
 
     def _local_node(self) -> DBLnNode:
         pub_key = self.ln.pubkey_local
 
-        return self.exec.query_first(
+        return self.exec.sel_first(
             query_node(pub_key), lambda c: c, _new_ln_node(pub_key)
         )
 
-    def _create_chan_idx(self, channel: Channel) -> ChannelIDX:
+    def _new_chan_idx(self, channel: Channel) -> ChannelIDX:
         return (self.ln_node.id, channel.chan_id)
 
 
