@@ -1,13 +1,13 @@
-import logging
 import time
 from typing import TYPE_CHECKING, Protocol
 
 from feelancer.lightning.lnd import LNDClient
+from feelancer.log import getLogger
 
 if TYPE_CHECKING:
     from feelancer.lnd.grpc_generated import lightning_pb2 as ln
 
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
 
 
 class Reconnector(Protocol):

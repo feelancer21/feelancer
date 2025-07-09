@@ -1,17 +1,17 @@
 from __future__ import annotations
 
-import logging
 from typing import TYPE_CHECKING
 
 import feelancer.lnd.client as lnd
 from feelancer.grpc.client import DeadlineExceeded
 from feelancer.lightning.client import Channel, ChannelPolicy
 from feelancer.lightning.utils import opening_height
+from feelancer.log import getLogger
 
 if TYPE_CHECKING:
     from feelancer.lnd.grpc_generated import lightning_pb2 as ln
 
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
 
 
 def _liquidity_pending(channel: ln.Channel) -> tuple[int, int]:
@@ -196,9 +196,3 @@ class LNDClient:
             )
         if len(response.failed_updates) > 0:
             raise Exception("update failure during policy update")
-
-    def start(self) -> None:
-        return self.lnd.start()
-
-    def stop(self) -> None:
-        return self.lnd.stop()

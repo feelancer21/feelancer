@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import base64
+import datetime
 import os
 from copy import deepcopy
 from dataclasses import dataclass, fields
-from typing import TypeVar
+from typing import Protocol, TypeVar
 
+import pytz
 import tomli
 
 
@@ -82,3 +85,25 @@ def first_some(value1: U | None, value2: U) -> U:
     """Returns the first value which is not None"""
 
     return value1 if value1 is not None else value2
+
+
+class SupportsStr(Protocol):
+    def __str__(self) -> str: ...
+
+
+def ns_to_datetime(ns: int) -> datetime.datetime:
+    """
+    Convert UNIX nanoseconds to a timezone-aware datetime (UTC).
+    """
+    return datetime.datetime.fromtimestamp(ns / 1e9, tz=pytz.utc)
+
+
+def sec_to_datetime(sec: int) -> datetime.datetime:
+    """
+    Convert UNIX seconds to a timezone-aware datetime (UTC).
+    """
+    return datetime.datetime.fromtimestamp(sec, tz=pytz.utc)
+
+
+def bytes_to_str(bytes: bytes) -> str:
+    return base64.b16encode(bytes).decode("utf-8").lower()

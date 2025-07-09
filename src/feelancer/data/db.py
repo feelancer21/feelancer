@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import csv
-import logging
 import os
 import tempfile
 from collections.abc import Callable, Generator, Iterable, Sequence
@@ -12,7 +11,8 @@ from sqlalchemy import URL, Row, create_engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
-from feelancer.retry import create_retry_handler
+from feelancer.log import getLogger
+from feelancer.retry import new_retry_handler
 
 if TYPE_CHECKING:
     from sqlalchemy import Delete, Select
@@ -27,7 +27,10 @@ DELAY = 5
 MIN_TOLERANCE_DELTA = 60
 
 
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
+
+
+class GetIdException(Exception): ...
 
 
 def _fields_to_dict(result, relations: dict[str, dict]) -> dict:
@@ -58,7 +61,7 @@ def _explore_path(path: Sequence, rel_dict: dict[str, dict]) -> dict[str, dict]:
     return rel_dict
 
 
-def _create_dict_gen_call(
+def _new_dict_gen_call(
     qry: Select[tuple[T]],
 ) -> Callable[[Sequence], Generator[dict]]:
     """
@@ -88,7 +91,7 @@ def _create_dict_gen_call(
 
 # Retry handler for database operations. We are raising IntegrityError amd retrying
 # on all other exceptions.
-_retry_handler = create_retry_handler(
+_retry_handler = new_retry_handler(
     exceptions_retry=EXCEPTIONS_RETRY,
     exceptions_raise=EXCEPTIONS_RAISE,
     max_retries=MAX_RETRIES,
@@ -99,11 +102,18 @@ _retry_handler = create_retry_handler(
 
 class FeelancerDB:
     def __init__(self, url_database: URL):
-        self.engine = create_engine(url_database)
-        self.session = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
+        self._engine = create_engine(url_database)
 
-    def create_base(self, base: type[DeclarativeBase]):
-        base.metadata.create_all(bind=self.engine)
+        self._sm = self._new_sessionmaker(bind=self._engine)
+
+    def new_base(self, base: type[DeclarativeBase]):
+        base.metadata.create_all(bind=self._engine)
+
+    def _new_sessionmaker(self, bind) -> sessionmaker:
+        """
+        Returns a new sessionmaker instance for the given bind.
+        """
+        return sessionmaker(autocommit=False, autoflush=False, bind=bind)
 
     @classmethod
     def from_config_dict(cls, config_dict: dict) -> FeelancerDB:
@@ -130,37 +140,90 @@ class FeelancerDB:
         pre_commit: Callable[[Session], V],
         post_commit: Callable[[V], T] = lambda x: x,
         needs_commit: bool = False,
+        repeatable_read: bool = False,
     ) -> T:
         """
         The main executor for database operations.
         """
 
-        with self.session() as session:
+        # First we define a closure which executes the callbacks with a g
+        def execute(sm: sessionmaker) -> T:
+            with sm() as session:
+                nonlocal needs_commit
+
+                try:
+                    # We execute the pre_commit function in the session, check
+                    # if a commit is needed and eventually we process the
+                    # post_commit function on the result after the commit.
+                    res = pre_commit(session)
+
+                    # If we are using sqlqlchemy's ORM we need to check if the session
+                    # is dirty, new or deleted. If so we need to commit the session
+                    # and eventually rollback if an exception occurs.
+                    # In case of Core API the flag has to be provided by the caller.
+                    if session.new or session.dirty or session.deleted:
+                        needs_commit = True
+
+                    if needs_commit:
+                        session.commit()
+
+                    return post_commit(res)
+
+                except Exception as e:
+                    if needs_commit:
+                        session.rollback()
+
+                    raise e
+
+        # If the isolation level is not REPEATABLE READ we can use the default
+        # sessionmaker of the engine.
+        if not repeatable_read:
+            return execute(self._sm)
+
+        # Otherwise we need to create a new sessionmaker with the
+        # isolation level REPEATABLE READ binded to the connection.
+        with self._engine.connect() as con:
+            con = con.execution_options(isolation_level="REPEATABLE READ")
+            return execute(self._new_sessionmaker(bind=con))
+
+    def new_get_id_or_add(
+        self,
+        get_qry: Callable[[V], Select[tuple[T]]],
+        read_id: Callable[[T], int],
+    ) -> Callable[[V, Callable[[], T] | None], int]:
+        """
+        Returns a closure which can be used to get the id of an object or add it
+        to the database if it does not exist.
+        """
+
+        def get_id(qry: Select[tuple[T]]) -> int:
+            # Execute the query and reads the id of the first result.
+            if (id := self.sel_first(qry, read_id)) is None:
+                raise GetIdException()
+            return id
+
+        def get_id_or_add(key: V, get_new_obj: Callable[[], T] | None) -> int:
+            # We test if the object exists in the database. If it does not exist
+            # we create a new object and add it to the database, if get_new_obj
+            # is set.
+
+            qry = get_qry(key)
             try:
-                # We execute the pre_commit function in the session, check
-                # if a commit is needed and eventually we process the
-                # post_commit function on the result after the commit.
-                res = pre_commit(session)
+                return get_id(qry)
+            except GetIdException as e:
+                if get_new_obj is None:
+                    raise e
 
-                # If we are using sqlqlchemy's ORM we need to check if the session
-                # is dirty, new or deleted. If so we need to commit the session
-                # and eventually rollback if an exception occurs.
-                # In case of Core API the flag has to provided by the caller.
-                if session.new or session.dirty or session.deleted:
-                    needs_commit = True
+                # If the object does not exist we add a new one. It there is
+                # was race with another thread, an IntegrityError is raised.
+                try:
+                    return self.add_post(get_new_obj(), read_id)
+                except IntegrityError:
+                    return get_id(qry)
 
-                if needs_commit:
-                    session.commit()
+        return get_id_or_add
 
-                return post_commit(res)
-
-            except Exception as e:
-                if needs_commit:
-                    session.rollback()
-
-                raise e
-
-    def query_all_to_list(
+    def sel_all_to_list(
         self, qry: Select[tuple[T]], convert: Callable[[T], V]
     ) -> list[V]:
         """
@@ -178,7 +241,7 @@ class FeelancerDB:
 
         return self._execute(get_data, to_list)
 
-    def query_all_to_dict(
+    def sel_all_to_dict(
         self, qry: Select[tuple[T]], key: Callable[[T], V], value: Callable[[T], W]
     ) -> dict[V, W]:
         """
@@ -196,7 +259,7 @@ class FeelancerDB:
 
         return self._execute(get_data, to_dict)
 
-    def qry_all_to_field_dict_gen(self, qry: Select[tuple[T]]) -> Generator[dict]:
+    def sel_all_to_field_dict_gen(self, qry: Select[tuple[T]]) -> Generator[dict]:
         """
         Executes the query and returns a generator of dictionaries. Each dict
         contains all fields as key value pairs, including the joined load data.
@@ -206,9 +269,9 @@ class FeelancerDB:
         def get_data(session: Session) -> Sequence[T]:
             return session.execute(qry).scalars().all()
 
-        return self._execute(get_data, _create_dict_gen_call(qry))
+        return self._execute(get_data, _new_dict_gen_call(qry))
 
-    def query_all_to_csv(
+    def sel_all_to_csv(
         self,
         qry: Select[tuple[T, ...]],
         file_path: str,
@@ -240,7 +303,7 @@ class FeelancerDB:
         # Atomically move the temporary file to the final destination
         os.replace(temp_path, path)
 
-    def query_first(
+    def sel_first(
         self, qry: Select[tuple[T]], convert: Callable[[T], V], default: W = None
     ) -> V | W:
         """
@@ -305,7 +368,7 @@ class FeelancerDB:
         for chunk in batched(iter, chunk_size):
             self.execute(lambda session: session.add_all(chunk))
 
-    def core_delete(self, queries: Iterable[Delete[tuple]] | Delete[tuple]) -> None:
+    def del_core(self, queries: Iterable[Delete[tuple]] | Delete[tuple]) -> None:
         """
         Deletes all data from the database using the core API. One can provide
         a single query or an iterable of queries. In the latter case all queries
@@ -321,7 +384,10 @@ class FeelancerDB:
             for q in queries:
                 session.execute(q)
 
-        self._execute(pre_commit=delete_data, needs_commit=True)
+        # Execute with isolation level REPEATABLE READ.
+        # TODO: During implementation it was more a quick fix. Not really studied
+        # all side effects.
+        self._execute(pre_commit=delete_data, needs_commit=True, repeatable_read=True)
 
 
 class SessionExecutor:
@@ -333,7 +399,7 @@ class SessionExecutor:
     def __init__(self, session: Session) -> None:
         self.session = session
 
-    def query_all_to_list(
+    def sel_all_to_list(
         self, qry: Select[tuple[T]], convert: Callable[[T], V]
     ) -> list[V]:
         """
@@ -343,7 +409,7 @@ class SessionExecutor:
         """
         return [convert(r) for r in self.session.execute(qry).scalars().all()]
 
-    def query_all_to_dict(
+    def sel_all_to_dict(
         self, qry: Select[tuple[T]], key: Callable[[T], V], value: Callable[[T], W]
     ) -> dict[V, W]:
         """
@@ -352,7 +418,7 @@ class SessionExecutor:
         """
         return {key(r): value(r) for r in self.session.execute(qry).scalars().all()}
 
-    def query_first(
+    def sel_first(
         self, qry: Select[tuple[T]], convert: Callable[[T], V], default: W = None
     ) -> V | W:
         """

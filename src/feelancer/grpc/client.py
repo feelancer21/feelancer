@@ -1,25 +1,31 @@
 from __future__ import annotations
 
 import codecs
-import logging
 import os
 import queue
-import time
+import threading
 from collections.abc import Callable, Generator, Iterable, Sequence
 from functools import wraps
 from typing import Generic, Protocol, TypeVar
 
 import grpc
+from google.protobuf.json_format import MessageToDict
 from google.protobuf.message import Message
 
-from feelancer.base import BaseServer
-from feelancer.retry import create_retry_handler, default_retry_handler
+from feelancer.base import BaseServer, run_with_timeout
+from feelancer.event import stop_event
+from feelancer.log import getLogger
+from feelancer.retry import default_retry_handler, new_retry_handler
 
 DEFAULT_MESSAGE_SIZE_MB = 200 * 1024 * 1024
 DEFAULT_MAX_CONNECTION_IDLE_MS = 30000
 DEFAULT_KEEPALIVE_TIME_MS = 30000
 DEFAULT_KEEPALIVE_TIMEOUT_MS = 20000
+
+# seconds before we start the reconciliation
 SLEEP_RECON = 5
+# seconds blocking waiting for the next item of a queue
+QUEUE_BLOCKING_TIMEOUT = 15
 
 
 T = TypeVar("T", bound=Message)
@@ -43,7 +49,7 @@ class RpcResponseHandler:
         # eval_error is a client specific function which evaluates a RpcError. It
         # takes the RpcError and an optional function name as arguments.
         self._eval_error = eval_error
-        self._logger = logging.getLogger(self.__module__)
+        self._logger = getLogger(self.__module__)
 
     def decorator_rpc_unary(self, fnc):
         """
@@ -83,7 +89,7 @@ class RpcResponseHandler:
 
         return wrapper
 
-    def create_handle_rpc_stream(self, name) -> Callable[[Iterable[T]], Generator[T]]:
+    def new_handle_rpc_stream(self, name) -> Callable[[Iterable[T]], Generator[T]]:
         """
         Creates a callable which handles the errors during a stream rpc.
         """
@@ -128,8 +134,7 @@ class RpcResponseHandler:
 
         # Can occur during rpc streams, when the user cancels the stream.
         if code == grpc.StatusCode.CANCELLED:
-            if details == "Locally cancelled by application!":
-                raise LocallyCancelled(details)
+            raise LocallyCancelled(details)
 
         if code == grpc.StatusCode.DEADLINE_EXCEEDED:
             raise DeadlineExceeded(details)
@@ -204,13 +209,30 @@ class SecureGrpcClient:
 
 
 # Retrying using the same grpc channel.
-_channel_retry_handler = create_retry_handler(
+_channel_retry_handler = new_retry_handler(
     exceptions_retry=(Exception,),
     exceptions_raise=(LocallyCancelled,),
     max_retries=1,
     delay=10,
     min_tolerance_delta=120,
 )
+
+
+class StreamConverter(Generic[V, T]):
+    def __init__(
+        self,
+        source_items: Generator[T],
+        process_item: Callable[[T], Generator[V]],
+    ):
+        self._source_items = source_items
+        self._process_item = process_item
+
+    def items(self) -> Generator[V]:
+        for item in self._source_items:
+            yield from self._process_item(item)
+
+            if stop_event.is_set():
+                self._source_items.close()
 
 
 class ReconSource(Generic[V], Protocol):
@@ -221,46 +243,40 @@ class ReconSource(Generic[V], Protocol):
         """
         ...
 
-    def stop(self) -> None:
-        """
-        Stops the generation of items.
-        """
-        ...
-
 
 class StreamDispatcher(Generic[T], BaseServer):
     """
     Receives grpc messages of Type T from an stream and handles the errors.
-    The message are distributors to all subscribers of the dispatchers.
+    The messages are distributed to all subscribers of the dispatchers.
     """
 
     def __init__(
         self,
-        new_stream_initializer: Callable[..., grpc.UnaryStreamMultiCallable],
-        request: Message,
-        handle_rpc_stream: Callable[[Iterable[T]], Generator[T]],
+        new_grpc_channel: Callable[[], grpc.Channel],
+        new_stream: Callable[[grpc.Channel], Generator[T]],
         **kwargs,
     ) -> None:
 
         BaseServer.__init__(self, **kwargs)
 
         # Want to have the class name in the logger name
-        self._logger: logging.Logger = logging.getLogger(
-            self.__module__ + "." + self.__class__.__name__
-        )
+        self._logger = getLogger(self.__module__ + "." + self.__class__.__name__)
 
-        self._new_stream_initializer = new_stream_initializer
-        self._request: Message = request
+        self._new_grpc_channel = new_grpc_channel
+        self._new_stream = new_stream
 
         self._message_queues: list[queue.Queue[T | Exception]] = []
-        self._stream: Iterable[T] | None = None
-        self._handle_rpc_stream = handle_rpc_stream
+        self._channel: grpc.Channel | None = None
+
+        # Lock for creating and closing the grpc channel, because multiple threads
+        # are involved.
+        self._channel_lock = threading.Lock()
 
         # Indicates whether there is a subscriber for the messages.
-        self._is_subscribed: bool = False
+        self._is_subscribed: threading.Event = threading.Event()
 
         # Indicates whether the dispatcher is receiving messages from the source
-        self._is_receiving: bool = False
+        self._is_receiving: threading.Event = threading.Event()
 
         self._register_sync_starter(self._start)
         self._register_sync_stopper(self._stop)
@@ -268,8 +284,8 @@ class StreamDispatcher(Generic[T], BaseServer):
     def subscribe(
         self,
         convert: Callable[[T, bool], Generator[V]],
-        get_recon_source: Callable[..., ReconSource[V]] | None = None,
-    ) -> Callable[..., Generator[V]]:
+        get_recon_source: Callable[[], ReconSource[V] | None] = lambda: None,
+    ) -> Callable[[], Generator[V]]:
         """
         Returns a callable which starts a stream of all received messages
         converted to the type V.
@@ -280,63 +296,61 @@ class StreamDispatcher(Generic[T], BaseServer):
         q: queue.Queue[T | Exception] = queue.Queue()
         self._message_queues.append(q)
 
-        self._is_subscribed = True
+        self._is_subscribed.set()
 
         # We return a callable which enables the subscriber to start a stream.
         # It gives the caller the possibility to restart the stream with a
         # new reconciliation when necessary.
-        def start_stream():
-            return self._start_subscriber_stream(q, convert, get_recon_source)
+        return lambda: self._subscribe_queue(q, convert, get_recon_source)
 
-        return start_stream
-
-    def _start_subscriber_stream(
+    def _subscribe_queue(
         self,
         q: queue.Queue[T | Exception],
         convert: Callable[[T, bool], Generator[V]],
-        get_recon_source: Callable[..., ReconSource[V]] | None = None,
+        get_recon_source: Callable[[], ReconSource[V] | None],
     ) -> Generator[V]:
         """Returns a generator for all new incoming messages converted to V."""
 
         while True:
-
             # Blocking until we know that the dispatcher is receiving messages
             # from the source. Otherwise reconciliation would start too
             # early.
-            while not (self._is_receiving or self._is_stopped):
-                pass
+            while not (self._is_receiving.is_set() or stop_event.is_set()):
+                stop_event.wait(0.1)
 
-            if self._is_stopped:
+            if stop_event.is_set():
                 return None
 
             # Indicates the subscriber whether the messages were created during
             # reconciliation. In this way he can decide if the messages are
             # processed or not.
-            in_recon = False
+            in_recon = True
+            self._logger.info("Reconciliation started")
 
-            # If there are messages from the reconciliation source, we yield them
-            # first.
-            if get_recon_source is not None:
-                self._logger.info("Reconciliation started")
-                in_recon = True
+            # Sleeping a little bit before fetching from the reconciliation
+            # source. This is to fill up the queue with messages from the stream.
+            stop_event.wait(SLEEP_RECON)
+            recon_source = get_recon_source()
 
-                # Sleeping a little bit before fetching from the reconciliation
-                # source. This is to fill up the queue with messages from the stream.
-                time.sleep(SLEEP_RECON)
-                recon_source = get_recon_source()
+            if stop_event.is_set():
+                return None
 
-                self._register_sync_stopper(recon_source.stop)
-
-                if self._is_stopped:
-                    return None
-
+            if recon_source is not None:
                 yield from recon_source.items()
+            else:
+                self._logger.info("No reconciliation source available")
 
-                self._logger.info("Reconciliation stage 1 finished")
+            self._logger.info("Reconciliation stage 1 finished")
 
-            # We yield the messages from the stream until we got an exception.
-            while True:
-                m = q.get()
+            # We yield the messages from the stream until we get an exception or
+            # the stop event is set.
+            while not stop_event.is_set():
+                try:
+                    # Timeout for safety reasons. Usually we should get an
+                    # exception if the stream is closed.
+                    m = q.get(block=True, timeout=QUEUE_BLOCKING_TIMEOUT)
+                except queue.Empty:
+                    continue
 
                 # If the service is stopped by the user we return early
                 if isinstance(m, LocallyCancelled):
@@ -345,6 +359,9 @@ class StreamDispatcher(Generic[T], BaseServer):
                 # If there is an unknown exception we break here and start
                 # with a new reconciliation. Maybe data have been run out of sync.
                 if isinstance(m, Exception):
+                    self._logger.warning(
+                        f"New reconciliation needed; received exception: {m}"
+                    )
                     break
 
                 yield from convert(m, in_recon)
@@ -355,6 +372,8 @@ class StreamDispatcher(Generic[T], BaseServer):
                     self._logger.info("Reconciliation finished")
                     in_recon = False
 
+                self._logger.trace_lazy(lambda: f"Queue size: {q.qsize()}")
+
     @default_retry_handler
     def _start(self) -> None:
         """
@@ -363,60 +382,93 @@ class StreamDispatcher(Generic[T], BaseServer):
         """
 
         # blocking until there is a first subscription or the server is stopped.
-        while not (self._is_subscribed or self._is_stopped):
-            pass
+        while not (self._is_subscribed.is_set() or stop_event.is_set()):
+            stop_event.wait(0.1)
 
         # Returning early if the server is stopped.
-        if self._is_stopped:
+        if stop_event.is_set():
             return None
 
-        # We have a subscriber. We can start the stream
+        # We have a subscriber. We are creating a new grpc channel for the stream.
+        with self._channel_lock:
+            self._channel = self._new_grpc_channel()
+
+        # Registering a callback for the channel connectivity changes.
+        def on_channel_connectivity(c: grpc.ChannelConnectivity) -> None:
+            self._logger.debug(f"Channel connectivity is {c.value}.")
+
+        self._channel.subscribe(on_channel_connectivity)
+
+        self._logger.debug("New grpc channel initialized...")
+
         try:
-            # The stream initializer allows creating rpc streams in the same
-            # grpc channel. We have to init it outside _channel_retry_handler.
-            stream_initializer = self._new_stream_initializer()
+            self._start_stream(self._channel)
 
-            self._start_stream(stream_initializer)
+        finally:
+            with self._channel_lock:
+                self._channel = None
 
-        # Unexpected errors are raised
+    @_channel_retry_handler
+    def _start_stream(self, channel: grpc.Channel) -> None:
+
+        # Creating a new stream decorated with an error handler.
+        handled_stream = self._new_stream(channel)
+
+        self._logger.debug("Starting stream...")
+        try:
+            # Fetching the first message from the stream. In case of an error
+            # we will not set the _is_receiving flag. This can be the case
+            # when the server is still unavailable.
+            # If there is no message until the timeout, we will start the reconciliation.
+            m = run_with_timeout(
+                func=lambda: next(handled_stream),  # 1st message from the stream
+                timeout=SLEEP_RECON,
+                on_timeout=lambda: self._is_receiving.set(),
+            )
+
+            self._logger.trace_lazy(lambda: f"Received 1st message: {MessageToDict(m)}")
+            self._put_to_queues(m)
+
+            self._is_receiving.set()
+
+            # Receiving all grpc messages.
+            for m in handled_stream:
+                self._logger.trace_lazy(
+                    lambda: f"Received next message: {MessageToDict(m)}"
+                )
+                self._put_to_queues(m)
+
+            # The normal case is that the stream is ended by an raised exception,
+            # either an LocallyCancelled (if the user closed the stream)
+            # or another exception. But sometimes the stream is closed without an
+            # error (e.g. SubscribeInvoice). In this case we have to raise an
+            # exception here.
+            raise Exception("Stream closed unexpected and not raised an error.")
+
         except Exception as e:
+            # Don't wanna trigger reconciliation if the exception _is_receiving
+            # flag is not set.
+            if self._is_receiving.is_set():
+                # Signaling the end of the queue to the consumers.
+                self._put_to_queues(e)
 
-            # Signaling the end of the queue to the consumers.
-            self._put_to_queues(e)
-
+            # If the stream was cancelled by the user, we end the method without
+            # raising an exception.
             if isinstance(e, LocallyCancelled):
-                # User ended the stream.
                 self._logger.debug(f"Stream cancelled: {e}")
-
                 return None
 
             raise e
 
-    @_channel_retry_handler
-    def _start_stream(self, stream_initializer: grpc.UnaryStreamMultiCallable) -> None:
-
-        # Creating a new stream in the grpc channel, decorates with an error handler
-        self._stream = stream_initializer(self._request)
-
-        self._logger.debug("Starting stream...")
-        try:
-            self._is_receiving = True
-            # Receiving of the grp messages
-            for m in self._handle_rpc_stream(self._stream):  # type: ignore
-                self._put_to_queues(m)
-
-        except Exception as e:
-            raise e
-
         finally:
-            self._stream = None
-            self._is_receiving = False
+            self._is_receiving.clear()
 
     def _stop(self) -> None:
         """Stops receiving of the messages from the upstream."""
 
-        if self._stream is not None:
-            self._stream.cancel()  # type: ignore
+        with self._channel_lock:
+            if self._channel is not None:
+                self._channel.close()
 
     def _put_to_queues(self, data: T | Exception) -> None:
         """Puts a message to each queue."""
@@ -444,8 +496,14 @@ class Paginator(Generic[W]):
         self._set_request = set_request
 
     def request(
-        self, max_events: int | None, offset: int = 0, **kwargs
+        self, max_events: int | None, blocking_sec: int | None, offset: int, **kwargs
     ) -> Generator[W]:
+        """
+        If blocking_sec is set, the paginator will not stop after receiving
+        the last events. It will wait some for seconds and afterwards calling the
+        producer again.
+        If max_events is not None, it will stop after max_events events.
+        """
 
         events_open = max_events
 
@@ -453,7 +511,7 @@ class Paginator(Generic[W]):
         next_max = self._max_responses
         next_offset = offset
 
-        while True:
+        while not stop_event.is_set():
 
             if events_open is not None and events_open < self._max_responses:
                 next_max = events_open
@@ -467,15 +525,18 @@ class Paginator(Generic[W]):
 
             yield from data
 
-            # Next call would not return any more events
-            if len(data) < self._max_responses:
-                break
-
             # If there is no limit on the number of events, we continue until the
             # last event is reached.
-            if events_open is None:
-                continue
+            if events_open is not None:
+                events_open -= len(data)
+                if events_open == 0:
+                    # We will break even in a blocking case
+                    break
 
-            events_open -= len(data)
-            if events_open == 0:
-                break
+            # An immediate next call would probably not return any new data, so we
+            # break if blocking_sec is None., or we wait some seconds until the
+            # next call.
+            if len(data) < self._max_responses:
+                if blocking_sec is None:
+                    break
+                stop_event.wait(blocking_sec)

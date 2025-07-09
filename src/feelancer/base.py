@@ -1,9 +1,13 @@
-import logging
 import os
 import signal
+import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Protocol, TypeVar
+
+from feelancer.log import getLogger
+
+from .event import stop_event
 
 T = TypeVar("T")
 
@@ -17,16 +21,50 @@ class Server(Protocol):
     def stop(self) -> None: ...
 
 
+def run_with_timeout(
+    func: Callable[[], T], timeout: int, on_timeout: Callable[[], None]
+) -> T:
+    """
+    'func' is called and returned, if it does not finish within 'timeout' seconds,
+    'on_timeout' is called additionally.
+    """
+    # We wrap 'func' and set an finished event to signal when the function
+    # has completed.
+    finished = threading.Event()
+
+    def wrapped_func() -> T:
+        try:
+            return func()
+        finally:
+            finished.set()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        future_wrapped = executor.submit(wrapped_func)
+
+        # The next future finishes ether when the wrapped function
+        # has completed or when the timeout is reached.
+        future_wait = executor.submit(lambda: finished.wait(timeout + 21))
+        try:
+            future_wait.result(timeout=timeout)
+        except TimeoutError:
+            on_timeout()
+        finally:
+            return future_wrapped.result()
+
+
 def _run_concurrent(
-    tasks: list[Callable[..., None]], err_signal: signal.Signals | None
+    tasks: list[Callable[[], None]], err_signal: signal.Signals | None
 ) -> None:
     """
     Starts the provided tasks concurrently. If an error is raised by one task,
     we send a signal to the signal handler to stop the MainServer.
     """
 
-    with ThreadPoolExecutor() as executor:
-        futures = {executor.submit(t): t for t in tasks}
+    if len(tasks) == 0:
+        return
+
+    with ThreadPoolExecutor(max_workers=len(tasks)) as executor:
+        futures = [executor.submit(t) for t in tasks]
 
         for future in as_completed(futures):
             try:
@@ -41,7 +79,7 @@ def _run_concurrent(
                 raise e
 
 
-def _run_sync(tasks: list[Callable[..., None]]) -> None:
+def _run_sync(tasks: list[Callable[[], None]]) -> None:
     """Runs the tasks synchronously."""
 
     for task in tasks:
@@ -56,38 +94,35 @@ class BaseServer:
     def __init__(self) -> None:
 
         # Logger for the server
-        self._logger: logging.Logger = logging.getLogger(self.__module__)
+        self._logger = getLogger(self.__module__)
 
         # Callables to be called synchronously during server start
-        self._sync_start: list[Callable[..., None]] = []
+        self._sync_start: list[Callable[[], None]] = []
 
         # Callables to be called synchronously during server stop
-        self._sync_stop: list[Callable[..., None]] = []
+        self._sync_stop: list[Callable[[], None]] = []
 
         # Callables to be started during server start concurrently
-        self._concurrent_start: list[Callable[..., None]] = []
+        self._concurrent_start: list[Callable[[], None]] = []
 
         # Callables to be started during server stop concurrently
-        self._concurrent_stop: list[Callable[..., None]] = []
-
-        # Flag to indicate if the server is stopped
-        self._is_stopped: bool = False
+        self._concurrent_stop: list[Callable[[], None]] = []
 
     def _register_sub_server(self, subserver: Server) -> None:
 
         self._register_starter(subserver.start)
         self._register_stopper(subserver.stop)
 
-    def _register_sync_starter(self, starter: Callable[..., None]) -> None:
+    def _register_sync_starter(self, starter: Callable[[], None]) -> None:
         self._sync_start.append(starter)
 
-    def _register_sync_stopper(self, stopper: Callable[..., None]) -> None:
+    def _register_sync_stopper(self, stopper: Callable[[], None]) -> None:
         self._sync_stop.append(stopper)
 
-    def _register_starter(self, starter: Callable[..., None]) -> None:
+    def _register_starter(self, starter: Callable[[], None]) -> None:
         self._concurrent_start.append(starter)
 
-    def _register_stopper(self, stopper: Callable[..., None]) -> None:
+    def _register_stopper(self, stopper: Callable[[], None]) -> None:
         self._concurrent_stop.append(stopper)
 
     def start(self) -> None:
@@ -96,7 +131,9 @@ class BaseServer:
         If an error is raised by one thread, the stop method of the server is called.
         """
 
-        if self._is_stopped:
+        # Preventing start if stop occurred before start. It's more a workaround
+        # and not safe in all cases.
+        if stop_event.is_set():
             return
 
         # If an error occurs, a SIGTERM signal is sent to the signal handler
@@ -108,7 +145,7 @@ class BaseServer:
             self._logger.info("Starting...")
             _run_sync(self._sync_start)
 
-            if not self._is_stopped:
+            if not stop_event.is_set():
                 _run_concurrent(self._concurrent_start, err_signal)
             self._logger.info("Finished")
 
@@ -124,8 +161,6 @@ class BaseServer:
         """
         Stops the server.
         """
-
-        self._is_stopped = True
 
         try:
             self._logger.info("Stopping...")

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import faulthandler
-import logging
 import os
 import pprint
 import signal
@@ -11,44 +10,91 @@ import traceback
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeVar
 
 from .base import BaseServer
-from .config import FeelancerConfig
+from .config import DictInitializedConfig, FeelancerConfig
 from .data.db import FeelancerDB
+from .event import stop_event
+from .lightning.data import LightningStore
 from .lightning.lnd import LNDClient
 from .lnd.client import LndGrpc
-from .paytrack.service import PaytrackConfig, PaytrackService
-from .paytrack.tracker import LNDPaymentTracker
-from .pid.data import PidConfig
+from .log import getLogger
+from .pid.data import PidConfig, PidStore
 from .pid.service import PidService
 from .reconnect.reconnector import LNDReconnector
 from .reconnect.service import ReconnectConfig, ReconnectService
-from .retry import stop_retry
 from .tasks.runner import TaskRunner
+from .tracker.data import TrackerStore
+from .tracker.lnd.channelbackups import LNDChannelBackupTracker
+from .tracker.lnd.channelevents import LNDChannelEventTracker
+from .tracker.lnd.forwards import LNDFwdTracker
+from .tracker.lnd.graph import LNDChannelGraphTracker
+from .tracker.lnd.htlcsevents import LNDHtlcTracker
+from .tracker.lnd.invoices import LNDInvoiceTracker
+from .tracker.lnd.payments import LNDPaymentTracker
+from .tracker.lnd.peerevents import LNDPeerEventTracker
+from .tracker.lnd.transactions import LNDTransactionTracker
+from .tracker.service import TrackerConfig, TrackerService
 from .utils import read_config_file
+
+T = TypeVar("T", bound=DictInitializedConfig)
 
 if TYPE_CHECKING:
     from feelancer.lightning.client import LightningClient
-    from feelancer.paytrack.tracker import PaymentTracker
     from feelancer.reconnect.reconnector import Reconnector
+    from feelancer.tracker.proto import Tracker
+
 
 DEFAULT_TIMEOUT = 180
 TRACEBACK_DUMP_FILE = "traceback_dump.txt"
 FAULTHANDLER_DUMP_FILE = "faulthandler_dump.txt"
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
+
+
+class Lnd:
+    def __init__(self, lndgrpc: LndGrpc, db: FeelancerDB) -> None:
+        self.lndgrpc: LndGrpc = lndgrpc
+        self.lnclient: LightningClient = LNDClient(lndgrpc)
+        self.reconnector: Reconnector = LNDReconnector(lndgrpc)
+
+        pub_key = self.lnclient.pubkey_local
+        self.ln_store = LightningStore(db, pub_key)
+        self.tracker_store = TrackerStore(db, self.ln_store.ln_node_id)
+
+        tracker_args = (self.lnclient, self.tracker_store)
+
+        self.payment_tracker = LNDPaymentTracker(*tracker_args)
+        self.invoice_tracker = LNDInvoiceTracker(*tracker_args)
+        self.htlc_tracker = LNDHtlcTracker(*tracker_args)
+        self.fwd_tracker = LNDFwdTracker(
+            *tracker_args, self.htlc_tracker.pop_settled_forwards
+        )
+        self.channel_graph_tracker = LNDChannelGraphTracker(*tracker_args)
+        self.channel_event_tracker = LNDChannelEventTracker(*tracker_args)
+        self.channel_backup_tracker = LNDChannelBackupTracker(*tracker_args)
+        self.peer_event_tracker = LNDPeerEventTracker(*tracker_args)
+        self.transaction_tracker = LNDTransactionTracker(*tracker_args)
+
+    def store_untransformed_events(self, store: bool) -> None:
+        """
+        Helper function to trigger all trackers to store untransformed events.
+        """
+        self.channel_graph_tracker.store_events = store
+        self.channel_event_tracker.store_events = store
+        self.channel_backup_tracker.store_events = store
+        self.peer_event_tracker.store_events = store
+        self.transaction_tracker.store_events = store
 
 
 @dataclass
 class MainConfig:
     db: FeelancerDB
-    lnclient: LightningClient
+    lnd: Lnd
     config_file: str
     log_file: str | None
     log_level: str | None
     feelancer_cfg: FeelancerConfig
-    reconnector: Reconnector
-    payment_tracker: PaymentTracker
     timeout: int
 
     @classmethod
@@ -63,10 +109,7 @@ class MainConfig:
             raise ValueError("'sqlalchemy' section is not included in config-file")
 
         if "lnd" in config_dict:
-            lndgrpc = LndGrpc.from_file(**config_dict["lnd"])
-            lnclient: LightningClient = LNDClient(lndgrpc)
-            reconnector: Reconnector = LNDReconnector(lndgrpc)
-            payment_tracker: PaymentTracker = LNDPaymentTracker(lndgrpc, db)
+            lnd = Lnd(LndGrpc.from_file(**config_dict["lnd"]), db)
         else:
             raise ValueError("'lnd' section is not included in config-file")
 
@@ -90,17 +133,7 @@ class MainConfig:
         # TODO: Move FeelancerConfig to db and api. Then we can remove it.
         feelancer_config = FeelancerConfig(config_dict)
 
-        return cls(
-            db,
-            lnclient,
-            config_file,
-            logfile,
-            loglevel,
-            feelancer_config,
-            reconnector,
-            payment_tracker,
-            timeout,
-        )
+        return cls(db, lnd, config_file, logfile, loglevel, feelancer_config, timeout)
 
     @classmethod
     def from_config_file(cls, file_name: str) -> MainConfig:
@@ -114,8 +147,8 @@ class SignalHandler:
 
     def __init__(
         self,
-        sig_handler: Callable[..., None],
-        alarm_handler: Callable[..., None],
+        sig_handler: Callable[[], None],
+        alarm_handler: Callable[[], None],
         timeout: int,
     ) -> None:
         self._timeout = timeout
@@ -123,7 +156,7 @@ class SignalHandler:
         self._alarm_handler = alarm_handler
 
         self._lock = threading.Lock()
-        self._sig_received = False
+        self._sig_received = threading.Event()
 
         # If one signal is received, self._receive_signal is called
         signal.signal(signal.SIGTERM, self._receive_sig)
@@ -134,10 +167,11 @@ class SignalHandler:
     def _receive_sig(self, signum, frame) -> None:
         """Action if SIGTERM or SIGINT is received."""
 
+        # Prevents double execution of the signal handler.
         with self._lock:
-            if self._sig_received:
+            if self._sig_received.is_set():
                 return
-            self._sig_received = True
+            self._sig_received.set()
 
         logger.debug(f"Received {signal.Signals(signum).name}")
 
@@ -204,56 +238,86 @@ class MainServer(BaseServer):
         self.cfg = cfg
 
         # Stopping all retry handlers if the server is stopped.
-        self._register_sync_stopper(stop_retry)
+        self._register_sync_stopper(stop_event.set)
 
         # Setting up the signal handler for SIGTERM and SIGINT.
         SignalHandler(self.stop, self.kill, self.cfg.timeout)
 
         # We init a task runner which controls the scheduler for the job
         # execution.
-        runner = TaskRunner(
-            self.cfg.lnclient,
+        self.runner = TaskRunner(
+            # TODO: Refactor to remove lnclient
+            self.cfg.lnd.lnclient,
             self.cfg.db,
             self.cfg.feelancer_cfg.seconds,
             self.cfg.feelancer_cfg.max_listener_attempts,
             self.read_feelancer_cfg,
         )
-        self._register_sub_server(runner)
+        self._register_sub_server(self.runner)
+
+        self._register_lnd(self.cfg.lnd)
+
+    def _register_lnd(self, lnd: Lnd) -> None:
+        """
+        Registers the LND client and its services.
+        """
+
+        self._register_sub_server(lnd.lndgrpc.track_payments_dispatcher)
+        self._register_sub_server(lnd.lndgrpc.invoices_dispatcher)
+        self._register_sub_server(lnd.lndgrpc.htlc_events_dispatcher)
+        self._register_sub_server(lnd.lndgrpc.graph_topology_dispatcher)
+        self._register_sub_server(lnd.lndgrpc.channel_event_dispatcher)
+        self._register_sub_server(lnd.lndgrpc.channel_backup_dispatcher)
+        self._register_sub_server(lnd.lndgrpc.peer_event_dispatcher)
+        self._register_sub_server(lnd.lndgrpc.transaction_dispatcher)
 
         # pid service is responsible for updating the fees with the pid model.
+        pid_store = PidStore(self.cfg.db, lnd.lnclient.pubkey_local)
         pid = PidService(
-            self.cfg.db, self.cfg.lnclient.pubkey_local, self.get_pid_config
+            lnd.ln_store, pid_store, self._get_config_reader("pid", PidConfig)
         )
-        runner.register_task(pid.run)
-        runner.register_reset(pid.reset)
+        self.runner.register_task(pid.run)
+        self.runner.register_reset(pid.reset)
 
         # reconnect service is responsible for reconnecting inactive channels
         # or channels with stuck htlcs.
-        reconnect = ReconnectService(cfg.reconnector, self.get_reconnect_config)
-        runner.register_task(reconnect.run)
+        reconnect = ReconnectService(
+            lnd.reconnector, self._get_config_reader("reconnect", ReconnectConfig)
+        )
+        self.runner.register_task(reconnect.run)
 
-        paytrack_conf = self.get_paytrack_config()
-        paytrack_service: PaytrackService | None = None
-        if paytrack_conf is not None:
-            # Adding callables for starting and stopping internal services of the
-            # lnclient, e.g. dispatcher of streams.
-            self._register_sub_server(cfg.lnclient)
+        # Helper function to trigger all trackers to store untransformed events.
+        def store_untransformed_events(store: bool) -> None:
+            lnd.channel_graph_tracker.store_events = store
+            lnd.channel_event_tracker.store_events = store
+            lnd.channel_backup_tracker.store_events = store
+            lnd.peer_event_tracker.store_events = store
+            lnd.transaction_tracker.store_events = store
 
-            paytrack_service = PaytrackService(
-                payment_tracker=self.cfg.payment_tracker,
-                get_paytrack_config=self.get_paytrack_config,
-                to_csv=self.cfg.db.query_all_to_csv,
-                delete_data=self.cfg.db.core_delete,
-                get_last_run=lambda: pid.pid_store.pid_run_last()[1],
-            )
-            self._register_sub_server(paytrack_service)
+        tracker = TrackerService(
+            self._get_config_reader("tracker", TrackerConfig),
+            self.cfg.db.sel_all_to_csv,
+            self.cfg.db.del_core,
+            lnd.htlc_tracker.set_store_htlc_events,
+            lnd.store_untransformed_events,
+            lambda: pid_store.pid_run_last()[1],
+        )
 
-            # Pre sync before threadpool execution starts to sync faster
-            self._register_sync_starter(
-                paytrack_service._payment_tracker.pre_sync_start
-            )
+        self.runner.register_task(tracker.run)
 
-            runner.register_task(paytrack_service.run)
+        self._register_tracker(lnd.payment_tracker)
+        self._register_tracker(lnd.invoice_tracker)
+        self._register_tracker(lnd.fwd_tracker)
+        self._register_tracker(lnd.htlc_tracker)
+        self._register_tracker(lnd.channel_graph_tracker)
+        self._register_tracker(lnd.channel_event_tracker)
+        self._register_tracker(lnd.channel_backup_tracker)
+        self._register_tracker(lnd.peer_event_tracker)
+        self._register_tracker(lnd.transaction_tracker)
+
+    def _register_tracker(self, tracker: Tracker) -> None:
+        self._register_sync_starter(tracker.pre_sync_start)
+        self._register_starter(tracker.start)
 
     def read_feelancer_cfg(self) -> FeelancerConfig:
         """
@@ -272,31 +336,20 @@ class MainServer(BaseServer):
 
         return self.cfg.feelancer_cfg
 
-    def get_pid_config(self) -> PidConfig | None:
-        config_dict = self.cfg.feelancer_cfg.tasks_config.get("pid")
-        if config_dict is None:
-            return None
+    def _get_config_reader(self, name: str, type: type[T]) -> Callable[[], T | None]:
+        def get_config() -> T | None:
+            config_dict = self.cfg.feelancer_cfg.tasks_config.get(name)
+            if config_dict is None:
+                return None
 
-        return PidConfig(config_dict)
+            return type(config_dict)
 
-    def get_reconnect_config(self) -> ReconnectConfig | None:
-        config_dict = self.cfg.feelancer_cfg.tasks_config.get("reconnect")
-        if config_dict is None:
-            return None
-
-        return ReconnectConfig(config_dict)
-
-    def get_paytrack_config(self) -> PaytrackConfig | None:
-        config_dict = self.cfg.feelancer_cfg.tasks_config.get("paytrack")
-        if config_dict is None:
-            return None
-
-        return PaytrackConfig(config_dict)
+        return get_config
 
     def kill(self) -> None:
         """
         Kills the server.
         """
 
-        self._logger.info("{Killing...\n")
+        self._logger.error("Cannot shutdown server gracefully; killing app...\n")
         os._exit(1)

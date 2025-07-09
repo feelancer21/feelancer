@@ -5,7 +5,6 @@ from collections.abc import Generator, Iterable, Sequence
 
 import grpc
 
-from feelancer.base import BaseServer
 from feelancer.grpc.client import (
     Paginator,
     RpcResponseHandler,
@@ -19,6 +18,7 @@ from .grpc_generated import router_pb2 as rt
 from .grpc_generated import router_pb2_grpc as rtrpc
 
 PAGINATOR_MAX_FORWARDING_EVENTS = 10000
+PAGINATOR_MAX_INVOICES = 10000
 PAGINATOR_MAX_PAYMENTS = 10000
 
 
@@ -78,7 +78,28 @@ def set_chan_point(chan_point_str: str, chan_point: ln.ChannelPoint) -> None:
 class LndPaymentDispatcher(StreamDispatcher[ln.Payment]): ...
 
 
-class LndGrpc(SecureGrpcClient, BaseServer):
+class LndInvoiceDispatcher(StreamDispatcher[ln.Invoice]): ...
+
+
+class LndHtlcEventDispatcher(StreamDispatcher[rt.HtlcEvent]): ...
+
+
+class LndGraphTopologyDispatcher(StreamDispatcher[ln.GraphTopologyUpdate]): ...
+
+
+class LndChannelEventDispatcher(StreamDispatcher[ln.ChannelEventUpdate]): ...
+
+
+class LndChannelBackupDispatcher(StreamDispatcher[ln.ChanBackupSnapshot]): ...
+
+
+class LndPeerEventDispatcher(StreamDispatcher[ln.PeerEvent]): ...
+
+
+class LndTransactionDispatcher(StreamDispatcher[ln.Transaction]): ...
+
+
+class LndGrpc(SecureGrpcClient):
 
     def __init__(
         self,
@@ -90,16 +111,24 @@ class LndGrpc(SecureGrpcClient, BaseServer):
     ) -> None:
         SecureGrpcClient.__init__(self, ip_address, credentials, **kwargs)
 
-        # Responsible for dispatching realtime streams form the grpc server
-        # to internal services.
-        BaseServer.__init__(self)
-
         self._pagintor_max_forwarding_events = paginator_max_forwarding_events
         self._pagintor_max_payments = paginator_max_payments
 
         self.track_payments_dispatcher = self._new_payments_dispatcher()
 
-        self._register_sub_server(self.track_payments_dispatcher)
+        self.invoices_dispatcher = self._new_invoice_dispatcher()
+
+        self.htlc_events_dispatcher = self._new_htlc_event_dispatcher()
+
+        self.graph_topology_dispatcher = self._new_graph_topology_dispatcher()
+
+        self.channel_event_dispatcher = self._new_channel_event_dispatcher()
+
+        self.channel_backup_dispatcher = self._new_channel_backup_dispatcher()
+
+        self.peer_event_dispatcher = self._new_peer_event_dispatcher()
+
+        self.transaction_dispatcher = self._new_transaction_dispatcher()
 
     @property
     def _ln_stub(self) -> lnrpc.LightningStub:
@@ -275,6 +304,7 @@ class LndGrpc(SecureGrpcClient, BaseServer):
     def paginate_forwarding_events(
         self,
         num_max_events: int | None = None,
+        blocking_sec: int | None = None,
         index_offset: int = 0,
         start_time: int = 0,
         end_time: int = 0,
@@ -298,12 +328,42 @@ class LndGrpc(SecureGrpcClient, BaseServer):
         )
 
         return paginator.request(
-            num_max_events, index_offset, start_time=start_time, end_time=end_time
+            num_max_events,
+            blocking_sec,
+            index_offset,
+            start_time=start_time,
+            end_time=end_time,
         )
+
+    def paginate_invoices(
+        self,
+        num_max_invoices: int | None = None,
+        blocking_sec: int | None = None,
+        index_offset: int = 0,
+        **kwargs,
+    ) -> Generator[ln.Invoice]:
+
+        def _read(d: ln.ListInvoiceResponse) -> tuple[Sequence[ln.Invoice], int]:
+            return d.invoices, d.last_index_offset
+
+        def _set(d: ln.ListInvoiceRequest, offset: int, max: int) -> None:
+            d.index_offset = offset
+            d.num_max_invoices = max
+
+        paginator = Paginator[ln.Invoice](
+            producer=self._ln_stub.ListInvoices,
+            request=ln.ListInvoiceRequest,
+            max_responses=PAGINATOR_MAX_INVOICES,
+            read_response=_read,
+            set_request=_set,
+        )
+
+        return paginator.request(num_max_invoices, blocking_sec, index_offset, **kwargs)
 
     def paginate_payments(
         self,
         max_payments: int | None = None,
+        blocking_sec: int | None = None,
         index_offset: int = 0,
         include_incomplete: bool = False,
         **kwargs,
@@ -325,23 +385,87 @@ class LndGrpc(SecureGrpcClient, BaseServer):
         )
 
         return paginator.request(
-            max_payments, index_offset, include_incomplete=include_incomplete, **kwargs
+            max_payments,
+            blocking_sec,
+            index_offset,
+            include_incomplete=include_incomplete,
+            **kwargs,
         )
 
     def _new_payments_dispatcher(
         self, no_inflight_updates: bool = False
     ) -> LndPaymentDispatcher:
 
-        req = rt.TrackPaymentsRequest()
-        req.no_inflight_updates = no_inflight_updates
+        def new_stream(channel: grpc.Channel) -> Generator[ln.Payment]:
+            req = rt.TrackPaymentsRequest()
+            req.no_inflight_updates = no_inflight_updates
+            handler = lnd_resp_handler.new_handle_rpc_stream("TrackPayments")
+            return handler(rtrpc.RouterStub(channel).TrackPayments(req))
 
-        rpc_handler = lnd_resp_handler.create_handle_rpc_stream("TrackPayments")
+        return LndPaymentDispatcher(lambda: self._channel, new_stream)
 
-        return LndPaymentDispatcher(
-            new_stream_initializer=lambda: self._router_stub.TrackPayments,
-            request=req,
-            handle_rpc_stream=rpc_handler,
-        )
+    def _new_invoice_dispatcher(self) -> LndInvoiceDispatcher:
+
+        def new_stream(channel: grpc.Channel) -> Generator[ln.Invoice]:
+            req = ln.InvoiceSubscription()
+            handler = lnd_resp_handler.new_handle_rpc_stream("SubscribeInvoices")
+            return handler(lnrpc.LightningStub(channel).SubscribeInvoices(req))
+
+        return LndInvoiceDispatcher(lambda: self._channel, new_stream)
+
+    def _new_htlc_event_dispatcher(self) -> LndHtlcEventDispatcher:
+
+        def new_stream(channel: grpc.Channel) -> Generator[rt.HtlcEvent]:
+            req = rt.SubscribeHtlcEventsRequest()
+            handler = lnd_resp_handler.new_handle_rpc_stream("SubscribeHtlcEvents")
+            return handler(rtrpc.RouterStub(channel).SubscribeHtlcEvents(req))
+
+        return LndHtlcEventDispatcher(lambda: self._channel, new_stream)
+
+    def _new_graph_topology_dispatcher(self) -> LndGraphTopologyDispatcher:
+
+        def new_stream(channel: grpc.Channel) -> Generator[ln.GraphTopologyUpdate]:
+            req = ln.GraphTopologySubscription()
+            handler = lnd_resp_handler.new_handle_rpc_stream("SubscribeChannelGraph")
+            return handler(lnrpc.LightningStub(channel).SubscribeChannelGraph(req))
+
+        return LndGraphTopologyDispatcher(lambda: self._channel, new_stream)
+
+    def _new_channel_event_dispatcher(self) -> LndChannelEventDispatcher:
+
+        def new_stream(channel: grpc.Channel) -> Generator[ln.ChannelEventUpdate]:
+            req = ln.ChannelEventSubscription()
+            handler = lnd_resp_handler.new_handle_rpc_stream("SubscribeChannelEvents")
+            return handler(lnrpc.LightningStub(channel).SubscribeChannelEvents(req))
+
+        return LndChannelEventDispatcher(lambda: self._channel, new_stream)
+
+    def _new_channel_backup_dispatcher(self) -> LndChannelBackupDispatcher:
+
+        def new_stream(channel: grpc.Channel) -> Generator[ln.ChanBackupSnapshot]:
+            req = ln.ChannelBackupSubscription()
+            handler = lnd_resp_handler.new_handle_rpc_stream("SubscribeChannelBackups")
+            return handler(lnrpc.LightningStub(channel).SubscribeChannelBackups(req))
+
+        return LndChannelBackupDispatcher(lambda: self._channel, new_stream)
+
+    def _new_peer_event_dispatcher(self) -> LndPeerEventDispatcher:
+
+        def new_stream(channel: grpc.Channel) -> Generator[ln.PeerEvent]:
+            req = ln.PeerEventSubscription()
+            handler = lnd_resp_handler.new_handle_rpc_stream("SubscribePeerEvents")
+            return handler(lnrpc.LightningStub(channel).SubscribePeerEvents(req))
+
+        return LndPeerEventDispatcher(lambda: self._channel, new_stream)
+
+    def _new_transaction_dispatcher(self) -> LndTransactionDispatcher:
+
+        def new_stream(channel: grpc.Channel) -> Generator[ln.Transaction]:
+            req = ln.GetTransactionsRequest()
+            handler = lnd_resp_handler.new_handle_rpc_stream("SubscribeTransactions")
+            return handler(lnrpc.LightningStub(channel).SubscribeTransactions(req))
+
+        return LndTransactionDispatcher(lambda: self._channel, new_stream)
 
 
 def update_failure_name(num) -> str:

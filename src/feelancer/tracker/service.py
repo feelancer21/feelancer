@@ -1,20 +1,21 @@
-import logging
 from collections.abc import Callable, Iterable
-from datetime import datetime, timedelta
+from datetime import timedelta, datetime
 
 from sqlalchemy import Delete, Select
 
-from feelancer.base import BaseServer
+from feelancer.log import getLogger
 from feelancer.tasks.runner import RunnerRequest, RunnerResult
 
 from .data import (
-    delete_failed_htlc_attempts,
-    delete_failed_payments,
+    delete_failed_htlcs,
+    delete_failed_transactions,
+    delete_htlc_events,
+    delete_orphaned_operations,
+    delete_untransformed_data,
     query_average_node_speed,
     query_liquidity_locked_per_htlc,
     query_slow_nodes,
 )
-from .tracker import PaymentTracker
 
 DEFAULT_NODE_SPEED_WRITE_CSV = False
 DEFAULT_NODE_SPEED_CSV_FILE = "~/.feelancer/node_speed.csv"
@@ -32,7 +33,16 @@ DEFAULT_HTLC_LIQUIDITY_LOCKED_CSV_FILE = "~/.feelancer/htlc_liquidity_locked.csv
 
 DEFAULT_DELETE_FAILED = False
 DEFAULT_DELETE_FAILED_HOURS = 168
-logger = logging.getLogger(__name__)
+
+DEFAULT_STORE_HTLC_EVENTS = False
+DEFAULT_DELETE_HTLC_EVENTS = False
+DEFAULT_DELETE_HTLC_EVENTS_HOURS = 168
+
+DEFAULT_STORE_UNTRANSFORMED_EVENTS = False
+DEFAULT_DELETE_UNTRANSFORMED_EVENTS = False
+DEFAULT_DELETE_UNTRANSFORMED_EVENTS_HOURS = 168
+
+logger = getLogger(__name__)
 
 
 def _validate_percentiles(percentiles: list[int]) -> None:
@@ -41,8 +51,7 @@ def _validate_percentiles(percentiles: list[int]) -> None:
             raise ValueError(f"Invalid percentile {p=}. Must be between 0 and 100.")
 
 
-# A config. But it is only a dummy at the moment.
-class PaytrackConfig:
+class TrackerConfig:
     def __init__(self, config_dict: dict) -> None:
         """
         Validates the provided dictionary and stores values in variables.
@@ -108,40 +117,71 @@ class PaytrackConfig:
                 config_dict.get("delete_failed_hours", DEFAULT_DELETE_FAILED_HOURS)
             )
 
+            self.store_htlc_events = bool(
+                config_dict.get("store_htlc_events", DEFAULT_STORE_HTLC_EVENTS)
+            )
+            self.delete_htlc_events = bool(
+                config_dict.get("delete_htlc_events", DEFAULT_DELETE_HTLC_EVENTS)
+            )
+            self.delete_htlc_events_hours = int(
+                config_dict.get(
+                    "delete_htlc_events_hours", DEFAULT_DELETE_HTLC_EVENTS_HOURS
+                )
+            )
+
+            self.store_untransformed_events = bool(
+                config_dict.get(
+                    "store_untransformed_events", DEFAULT_STORE_UNTRANSFORMED_EVENTS
+                )
+            )
+            self.delete_untransformed_events = bool(
+                config_dict.get(
+                    "delete_untransformed_events", DEFAULT_DELETE_UNTRANSFORMED_EVENTS
+                )
+            )
+            self.delete_untransformed_events_hours = int(
+                config_dict.get(
+                    "delete_untransformed_events_hours",
+                    DEFAULT_DELETE_UNTRANSFORMED_EVENTS_HOURS,
+                )
+            )
+
         except Exception as e:
             raise ValueError(f"Invalid config: {e}")
 
 
-class PaytrackService(BaseServer):
+class TrackerService:
     """
     Receiving of payment data from a stream and storing in the database.
     """
 
     def __init__(
         self,
-        payment_tracker: PaymentTracker,
-        get_paytrack_config: Callable[..., PaytrackConfig | None],
-        to_csv: Callable[[Select[tuple], str, list[str] | None], None],
-        delete_data: Callable[[Iterable[Delete[tuple]]], None],
+        get_config: Callable[[], TrackerConfig | None],
+        db_to_csv: Callable[[Select[tuple], str, list[str] | None], None],
+        db_delete_data: Callable[[Iterable[Delete[tuple]] | Delete[tuple]], None],
+        set_store_htlc_events: Callable[[bool], None],
+        set_store_untransformed_events: Callable[[bool], None],
         get_last_run: Callable[[], datetime | None],
-        **kwargs,
     ) -> None:
-        super().__init__(**kwargs)
-        self._payment_tracker = payment_tracker
-        self._get_paytrack_config = get_paytrack_config
-        self._to_csv = to_csv
-        self._delete_data = delete_data
+
+        self._get_config = get_config
+        self._db_to_csv = db_to_csv
+        self._db_delete_data = db_delete_data
+        self._set_store_htlc_events = set_store_htlc_events
+        self._set_store_untransformed_events = set_store_untransformed_events
         self._get_last_run = get_last_run
 
-        self._register_starter(self._start_server)
-        self._register_stopper(self._stop_server)
+        if (config := self._get_config()) is not None:
+            self._set_store_htlc_events(config.store_htlc_events)
+            self._set_store_untransformed_events(config.store_untransformed_events)
 
     def run(self, request: RunnerRequest) -> RunnerResult:
         """
         Creates the csv files with node speed and slow nodes.
         """
 
-        config = self._get_paytrack_config()
+        config = self._get_config()
         if config is None:
             return RunnerResult()
 
@@ -161,7 +201,7 @@ class PaytrackService(BaseServer):
                 end_time=request.timestamp,
                 percentiles=config.node_speed_percentiles,
             )
-            self._to_csv(qry, config.node_speed_csv_file, header)
+            self._db_to_csv(qry, config.node_speed_csv_file, header)
 
         if config.slow_nodes_write_csv:
             qry = query_slow_nodes(
@@ -172,7 +212,7 @@ class PaytrackService(BaseServer):
                 min_speed=config.slow_nodes_min_speed,
                 min_num_attempts=config.slow_nodes_min_attempts,
             )
-            self._to_csv(qry, config.slow_nodes_csv_file, None)
+            self._db_to_csv(qry, config.slow_nodes_csv_file, None)
 
         if config.htlc_liquidity_locked_write_csv:
             qry, header = query_liquidity_locked_per_htlc(
@@ -181,7 +221,7 @@ class PaytrackService(BaseServer):
                 end_time=request.timestamp,
             )
 
-            self._to_csv(qry, config.htlc_liquidity_locked_csv_file, header)
+            self._db_to_csv(qry, config.htlc_liquidity_locked_csv_file, header)
 
         # Housekeeping to delete failed htlc attempts
         if config.delete_failed:
@@ -190,25 +230,29 @@ class PaytrackService(BaseServer):
             deletion_cutoff += timedelta(hours=-config.delete_failed_hours)
 
             queries = []
-            # First we delete the failed payments, then the remaining failed
-            # htlc attempts connected with success full the payments
-            queries.append(delete_failed_payments(deletion_cutoff))
-            queries.append(delete_failed_htlc_attempts(deletion_cutoff))
+            # First we delete the failed transactions, then the failed htlcs.
+            queries.append(delete_failed_transactions(deletion_cutoff))
+            queries.append(delete_failed_htlcs(deletion_cutoff))
+            queries.append(delete_orphaned_operations())
 
-            self._delete_data(queries)
+            self._db_delete_data(queries)
+
+        self._set_store_htlc_events(config.store_htlc_events)
+        if config.delete_htlc_events:
+            deletion_cutoff = request.timestamp
+            deletion_cutoff += timedelta(hours=-config.delete_htlc_events_hours)
+
+            self._db_delete_data(delete_htlc_events(deletion_cutoff))
+
+        self._set_store_untransformed_events(config.store_untransformed_events)
+        if config.delete_untransformed_events:
+            deletion_cutoff = request.timestamp
+            deletion_cutoff += timedelta(
+                hours=-config.delete_untransformed_events_hours
+            )
+
+            self._db_delete_data(delete_untransformed_data(deletion_cutoff))
 
         logger.info("Finished run...")
 
         return RunnerResult()
-
-    def _start_server(self) -> None:
-        """Start storing new payments."""
-
-        self._payment_tracker.start()
-
-    def _stop_server(self) -> None:
-        # Service ends when the incoming payment stream has exhausted.
-        # But we have to stop the pre sync with is started synchronously.
-
-        self._payment_tracker.pre_sync_stop()
-        return None
