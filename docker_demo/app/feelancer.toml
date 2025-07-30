@@ -129,6 +129,8 @@ max_age_spread_hours = 72 # default: 0 hours
 # Then the delta between the pin value and the current value is calculated.
 # This delta is applied as a shift to all spread controllers, which changes
 # the spreads of all controllers about the value.
+# If it is set to "dynamic", the peer with the lowest spread is selected
+# automatically and pinned.
 peer = "026165850492521f4ac8abd9bd8088123446d126f648ca35e60f88177dc149ceb2"
 # 'fee_rate' or 'spread'
 method = "spread"

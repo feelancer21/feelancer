@@ -709,6 +709,15 @@ class PidController:
         # the spreads of all controllers about the value.
         shift = 0
         if (pin_peer := config.pin_peer) is not None:
+
+            # If the pin peer is set to "dynamic", we select the peer with the lowest
+            # spread controller spread.
+            if pin_peer == "dynamic" and len(peer_results) > 0:
+                pin_peer = min(
+                    peer_results, key=lambda p: peer_results[p].spread_controller.spread
+                )
+                logger.debug(f"Dynamic pin peer selected: {pin_peer=}")
+
             peer_result = peer_results.get(pin_peer)
 
             if peer_result is not None:
