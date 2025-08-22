@@ -92,6 +92,7 @@ def _new_mock_pid_config(
     c.db_only = False
     c.spread_level_max_deviation_ppm = 0
     c.spread_level_target_ppm = 0
+    c.target_default_offset = 0
 
     # peer_config returns the value of dict config, and uses default_config
     # as default.

@@ -452,6 +452,8 @@ class PidConfig:
         except Exception as e:
             raise ValueError(f"Cannot parse section 'pid.spread_level': {e}")
 
+        self.target_default_offset = int(conf_copy.get("target_default_offset") or 0)
+
     def peer_config(self, pub_key: str) -> PidSpreadControllerConfig:
         return self.peers.get(pub_key, self.peers["default"])
 
