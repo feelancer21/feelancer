@@ -122,6 +122,9 @@ max_age_new_channels = 144 # default: 144blocks
 # 'max_age_spread_hours' specifies how old a spread may be in hours.
 max_age_spread_hours = 72 # default: 0 hours
 
+# If set this will be added to the target of the controllers using the calculated
+# default value.
+target_default_offset = 0
 
 [pid.pin]
 # Optional feature. If a peer is pinned, you can choose whether you want to keep

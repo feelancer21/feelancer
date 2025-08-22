@@ -334,6 +334,8 @@ class ChannelAggregator:
                 PEER_TARGET_UNIT * (sum_liquidity - sum_local) - sum_liquidity_target
             ) / (sum_liquidity - sum_liquidity_known_target)
 
+            target += self.config.target_default_offset
+
             if target < DEFAULT_TARGET_MIN:
                 target = DEFAULT_TARGET_MIN
 
